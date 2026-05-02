@@ -1,0 +1,21 @@
+{
+  "name": "price-insight",
+  "version": "0.1.0",
+  "description": "A small JSON-in/JSON-out price analysis tool.",
+  "type": "module",
+  "bin": {
+    "price-insight": "./src/cli.js",
+    "price-insight-extract": "./src/extractor/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js examples/sample.json",
+    "extract:sample": "node src/extractor/cli.js https://shop.example.com/products/acme-dash-mouse --reader-file examples/reader-output-sample.md",
+    "test": "node test/core.test.js && node test/extractor.test.js"
+  },
+  "keywords": [
+    "pricing",
+    "tool-call",
+    "analysis"
+  ],
+  "license": "MIT"
+}

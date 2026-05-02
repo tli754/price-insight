@@ -1,0 +1,42 @@
+{
+  "type": "function",
+  "function": {
+    "name": "price_insight",
+    "description": "Compare a target price against reference prices and return market position, basic statistics, optional margin, and a recommendation.",
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "type": "string",
+          "description": "Optional item name, SKU, or product label."
+        },
+        "price": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The price to evaluate."
+        },
+        "currency": {
+          "type": "string",
+          "default": "USD",
+          "description": "Currency code or display label."
+        },
+        "reference_prices": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "description": "Competitor, historical, or benchmark prices to compare against."
+        },
+        "cost": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional unit cost for margin analysis."
+        }
+      },
+      "required": ["price", "reference_prices"]
+    }
+  }
+}

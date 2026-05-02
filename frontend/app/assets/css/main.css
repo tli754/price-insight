@@ -1,0 +1,41 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme static {
+  --font-sans: "Public Sans", "Segoe UI", sans-serif;
+
+  --color-primary-50: #eef6ff;
+  --color-primary-100: #d9ebff;
+  --color-primary-200: #bcd8ff;
+  --color-primary-300: #8bbcff;
+  --color-primary-400: #5798f5;
+  --color-primary-500: #2f6fd6;
+  --color-primary-600: #2258af;
+  --color-primary-700: #1e488d;
+  --color-primary-800: #1d3d73;
+  --color-primary-900: #1d335e;
+
+  --color-secondary-50: #f3f8f6;
+  --color-secondary-100: #e1eee7;
+  --color-secondary-200: #c4decf;
+  --color-secondary-300: #98c4ad;
+  --color-secondary-400: #6aa183;
+  --color-secondary-500: #4c8367;
+  --color-secondary-600: #3a6952;
+  --color-secondary-700: #305443;
+  --color-secondary-800: #294438;
+  --color-secondary-900: #24382f;
+}
+
+html,
+body,
+#__nuxt {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(47, 111, 214, 0.18), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(76, 131, 103, 0.16), transparent 32%),
+    linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
+}

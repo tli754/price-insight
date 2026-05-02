@@ -1,0 +1,7 @@
+{
+  "item": "Wireless mouse",
+  "price": 24.99,
+  "currency": "USD",
+  "reference_prices": [19.99, 22.49, 23.99, 27.99, 29.5],
+  "cost": 14.75
+}
