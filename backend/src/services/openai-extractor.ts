@@ -5,8 +5,10 @@ import { AppError } from "../lib/app-error.js";
 import { loadPrompt } from "../lib/prompt-loader.js";
 import {
   openAIExtractionJsonSchema,
+  openAIValidationJsonSchema,
   productExtractionSchema,
   validateExtractionRules,
+  validationResponseSchema,
   type ProductExtraction
 } from "../schemas/product.js";
 
@@ -61,10 +63,63 @@ export class OpenAIExtractorService {
     }
 
     try {
-      return validateExtractionRules(productExtractionSchema.parse(parsed));
+      const extracted = validateExtractionRules(productExtractionSchema.parse(parsed));
+      return this.validate(input, extracted);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid extraction payload.";
       throw new AppError(502, "OPENAI_INVALID_SCHEMA", message);
+    }
+  }
+
+  private async validate(input: ExtractInput, extraction: ProductExtraction): Promise<ProductExtraction> {
+    const validationSystemPrompt = await loadPrompt("extractor-validation.md");
+
+    const userPrompt = [
+      "Validate this product extraction.",
+      "",
+      `Source URL:\n${input.sourceUrl}`,
+      "",
+      `Jina Reader Content:\n${input.readerContent}`,
+      "",
+      `Extracted JSON:\n${JSON.stringify(extraction, null, 2)}`,
+      "",
+      "Return strict JSON only using the validation schema."
+    ].join("\n");
+
+    let outputText: string | null | undefined;
+    try {
+      const response = await this.client.responses.create({
+        model: this.env.OPENAI_MODEL,
+        input: [
+          { role: "system", content: validationSystemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            ...openAIValidationJsonSchema
+          }
+        }
+      });
+      outputText = response.output_text;
+    } catch {
+      return extraction;
+    }
+
+    if (!outputText) return extraction;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(outputText);
+    } catch {
+      return extraction;
+    }
+
+    try {
+      const result = validationResponseSchema.parse(parsed);
+      return validateExtractionRules(result.normalized);
+    } catch {
+      return extraction;
     }
   }
 }

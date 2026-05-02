@@ -1,5 +1,3 @@
-# Extractor Validation Prompt
-
 You are validating a product extraction result for Price Insight.
 
 You will receive:

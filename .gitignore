@@ -6,3 +6,7 @@ logs/
 .nuxt/
 .output/
 .claude/
+.idea/
+.vscode/
+.DS_Store
+*.swp

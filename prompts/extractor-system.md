@@ -1,5 +1,3 @@
-# Extractor System Prompt
-
 You are a precise product extraction model for Price Insight.
 
 You receive:

@@ -15,7 +15,7 @@ const envSchema = z.object({
   REDIS_PASSWORD: z.string().optional(),
   REDIS_DB: z.coerce.number().int().nonnegative().default(0),
   REDIS_TTL_SECONDS: z.coerce.number().int().positive().default(86400),
-  JINA_API_KEY: z.string().optional(),
+  JINA_API_KEY: z.string().min(1),
   SERPAPI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini")

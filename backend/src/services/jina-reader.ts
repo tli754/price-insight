@@ -1,13 +1,13 @@
 import { AppError } from "../lib/app-error.js";
 
 export class JinaReaderService {
-  constructor(private readonly apiKey?: string) {}
+  constructor(private readonly apiKey: string) {}
 
   async read(productUrl: string): Promise<string> {
     const response = await fetch(`https://r.jina.ai/${productUrl}`, {
       headers: {
         Accept: "text/plain",
-        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {})
+        Authorization: `Bearer ${this.apiKey}`
       }
     });
 

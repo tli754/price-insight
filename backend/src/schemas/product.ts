@@ -81,3 +81,66 @@ export function validateExtractionRules(extraction: ProductExtraction): ProductE
 
   return extraction;
 }
+
+export const validationResponseSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(z.string()),
+  normalized: productExtractionSchema
+});
+
+export type ValidationResponse = z.infer<typeof validationResponseSchema>;
+
+export const openAIValidationJsonSchema = {
+  name: "product_validation",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      valid: { type: "boolean" },
+      errors: { type: "array", items: { type: "string" } },
+      normalized: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          source_url: { type: "string" },
+          product_name: { type: ["string", "null"] },
+          brand: { type: ["string", "null"] },
+          model_or_variant: { type: ["string", "null"] },
+          thumbnail: { type: ["string", "null"] },
+          price: { type: ["number", "null"] },
+          sales_price: { type: ["number", "null"] },
+          currency: { type: ["string", "null"] },
+          availability: { type: ["string", "null"] },
+          seller_or_store: { type: ["string", "null"] },
+          product_category: { type: ["string", "null"] },
+          key_specs: {
+            type: "array",
+            items: { type: "string" },
+            maxItems: 20
+          },
+          confidence: {
+            type: "string",
+            enum: ["high", "medium", "low"]
+          }
+        },
+        required: [
+          "source_url",
+          "product_name",
+          "brand",
+          "model_or_variant",
+          "thumbnail",
+          "price",
+          "sales_price",
+          "currency",
+          "availability",
+          "seller_or_store",
+          "product_category",
+          "key_specs",
+          "confidence"
+        ]
+      }
+    },
+    required: ["valid", "errors", "normalized"]
+  }
+} as const;

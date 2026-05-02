@@ -1,8 +1,12 @@
 <script setup lang="ts">
 const { loggedIn, fetch } = useUserSession()
 const route = useRoute()
+const config = useRuntimeConfig()
+const devAuthBypass = config.public.devAuthBypass
+
 const pending = ref(false)
-const errorMessage = computed(() =>
+const password = ref("")
+const errorMessage = ref(
   typeof route.query.error === "string" ? route.query.error : ""
 )
 
@@ -14,11 +18,24 @@ if (loggedIn.value) {
 
 async function loginWithGoogle() {
   pending.value = true
-
   try {
-    await navigateTo("/auth/google", {
-      external: true
+    await navigateTo("/auth/google", { external: true })
+  } finally {
+    pending.value = false
+  }
+}
+
+async function loginWithPassword() {
+  pending.value = true
+  errorMessage.value = ""
+  try {
+    await $fetch("/auth/dev-login", {
+      method: "POST",
+      body: { password: password.value }
     })
+    await navigateTo("/")
+  } catch {
+    errorMessage.value = "Invalid password"
   } finally {
     pending.value = false
   }
@@ -49,7 +66,25 @@ async function loginWithGoogle() {
           :description="errorMessage"
         />
 
-        <div class="mt-8">
+        <div v-if="devAuthBypass" class="mt-8 flex max-w-sm flex-col gap-3">
+          <UInput
+            v-model="password"
+            type="password"
+            placeholder="Dev password"
+            size="xl"
+            @keyup.enter="loginWithPassword"
+          />
+          <UButton
+            size="xl"
+            color="primary"
+            :loading="pending"
+            @click="loginWithPassword"
+          >
+            Sign in
+          </UButton>
+        </div>
+
+        <div v-else class="mt-8">
           <UButton
             size="xl"
             color="primary"
