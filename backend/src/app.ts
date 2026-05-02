@@ -4,13 +4,17 @@ import cors from "@fastify/cors";
 import type { AppEnv } from "./config/env.js";
 import { createDatabase } from "./db/index.js";
 import { AppError } from "./lib/app-error.js";
+import analysisRoutes from "./routes/analysis.js";
 import healthRoutes from "./routes/health.js";
 import productRoutes from "./routes/products.js";
 import { createRedis } from "./services/cache.js";
+import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
+import { CompetitorRepository } from "./services/competitor-repository.js";
 import { ExtractorService } from "./services/extractor-service.js";
 import { JinaReaderService } from "./services/jina-reader.js";
 import { OpenAIExtractorService } from "./services/openai-extractor.js";
 import { ProductRepository } from "./services/product-repository.js";
+import { SerpApiService } from "./services/serp-api-service.js";
 
 export async function buildApp(env: AppEnv) {
   const app = Fastify({
@@ -27,6 +31,7 @@ export async function buildApp(env: AppEnv) {
   await redis.connect();
 
   const productRepository = new ProductRepository(db);
+  const competitorRepository = new CompetitorRepository(db);
   const jinaReader = new JinaReaderService(env.JINA_API_KEY);
   const openAIExtractor = new OpenAIExtractorService(env);
   const extractorService = new ExtractorService(
@@ -36,10 +41,14 @@ export async function buildApp(env: AppEnv) {
     jinaReader,
     openAIExtractor
   );
+  const serpApi = new SerpApiService(env.SERPAPI_API_KEY);
+  const competitorAnalysisService = new CompetitorAnalysisService(serpApi, redis, competitorRepository);
 
   app.decorate("env", env);
   app.decorate("productRepository", productRepository);
+  app.decorate("competitorRepository", competitorRepository);
   app.decorate("extractorService", extractorService);
+  app.decorate("competitorAnalysisService", competitorAnalysisService);
 
   app.setErrorHandler((error: unknown, request, reply) => {
     request.log.error(error);
@@ -77,6 +86,7 @@ export async function buildApp(env: AppEnv) {
 
   await app.register(healthRoutes, { prefix: "/api" });
   await app.register(productRoutes, { prefix: "/api" });
+  await app.register(analysisRoutes, { prefix: "/api" });
 
   return app;
 }

@@ -5,6 +5,7 @@ import type { AppEnv } from "../config/env.js";
 export type RedisClient = {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, mode: "EX", ttlSeconds: number): Promise<unknown>;
+  del(key: string): Promise<unknown>;
   connect(): Promise<void>;
   quit(): Promise<unknown>;
   ping(): Promise<string>;

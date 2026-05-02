@@ -42,3 +42,40 @@ export const products = mysqlTable(
 
 export type ProductRow = typeof products.$inferSelect;
 export type NewProductRow = typeof products.$inferInsert;
+
+export const competitor = mysqlTable(
+  "competitor",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    state: varchar("state", { length: 32 }).notNull().default("active"),
+    thumbnail: text("thumbnail"),
+    createdAt: timestamp("created_at").notNull().defaultNow()
+  },
+  (table) => ({
+    nameUnique: uniqueIndex("competitor_name_unique").on(table.name)
+  })
+);
+
+export type CompetitorRow = typeof competitor.$inferSelect;
+export type NewCompetitorRow = typeof competitor.$inferInsert;
+
+export const competitorProducts = mysqlTable("competitor_products", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("product_id").notNull(),
+  competitorId: int("competitor_id").notNull(),
+  title: text("title"),
+  externalId: text("external_id"),
+  productLink: text("product_link"),
+  source: varchar("source", { length: 255 }),
+  price: varchar("price", { length: 64 }),
+  extractedPrice: double("extracted_price"),
+  oldPrice: varchar("old_price", { length: 64 }),
+  extractedOldPrice: double("extracted_old_price"),
+  thumbnail: text("thumbnail"),
+  tag: text("tag"),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+});
+
+export type CompetitorProductRow = typeof competitorProducts.$inferSelect;
+export type NewCompetitorProductRow = typeof competitorProducts.$inferInsert;
