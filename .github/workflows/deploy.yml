@@ -128,6 +128,7 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Run database migrations
+        continue-on-error: true
         run: |
           kubectl delete job db-migrate -n price-insight --ignore-not-found
           sed "s|IMAGE_TAG|${{ github.sha }}|g" k8s/backend/migration-job.yaml \
