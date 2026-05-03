@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: price-insight-cert
+  namespace: price-insight
+spec:
+  domains:
+    - qweyha520.bar

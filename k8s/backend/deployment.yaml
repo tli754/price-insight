@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: price-insight
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      serviceAccountName: price-insight-ksa
+      containers:
+        - name: backend
+          # Image is updated by CI: kubectl set image deployment/backend backend=<image>:<sha>
+          image: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend:latest
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef:
+                name: backend-secrets
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "4000"
+            - name: APP_URL
+              value: "https://qweyha520.bar"
+            # Cloud SQL Auth Proxy listens on 127.0.0.1:3306
+            - name: MYSQL_HOST
+              value: "127.0.0.1"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+        # Cloud SQL Auth Proxy sidecar — connects to your Cloud SQL instance
+        # Replace REPLACE_WITH_CONNECTION_NAME with your instance connection name
+        # format: PROJECT_ID:REGION:INSTANCE_NAME
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+          args:
+            - "--structured-logs"
+            - "--port=3306"
+            - "wd-tools:australia-southeast1:wd-tools"
+          securityContext:
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

@@ -4,6 +4,7 @@ export const saveCompetitorsSchema = z.object({
   competitors: z.array(
     z.object({
       title: z.string(),
+      externalId: z.string().nullable(),
       rawPrice: z.string().nullable(),
       extractedPrice: z.number().positive(),
       rawOldPrice: z.string().nullable(),
