@@ -20,9 +20,6 @@ spec:
           image: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend:latest
           ports:
             - containerPort: 4000
-          envFrom:
-            - secretRef:
-                name: backend-secrets
           env:
             - name: NODE_ENV
               value: production
@@ -41,8 +38,8 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 50m
+              memory: 128Mi
             limits:
               cpu: 500m
               memory: 512Mi
@@ -60,7 +57,7 @@ spec:
             runAsNonRoot: true
           resources:
             requests:
-              cpu: 20m
+              cpu: 10m
               memory: 32Mi
             limits:
               cpu: 100m

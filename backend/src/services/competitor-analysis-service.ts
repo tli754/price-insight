@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import type { CompetitorProductRow, ProductRow } from "../db/schema.js";
 import { AppError } from "../lib/app-error.js";
+import { analyzePrice } from "../lib/price-analysis.js";
 import { getJson, setJson, type RedisClient } from "./cache.js";
 import { CompetitorRepository } from "./competitor-repository.js";
 import type { CompetitorResult } from "./serp-api-service.js";
@@ -45,8 +48,8 @@ export class CompetitorAnalysisService {
     return { cached: false, query, competitors: results };
   }
 
-  async saveCompetitors(productId: number, selected: CompetitorResult[]): Promise<CompetitorProductRow[]> {
-    const uniqueSources = [...new Set(selected.map((r) => r.source).filter(Boolean))];
+  async saveCompetitors(product: ProductRow, selected: CompetitorResult[]): Promise<CompetitorProductRow[]> {
+    const uniqueSources = [...new Set(selected.map((r) => normalizeSource(r.source)))];
     const competitorMap = new Map<string, number>();
 
     for (const source of uniqueSources) {
@@ -55,22 +58,45 @@ export class CompetitorAnalysisService {
     }
 
     const rows = selected.map((r) => ({
-      competitorId: competitorMap.get(r.source) ?? 0,
+      competitorId: competitorMap.get(normalizeSource(r.source)) ?? 0,
       title: r.title,
       externalId: r.externalId,
+      productLinkHash: hashListingIdentity(r),
       productLink: r.link,
-      source: r.source,
+      source: normalizeSource(r.source),
       price: r.rawPrice,
       extractedPrice: r.extractedPrice,
       oldPrice: r.rawOldPrice,
       extractedOldPrice: r.extractedOldPrice,
+      currency: r.currency,
       thumbnail: r.thumbnail,
       tag: r.tag
     }));
 
-    const saved = await this.competitorRepository.replaceCompetitorProducts(productId, rows);
-    await this.redis.del(`competitors:product:${productId}`);
+    const saved = await this.competitorRepository.replaceCompetitorProducts(product.id, rows);
+
+    if (typeof product.price === "number" && rows.length > 0) {
+      const analysis = analyzePrice({
+        price: product.price,
+        reference_prices: rows.map((row) => row.extractedPrice),
+        item: product.productName,
+        currency: product.currency ?? rows.find((row) => row.currency)?.currency ?? undefined
+      });
+      await this.competitorRepository.recordPriceInsight(product.id, analysis);
+    }
+
+    await this.redis.del(`competitors:product:${product.id}`);
 
     return saved;
   }
+}
+
+function normalizeSource(source: string): string {
+  const trimmed = source.trim();
+  return trimmed.length > 0 ? trimmed : "Unknown";
+}
+
+function hashListingIdentity(result: CompetitorResult): string {
+  const identity = result.link || [result.externalId, result.source, result.title].join("|");
+  return createHash("sha256").update(identity).digest("hex");
 }

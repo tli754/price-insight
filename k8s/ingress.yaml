@@ -3,15 +3,27 @@ kind: Ingress
 metadata:
   name: price-insight
   namespace: price-insight
-  annotations:
-    kubernetes.io/ingress.class: "gce"
-    kubernetes.io/ingress.global-static-ip-name: "price-insight-ip"
-    networking.gke.io/managed-certificates: "price-insight-cert"
+
 spec:
+  ingressClassName: nginx
   rules:
     - host: qweyha520.bar
       http:
         paths:
+          - path: /api/_auth
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
           - path: /api
             pathType: Prefix
             backend:

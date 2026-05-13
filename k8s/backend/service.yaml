@@ -3,9 +3,9 @@ kind: Service
 metadata:
   name: backend
   namespace: price-insight
-  annotations:
-    cloud.google.com/backend-config: '{"default": "backend-config"}'
+
 spec:
+  type: ClusterIP
   selector:
     app: backend
   ports:
