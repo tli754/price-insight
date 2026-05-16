@@ -10,3 +10,25 @@ logs/
 .vscode/
 .DS_Store
 *.swp
+
+# Local Terraform working directory
+.terraform/
+
+# State files — state lives in GCS, never commit local copies
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files (local dev only)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local var files that may contain secrets
+*.auto.tfvars
+
+# NOTE: .terraform.lock.hcl SHOULD be committed — it pins provider versions

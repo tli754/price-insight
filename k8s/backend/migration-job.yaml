@@ -14,7 +14,8 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend:IMAGE_TAG
+#          image: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend:IMAGE_TAG
+          image: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend:latest
           command: ["npx", "drizzle-kit", "push"]
           envFrom:
             - secretRef:
@@ -31,7 +32,6 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-
         - name: cloud-sql-proxy
           image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
           args:
@@ -44,3 +44,6 @@ spec:
             requests:
               cpu: 20m
               memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

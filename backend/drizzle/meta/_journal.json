@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1777836119649,
+      "tag": "0000_wonderful_mimic",
+      "breakpoints": true
+    }
+  ]
+}

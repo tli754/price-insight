@@ -41,15 +41,13 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 50m
+              memory: 128Mi
             limits:
               cpu: 500m
               memory: 512Mi
 
         # Cloud SQL Auth Proxy sidecar — connects to your Cloud SQL instance
-        # Replace REPLACE_WITH_CONNECTION_NAME with your instance connection name
-        # format: PROJECT_ID:REGION:INSTANCE_NAME
         - name: cloud-sql-proxy
           image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
           args:
@@ -60,7 +58,7 @@ spec:
             runAsNonRoot: true
           resources:
             requests:
-              cpu: 20m
+              cpu: 10m
               memory: 32Mi
             limits:
               cpu: 100m

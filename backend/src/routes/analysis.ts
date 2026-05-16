@@ -26,7 +26,7 @@ const competitorRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const body = saveCompetitorsSchema.parse(request.body);
-    const saved = await fastify.competitorAnalysisService.saveCompetitors(id, body.competitors);
+    const saved = await fastify.competitorAnalysisService.saveCompetitors(product, body.competitors);
 
     return { items: saved };
   });
