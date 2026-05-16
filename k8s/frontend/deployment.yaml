@@ -19,6 +19,9 @@ spec:
           image: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend:latest
           ports:
             - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: frontend-secrets
           env:
             - name: NODE_ENV
               value: production

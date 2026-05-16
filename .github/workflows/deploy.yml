@@ -100,31 +100,50 @@ jobs:
 
       - name: Sync secrets
         run: |
+          PROJECT=wd-tools
+
+          # Read backend secrets from Google Secret Manager
+          DATABASE_URL=$(gcloud secrets versions access latest --secret="backend-database-url" --project="$PROJECT")
+          MYSQL_USER=$(gcloud secrets versions access latest --secret="backend-mysql-user" --project="$PROJECT")
+          MYSQL_PASSWORD=$(gcloud secrets versions access latest --secret="backend-mysql-password" --project="$PROJECT")
+          MYSQL_DATABASE=$(gcloud secrets versions access latest --secret="backend-mysql-database" --project="$PROJECT")
+          OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="backend-openai-api-key" --project="$PROJECT")
+          OPENAI_MODEL=$(gcloud secrets versions access latest --secret="backend-openai-model" --project="$PROJECT")
+          JINA_API_KEY=$(gcloud secrets versions access latest --secret="backend-jina-api-key" --project="$PROJECT")
+          SERPAPI_API_KEY=$(gcloud secrets versions access latest --secret="backend-serpapi-api-key" --project="$PROJECT")
+
           kubectl create secret generic backend-secrets \
             --namespace=price-insight \
-            --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --from-literal=DATABASE_URL="$DATABASE_URL" \
             --from-literal=MYSQL_HOST="127.0.0.1" \
             --from-literal=MYSQL_PORT="3306" \
-            --from-literal=MYSQL_USER="${{ secrets.MYSQL_USER }}" \
-            --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
-            --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}" \
+            --from-literal=MYSQL_USER="$MYSQL_USER" \
+            --from-literal=MYSQL_PASSWORD="$MYSQL_PASSWORD" \
+            --from-literal=MYSQL_DATABASE="$MYSQL_DATABASE" \
             --from-literal=REDIS_HOST="redis" \
             --from-literal=REDIS_PORT="6379" \
             --from-literal=REDIS_TTL_SECONDS="86400" \
-            --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-            --from-literal=OPENAI_MODEL="${{ secrets.OPENAI_MODEL }}" \
-            --from-literal=JINA_API_KEY="${{ secrets.JINA_API_KEY }}" \
-            --from-literal=SERPAPI_API_KEY="${{ secrets.SERPAPI_API_KEY }}" \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+            --from-literal=OPENAI_MODEL="$OPENAI_MODEL" \
+            --from-literal=JINA_API_KEY="$JINA_API_KEY" \
+            --from-literal=SERPAPI_API_KEY="$SERPAPI_API_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
+
+          # Read frontend secrets from Google Secret Manager
+          NUXT_SESSION_PASSWORD=$(gcloud secrets versions access latest --secret="frontend-nuxt-session-password" --project="$PROJECT")
+          NUXT_OAUTH_GOOGLE_CLIENT_ID=$(gcloud secrets versions access latest --secret="frontend-nuxt-oauth-google-client-id" --project="$PROJECT")
+          NUXT_OAUTH_GOOGLE_CLIENT_SECRET=$(gcloud secrets versions access latest --secret="frontend-nuxt-oauth-google-client-secret" --project="$PROJECT")
+          NUXT_DEV_AUTH_BYPASS=$(gcloud secrets versions access latest --secret="frontend-nuxt-dev-auth-bypass" --project="$PROJECT")
+          NUXT_DEV_AUTH_PASSWORD=$(gcloud secrets versions access latest --secret="frontend-nuxt-dev-auth-password" --project="$PROJECT")
 
           kubectl create secret generic frontend-secrets \
             --namespace=price-insight \
-            --from-literal=NUXT_SESSION_PASSWORD="${{ secrets.NUXT_SESSION_PASSWORD }}" \
-            --from-literal=NUXT_OAUTH_GOOGLE_CLIENT_ID="${{ secrets.NUXT_OAUTH_GOOGLE_CLIENT_ID }}" \
-            --from-literal=NUXT_OAUTH_GOOGLE_CLIENT_SECRET="${{ secrets.NUXT_OAUTH_GOOGLE_CLIENT_SECRET }}" \
+            --from-literal=NUXT_SESSION_PASSWORD="$NUXT_SESSION_PASSWORD" \
+            --from-literal=NUXT_OAUTH_GOOGLE_CLIENT_ID="$NUXT_OAUTH_GOOGLE_CLIENT_ID" \
+            --from-literal=NUXT_OAUTH_GOOGLE_CLIENT_SECRET="$NUXT_OAUTH_GOOGLE_CLIENT_SECRET" \
             --from-literal=NUXT_PUBLIC_API_URL="https://qweyha520.bar" \
-            --from-literal=NUXT_DEV_AUTH_BYPASS="${{ secrets.NUXT_DEV_AUTH_BYPASS }}" \
-            --from-literal=NUXT_DEV_AUTH_PASSWORD="${{ secrets.NUXT_DEV_AUTH_PASSWORD }}" \
+            --from-literal=NUXT_DEV_AUTH_BYPASS="$NUXT_DEV_AUTH_BYPASS" \
+            --from-literal=NUXT_DEV_AUTH_PASSWORD="$NUXT_DEV_AUTH_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Run database migrations
