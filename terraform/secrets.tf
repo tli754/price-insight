@@ -16,6 +16,7 @@ locals {
     "frontend-nuxt-oauth-google-client-secret",
     "frontend-nuxt-dev-auth-bypass",
     "frontend-nuxt-dev-auth-password",
+    "frontend-nuxt-public-api-url",
   ]
 }
 
