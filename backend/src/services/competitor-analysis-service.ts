@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import type { CompetitorProductRow, ProductRow } from "../db/schema.js";
 import { AppError } from "../lib/app-error.js";
 import { analyzePrice } from "../lib/price-analysis.js";
@@ -31,7 +29,7 @@ export class CompetitorAnalysisService {
       return { cached: true, query: "", competitors: cached };
     }
 
-    const query = [product.brand, product.productName].filter(Boolean).join(" ");
+    const query = [product.brand, product.title].filter(Boolean).join(" ");
 
     if (!query) {
       throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
@@ -61,16 +59,13 @@ export class CompetitorAnalysisService {
       competitorId: competitorMap.get(normalizeSource(r.source)) ?? 0,
       title: r.title,
       externalId: r.externalId,
-      productLinkHash: hashListingIdentity(r),
       productLink: r.link,
       source: normalizeSource(r.source),
-      price: r.rawPrice,
-      extractedPrice: r.extractedPrice,
-      oldPrice: r.rawOldPrice,
-      extractedOldPrice: r.extractedOldPrice,
       currency: r.currency,
       thumbnail: r.thumbnail,
-      tag: r.tag
+      tag: r.tag,
+      rawPrice: r.rawPrice,
+      extractedPrice: r.extractedPrice
     }));
 
     const saved = await this.competitorRepository.replaceCompetitorProducts(product.id, rows);
@@ -79,7 +74,7 @@ export class CompetitorAnalysisService {
       const analysis = analyzePrice({
         price: product.price,
         reference_prices: rows.map((row) => row.extractedPrice),
-        item: product.productName,
+        item: product.title,
         currency: product.currency ?? rows.find((row) => row.currency)?.currency ?? undefined
       });
       await this.competitorRepository.recordPriceInsight(product.id, analysis);
@@ -94,9 +89,4 @@ export class CompetitorAnalysisService {
 function normalizeSource(source: string): string {
   const trimmed = source.trim();
   return trimmed.length > 0 ? trimmed : "Unknown";
-}
-
-function hashListingIdentity(result: CompetitorResult): string {
-  const identity = result.link || [result.externalId, result.source, result.title].join("|");
-  return createHash("sha256").update(identity).digest("hex");
 }

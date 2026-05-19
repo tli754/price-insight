@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -7,7 +7,7 @@ import {
   priceHistory,
   priceInsights,
   type CompetitorProductRow,
-  type CompetitorRow,
+  type CompetitorRow
 } from "../db/schema.js";
 import type { PriceAnalysisResult } from "../lib/price-analysis.js";
 
@@ -15,16 +15,14 @@ export type CompetitorProductInput = {
   competitorId: number;
   title: string;
   externalId: string | null;
-  productLinkHash: string;
   productLink: string;
   source: string;
-  price: string | null;
-  extractedPrice: number;
-  oldPrice: string | null;
-  extractedOldPrice: number | null;
   currency: string | null;
   thumbnail: string | null;
   tag: string | null;
+  googlePosition?: number | null;
+  rawPrice: string | null;
+  extractedPrice: number;
 };
 
 export class CompetitorRepository {
@@ -53,88 +51,54 @@ export class CompetitorRepository {
     return this.db
       .select()
       .from(competitorProducts)
-      .where(and(eq(competitorProducts.productId, productId), eq(competitorProducts.state, "active")))
-      .orderBy(desc(competitorProducts.lastSeenAt));
+      .where(eq(competitorProducts.productId, productId))
+      .orderBy(desc(competitorProducts.createdAt));
   }
 
   async replaceCompetitorProducts(
     productId: number,
     items: CompetitorProductInput[]
   ): Promise<CompetitorProductRow[]> {
-    const now = new Date();
-
     await this.db.transaction(async (tx) => {
-      await tx
-        .update(competitorProducts)
-        .set({ state: "inactive" })
-        .where(eq(competitorProducts.productId, productId));
+      await tx.delete(competitorProducts).where(eq(competitorProducts.productId, productId));
 
       for (const item of items) {
-        const [existing] = await tx
-          .select()
-          .from(competitorProducts)
-          .where(
-            and(
-              eq(competitorProducts.productId, productId),
-              eq(competitorProducts.competitorId, item.competitorId),
-              eq(competitorProducts.productLinkHash, item.productLinkHash)
-            )
-          )
-          .limit(1);
+        const result = await tx
+          .insert(competitorProducts)
+          .values({
+            productId,
+            competitorId: item.competitorId,
+            title: item.title,
+            externalId: item.externalId,
+            productLink: item.productLink,
+            source: item.source,
+            currency: item.currency,
+            thumbnail: item.thumbnail,
+            tag: item.tag,
+            googlePosition: item.googlePosition ?? null
+          })
+          .$returningId();
 
-        let competitorProductId = existing?.id;
-
-        if (existing) {
-          await tx
-            .update(competitorProducts)
-            .set({
-              ...item,
-              state: "active",
-              lastSeenAt: now
-            })
-            .where(eq(competitorProducts.id, existing.id));
-        } else {
-          const result = await tx
-            .insert(competitorProducts)
-            .values({
-              ...item,
-              productId,
-              state: "active",
-              lastSeenAt: now
-            })
-            .$returningId();
-          competitorProductId = Number(result[0]?.id);
-        }
-
-        if (!competitorProductId) continue;
+        const competitorProductId = Number(result[0]?.id);
 
         await tx.insert(priceHistory).values({
           competitorProductId,
-          price: item.extractedPrice,
-          oldPrice: item.extractedOldPrice,
-          currency: item.currency,
-          observedAt: now
+          price: item.rawPrice,
+          extractedPrice: item.extractedPrice
         });
       }
     });
+
     return this.getProductsByProductId(productId);
   }
 
   async recordPriceInsight(productId: number, analysis: PriceAnalysisResult): Promise<void> {
     await this.db.insert(priceInsights).values({
       productId,
-      referenceCount: analysis.reference_count,
-      minimumPrice: analysis.statistics.minimum,
-      maximumPrice: analysis.statistics.maximum,
-      averagePrice: analysis.statistics.average,
-      medianPrice: analysis.statistics.median,
-      positionLabel: analysis.position.label,
-      percentile: analysis.position.percentile,
-      differenceToAverage: analysis.position.difference_to_average,
-      differenceToAveragePercent: analysis.position.difference_to_average_percent,
-      recommendation: analysis.recommendation,
-      confidence: analysis.confidence,
-      analysisPayload: analysis as unknown as Record<string, unknown>
+      minPrice: analysis.statistics.minimum,
+      maxPrice: analysis.statistics.maximum,
+      summary: analysis.recommendation,
+      marketPosition: analysis.position.label
     });
   }
 }

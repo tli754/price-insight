@@ -1,7 +1,6 @@
 import type { AppEnv } from "../config/env.js";
 import type { CompetitorAnalysisService } from "../services/competitor-analysis-service.js";
 import type { CompetitorRepository } from "../services/competitor-repository.js";
-import type { ExtractorService } from "../services/extractor-service.js";
 import type { ProductRepository } from "../services/product-repository.js";
 
 declare module "fastify" {
@@ -9,7 +8,6 @@ declare module "fastify" {
     env: AppEnv;
     productRepository: ProductRepository;
     competitorRepository: CompetitorRepository;
-    extractorService: ExtractorService;
     competitorAnalysisService: CompetitorAnalysisService;
   }
 }
