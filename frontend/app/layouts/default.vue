@@ -43,6 +43,8 @@ const { loggedIn, user, clear, ready } = useUserSession()
       </div>
     </header>
 
+    <AppNav />
+
     <main>
       <slot />
     </main>
