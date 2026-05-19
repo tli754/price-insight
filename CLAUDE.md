@@ -58,6 +58,36 @@ Five markdown files drive the LLM extraction:
 
 See `prompts/README.md` for the recommended full flow.
 
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Core | Node.js (ESM), plain JavaScript |
+| Backend | TypeScript, Fastify 5, Drizzle ORM 0.44, Zod 3, ioredis 5 |
+| Database | MySQL 8 (Cloud SQL in prod), Redis (in-cluster in prod) |
+| AI / extraction | OpenAI SDK 5 (Responses API, `json_schema` structured output) |
+| Frontend | Nuxt 4, Vue 3, `@nuxt/ui` 4 (Tailwind CSS v4), `nuxt-auth-utils` |
+| Auth | Google OAuth 2.0 |
+| Infrastructure | GCP — GKE (Kubernetes), Cloud SQL, Google Secret Manager, Cloud SQL Auth Proxy sidecar |
+| IaC | Terraform ≥ 1.5, Google provider ~6.0, state in GCS (`wd-tools-tfstate`) |
+| CI/CD | GitHub Actions — separate manual build and deploy workflows; secrets injected from GSM on every deploy |
+
+## Infrastructure
+
+Deployment targets a GKE cluster (`price-insight`, zone `australia-southeast1-a`). Traffic flows:
+
+```
+Internet → GCE Load Balancer (Ingress)
+             ├── /api → backend (port 4000)
+             │           ├── Fastify container
+             │           └── cloud-sql-proxy sidecar → Cloud SQL MySQL
+             └── /    → frontend (port 3000, Nuxt SSR)
+
+backend → Redis (in-cluster, port 6379)
+```
+
+Terraform manages GCP IAM and secrets (`/terraform`). Kubernetes manifests are in `/k8s`. See [`k8s/README.md`](k8s/README.md) for cluster bootstrap steps.
+
 ## Environment Setup
 
 Copy `.env.example` in each package before starting:
