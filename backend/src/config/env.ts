@@ -18,7 +18,11 @@ const envSchema = z.object({
   JINA_API_KEY: z.string().min(1),
   SERPAPI_API_KEY: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini")
+  OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
+  SHOPIFY_TOKEN_URL: z.string().url().optional(),
+  SHOPIFY_PRODUCTS_URL: z.string().url().optional(),
+  SHOPIFY_CLIENT_ID: z.string().min(1).optional(),
+  SHOPIFY_CLIENT_SECRET: z.string().min(1).optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

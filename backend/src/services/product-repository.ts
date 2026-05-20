@@ -100,6 +100,10 @@ export class ProductRepository {
     return this.db.select().from(products).orderBy(desc(products.updatedAt));
   }
 
+  async deleteProduct(id: number): Promise<void> {
+    await this.db.delete(products).where(eq(products.id, id));
+  }
+
   async getProductById(id: number): Promise<(ProductRow & { images: ProductImageRow[] }) | null> {
     const [product] = await this.db.select().from(products).where(eq(products.id, id)).limit(1);
     if (!product) return null;

@@ -27,6 +27,25 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
     reply.code(201);
     return { imported };
   });
+
+  fastify.post("/products/sync", async (request, reply) => {
+    if (!fastify.shopifyService) {
+      throw new AppError(503, "SHOPIFY_NOT_CONFIGURED", "Shopify credentials are not configured.");
+    }
+    const accessToken = await fastify.shopifyService.getAccessToken();
+    const shopifyProducts = await fastify.shopifyService.fetchAllProducts(accessToken);
+    const synced = await fastify.productRepository.importProducts(shopifyProducts);
+    reply.code(200);
+    return { synced };
+  });
+
+  fastify.delete("/products/:id", async (request, reply) => {
+    const id = parseProductId((request.params as { id: string }).id);
+    const product = await fastify.productRepository.getProductById(id);
+    if (!product) throw new AppError(404, "PRODUCT_NOT_FOUND", "Product not found.");
+    await fastify.productRepository.deleteProduct(id);
+    reply.code(204).send();
+  });
 };
 
 export default productRoutes;

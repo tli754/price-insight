@@ -12,6 +12,7 @@ import { CompetitorAnalysisService } from "./services/competitor-analysis-servic
 import { CompetitorRepository } from "./services/competitor-repository.js";
 import { ProductRepository } from "./services/product-repository.js";
 import { SerpApiService } from "./services/serp-api-service.js";
+import { ShopifyService } from "./services/shopify-service.js";
 
 export async function buildApp(env: AppEnv) {
   const app = Fastify({
@@ -31,11 +32,15 @@ export async function buildApp(env: AppEnv) {
   const competitorRepository = new CompetitorRepository(db);
   const serpApi = new SerpApiService(env.SERPAPI_API_KEY);
   const competitorAnalysisService = new CompetitorAnalysisService(serpApi, redis, competitorRepository);
+  const shopifyService = env.SHOPIFY_TOKEN_URL && env.SHOPIFY_PRODUCTS_URL && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET
+    ? new ShopifyService(env.SHOPIFY_TOKEN_URL, env.SHOPIFY_PRODUCTS_URL, env.SHOPIFY_CLIENT_ID, env.SHOPIFY_CLIENT_SECRET)
+    : null;
 
   app.decorate("env", env);
   app.decorate("productRepository", productRepository);
   app.decorate("competitorRepository", competitorRepository);
   app.decorate("competitorAnalysisService", competitorAnalysisService);
+  app.decorate("shopifyService", shopifyService);
 
   app.setErrorHandler((error: unknown, request, reply) => {
     request.log.error(error);
