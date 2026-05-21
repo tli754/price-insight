@@ -1,3 +1,14 @@
+export interface ProductImage {
+  id: number
+  productId: number
+  externalId: number
+  position: number
+  src: string
+  alt: string
+  width: number | null
+  height: number | null
+}
+
 export interface ProductRow {
   id: number
   externalId: number
@@ -13,6 +24,9 @@ export interface ProductRow {
   weight: number | null
   sku: string | null
   tags: string | null
+  description: string | null
   createdAt: string
   updatedAt: string
+  // Only present on GET /api/products/:id
+  images?: ProductImage[]
 }

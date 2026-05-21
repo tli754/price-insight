@@ -55,6 +55,27 @@ export class CompetitorRepository {
       .orderBy(desc(competitorProducts.createdAt));
   }
 
+  async getSavedCompetitorsWithPrice(productId: number) {
+    return this.db
+      .select({
+        id: competitorProducts.id,
+        title: competitorProducts.title,
+        source: competitorProducts.source,
+        thumbnail: competitorProducts.thumbnail,
+        productLink: competitorProducts.productLink,
+        currency: competitorProducts.currency,
+        tag: competitorProducts.tag,
+        createdAt: competitorProducts.createdAt,
+        rawPrice: priceHistory.price,
+        extractedPrice: priceHistory.extractedPrice,
+        capturedAt: priceHistory.capturedAt
+      })
+      .from(competitorProducts)
+      .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
+      .where(eq(competitorProducts.productId, productId))
+      .orderBy(desc(competitorProducts.createdAt));
+  }
+
   async replaceCompetitorProducts(
     productId: number,
     items: CompetitorProductInput[]
@@ -90,6 +111,10 @@ export class CompetitorRepository {
     });
 
     return this.getProductsByProductId(productId);
+  }
+
+  async deleteCompetitorProduct(id: number): Promise<void> {
+    await this.db.delete(competitorProducts).where(eq(competitorProducts.id, id));
   }
 
   async recordPriceInsight(productId: number, analysis: PriceAnalysisResult): Promise<void> {

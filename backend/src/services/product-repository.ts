@@ -26,6 +26,7 @@ export type ShopifyImage = {
 export type ShopifyProduct = {
   id: number;
   title: string;
+  body_html: string | null;
   vendor: string;
   handle: string;
   status: string;
@@ -51,6 +52,7 @@ export class ProductRepository {
         brand: sp.vendor || null,
         handle: sp.handle,
         tags: sp.tags || null,
+        description: sp.body_html || null,
         thumbnail: primaryImage?.src ?? null,
         price: variant ? parseFloat(variant.price) : null,
         sku: variant?.sku ?? null,

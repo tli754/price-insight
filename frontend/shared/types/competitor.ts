@@ -1,3 +1,17 @@
+export interface SavedCompetitor {
+  id: number
+  title: string
+  source: string
+  thumbnail: string | null
+  productLink: string
+  currency: string | null
+  tag: string | null
+  createdAt: string
+  rawPrice: string | null
+  extractedPrice: number | null
+  capturedAt: string | null
+}
+
 export interface CompetitorResult {
   title: string
   externalId: string | null

@@ -27,15 +27,6 @@ async function syncProducts() {
   }
 }
 
-async function deleteProduct(id: number) {
-  try {
-    await $fetch(`${apiUrl}/api/products/${id}`, { method: 'DELETE' })
-    await refresh()
-    toast.add({ title: 'Product deleted', color: 'success' })
-  } catch {
-    toast.add({ title: 'Failed to delete product', color: 'error' })
-  }
-}
 
 const statusColor = (status: string) => {
   if (status === 'active') return 'success'
@@ -45,9 +36,11 @@ const statusColor = (status: string) => {
 
 const filtered = computed(() =>
   products.value.filter(p =>
-    !search.value ||
-    p.title?.toLowerCase().includes(search.value.toLowerCase()) ||
-    p.sku?.toLowerCase().includes(search.value.toLowerCase())
+    p.status === 'active' && (
+      !search.value ||
+      p.title?.toLowerCase().includes(search.value.toLowerCase()) ||
+      p.sku?.toLowerCase().includes(search.value.toLowerCase())
+    )
   )
 )
 
@@ -55,11 +48,9 @@ const columns = [
   { accessorKey: 'thumbnail', header: 'Image' },
   { accessorKey: 'title', header: 'Product Name' },
   { accessorKey: 'sku', header: 'SKU' },
-  { accessorKey: 'brand', header: 'Brand' },
   { accessorKey: 'price', header: 'Price' },
   { accessorKey: 'inventoryQuantity', header: 'Inventory' },
   { accessorKey: 'status', header: 'Status' },
-  { id: 'actions', header: '' }
 ]
 </script>
 
@@ -115,13 +106,17 @@ const columns = [
                 v-if="row.original.thumbnail"
                 :src="row.original.thumbnail"
                 :alt="row.original.title ?? ''"
-                class="h-10 w-10 rounded object-cover"
+                class="h-[60px] w-[60px] rounded object-cover"
               />
-              <div v-else class="h-10 w-10 rounded bg-gray-100" />
+              <div v-else class="h-[60px] w-[60px] rounded bg-gray-100" />
             </NuxtLink>
           </template>
           <template #title-cell="{ row }">
-            <NuxtLink :to="`/products/${row.original.id}`" class="font-medium text-gray-900 hover:underline">
+            <NuxtLink
+              :to="`/products/${row.original.id}`"
+              class="block max-w-[250px] truncate font-medium text-gray-900 hover:underline"
+              :title="row.original.title ?? ''"
+            >
               {{ row.original.title }}
             </NuxtLink>
           </template>
@@ -136,17 +131,6 @@ const columns = [
             <UBadge :color="statusColor(row.original.status)" variant="soft" size="sm">
               {{ row.original.status }}
             </UBadge>
-          </template>
-          <template #actions-cell="{ row }">
-            <UDropdownMenu
-              :items="[[
-                { label: 'View', icon: 'i-lucide-eye', to: `/products/${row.original.id}` }
-              ],[
-                { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteProduct(row.original.id) }
-              ]]"
-            >
-              <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-ellipsis" />
-            </UDropdownMenu>
           </template>
         </UTable>
       </UCard>

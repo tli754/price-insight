@@ -38,6 +38,7 @@ export const products = mysqlTable(
     weight: decimal("weight", { precision: 10, scale: 3, mode: "number" }),
     sku: varchar("sku", { length: 255 }),
     tags: text("tags"),
+    description: text("description"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
   },
