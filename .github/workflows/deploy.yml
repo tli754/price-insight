@@ -11,7 +11,7 @@ on:
 env:
   GKE_PROJECT: wd-tools
   GKE_CLUSTER: wd-tools-cluster
-  GKE_REGION: australia-southeast1
+  GKE_ZONE: australia-southeast1-a
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
 
@@ -39,7 +39,7 @@ jobs:
       - name: Get GKE credentials
         run: |
           gcloud container clusters get-credentials wd-tools-cluster \
-            --region australia-southeast1 \
+            --zone australia-southeast1-a \
             --project wd-tools
 
       - name: Apply base manifests
