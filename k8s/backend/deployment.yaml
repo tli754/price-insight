@@ -5,6 +5,8 @@ metadata:
   namespace: price-insight
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: backend
