@@ -9,17 +9,13 @@ FROM node:22-alpine AS runner
 RUN apk add --no-cache tini
 WORKDIR /app/backend
 COPY --from=builder /app/backend/package*.json ./
-RUN npm ci --omit=dev && \
-    npm install --no-save drizzle-kit && \
-    npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/backend/dist ./dist
-COPY --from=builder /app/backend/drizzle.config.ts ./
-COPY --from=builder /app/backend/src/db ./src/db
+COPY --from=builder /app/backend/drizzle ./drizzle
 COPY prompts/ /app/prompts/
-COPY --from=builder /app/backend/start.sh ./start.sh
-RUN chown -R node:node /app && chmod +x /app/backend/start.sh
+RUN chown -R node:node /app
 ENV NODE_ENV=production
 USER node
 EXPOSE 4000
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "start.sh"]
+CMD ["node", "dist/server.js"]
