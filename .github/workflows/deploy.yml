@@ -28,8 +28,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
 
       - name: Set up gcloud + kubectl
         uses: google-github-actions/setup-gcloud@v2
