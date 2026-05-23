@@ -1,0 +1,23 @@
+name: Codex Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  codex-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt: |
+            Review this PR for:
+            - architecture consistency
+            - TypeScript issues
+            - security
+            - performance
+            - missing tests
