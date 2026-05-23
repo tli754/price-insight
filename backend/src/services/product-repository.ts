@@ -1,87 +1,121 @@
-import { createHash } from "node:crypto";
-
 import { desc, eq } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
-import { products, type ProductRow } from "../db/schema.js";
-import type { ProductExtraction } from "../schemas/product.js";
+import { productImages, products, type ProductImageRow, type ProductRow } from "../db/schema.js";
 
-type SaveProductInput = {
-  extraction: ProductExtraction;
-  rawReaderContent: string;
+export type ShopifyVariant = {
+  price: string;
+  compare_at_price: string | null;
+  sku: string | null;
+  barcode: string | null;
+  grams: number;
+  weight: number;
+  weight_unit: string;
+  inventory_quantity: number;
+};
+
+export type ShopifyImage = {
+  id: number;
+  position: number;
+  src: string;
+  alt: string | null;
+  width: number;
+  height: number;
+};
+
+export type ShopifyProduct = {
+  id: number;
+  title: string;
+  body_html: string | null;
+  vendor: string;
+  handle: string;
+  status: string;
+  tags: string;
+  variants: ShopifyVariant[];
+  images: ShopifyImage[];
 };
 
 export class ProductRepository {
   constructor(private readonly db: Database) {}
 
+  async importProducts(shopifyProducts: ShopifyProduct[]): Promise<number> {
+    let count = 0;
+
+    for (const sp of shopifyProducts) {
+      const variant = sp.variants[0];
+      const primaryImage = sp.images.find((img) => img.position === 1) ?? sp.images[0];
+
+      const productPayload = {
+        externalId: sp.id,
+        status: sp.status,
+        title: sp.title,
+        brand: sp.vendor || null,
+        handle: sp.handle,
+        tags: sp.tags || null,
+        description: sp.body_html || null,
+        thumbnail: primaryImage?.src ?? null,
+        price: variant ? parseFloat(variant.price) : null,
+        sku: variant?.sku ?? null,
+        weight: variant?.weight ?? null,
+        weightUnit: variant?.weight_unit ?? null,
+        inventoryQuantity: variant?.inventory_quantity ?? null
+      };
+
+      const [existing] = await this.db
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.externalId, sp.id))
+        .limit(1);
+
+      let productId: number;
+
+      if (existing) {
+        await this.db.update(products).set(productPayload).where(eq(products.id, existing.id));
+        productId = existing.id;
+        // Remove old images and re-insert
+        await this.db.delete(productImages).where(eq(productImages.productId, productId));
+      } else {
+        const result = await this.db.insert(products).values(productPayload).$returningId();
+        productId = Number(result[0]?.id);
+        count++;
+      }
+
+      if (sp.images.length > 0) {
+        await this.db.insert(productImages).values(
+          sp.images.map((img) => ({
+            productId,
+            externalId: img.id,
+            position: img.position,
+            src: img.src,
+            alt: img.alt?.trim() || sp.title,
+            width: img.width,
+            height: img.height
+          }))
+        );
+      }
+    }
+
+    return count;
+  }
+
   async listProducts(): Promise<ProductRow[]> {
     return this.db.select().from(products).orderBy(desc(products.updatedAt));
   }
 
-  async getProductById(id: number): Promise<ProductRow | null> {
+  async deleteProduct(id: number): Promise<void> {
+    await this.db.delete(products).where(eq(products.id, id));
+  }
+
+  async getProductById(id: number): Promise<(ProductRow & { images: ProductImageRow[] }) | null> {
     const [product] = await this.db.select().from(products).where(eq(products.id, id)).limit(1);
-    return product ?? null;
-  }
+    if (!product) return null;
 
-  async getProductBySourceUrl(sourceUrl: string): Promise<ProductRow | null> {
-    const sourceUrlHash = hashSourceUrl(sourceUrl);
-    const [product] = await this.db
+    const images = await this.db
       .select()
-      .from(products)
-      .where(eq(products.sourceUrlHash, sourceUrlHash))
-      .limit(1);
-    return product ?? null;
+      .from(productImages)
+      .where(eq(productImages.productId, id))
+      .orderBy(productImages.position);
+
+    return { ...product, images };
   }
-
-  async saveExtractedProduct(input: SaveProductInput): Promise<ProductRow> {
-    const existing = await this.getProductBySourceUrl(input.extraction.source_url);
-
-    const payload = {
-      sourceUrlHash: hashSourceUrl(input.extraction.source_url),
-      sourceUrl: input.extraction.source_url,
-      productName: input.extraction.product_name,
-      brand: input.extraction.brand,
-      modelOrVariant: input.extraction.model_or_variant,
-      thumbnail: input.extraction.thumbnail,
-      price: input.extraction.price,
-      salesPrice: input.extraction.sales_price,
-      currency: input.extraction.currency,
-      availability: input.extraction.availability,
-      sellerOrStore: input.extraction.seller_or_store,
-      productCategory: input.extraction.product_category,
-      keySpecs: input.extraction.key_specs,
-      confidence: input.extraction.confidence,
-      rawReaderContent: input.rawReaderContent,
-      extractionPayload: input.extraction,
-      lastExtractedAt: new Date()
-    };
-
-    if (existing) {
-      await this.db
-        .update(products)
-        .set(payload)
-        .where(eq(products.id, existing.id));
-
-      return (await this.getProductById(existing.id))!;
-    }
-
-    const insertPayload = {
-      externalId: null,
-      status: "pending",
-      ...payload
-    };
-
-    const result = await this.db.insert(products).values(insertPayload).$returningId();
-    const insertedId = Number(result[0]?.id);
-    return (await this.getProductById(insertedId))!;
-  }
-
-  async updateStatus(id: number, status: "pending" | "approved" | "deleted"): Promise<ProductRow | null> {
-    await this.db.update(products).set({ status }).where(eq(products.id, id));
-    return this.getProductById(id);
-  }
-}
-
-function hashSourceUrl(sourceUrl: string) {
-  return createHash("sha256").update(sourceUrl).digest("hex");
 }

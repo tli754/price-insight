@@ -10,11 +10,9 @@ import productRoutes from "./routes/products.js";
 import { createRedis } from "./services/cache.js";
 import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
 import { CompetitorRepository } from "./services/competitor-repository.js";
-import { ExtractorService } from "./services/extractor-service.js";
-import { JinaReaderService } from "./services/jina-reader.js";
-import { OpenAIExtractorService } from "./services/openai-extractor.js";
 import { ProductRepository } from "./services/product-repository.js";
 import { SerpApiService } from "./services/serp-api-service.js";
+import { ShopifyService } from "./services/shopify-service.js";
 
 export async function buildApp(env: AppEnv) {
   const app = Fastify({
@@ -32,23 +30,17 @@ export async function buildApp(env: AppEnv) {
 
   const productRepository = new ProductRepository(db);
   const competitorRepository = new CompetitorRepository(db);
-  const jinaReader = new JinaReaderService(env.JINA_API_KEY);
-  const openAIExtractor = new OpenAIExtractorService(env);
-  const extractorService = new ExtractorService(
-    env,
-    redis,
-    productRepository,
-    jinaReader,
-    openAIExtractor
-  );
   const serpApi = new SerpApiService(env.SERPAPI_API_KEY);
   const competitorAnalysisService = new CompetitorAnalysisService(serpApi, redis, competitorRepository);
+  const shopifyService = env.SHOPIFY_TOKEN_URL && env.SHOPIFY_PRODUCTS_URL && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET
+    ? new ShopifyService(env.SHOPIFY_TOKEN_URL, env.SHOPIFY_PRODUCTS_URL, env.SHOPIFY_CLIENT_ID, env.SHOPIFY_CLIENT_SECRET)
+    : null;
 
   app.decorate("env", env);
   app.decorate("productRepository", productRepository);
   app.decorate("competitorRepository", competitorRepository);
-  app.decorate("extractorService", extractorService);
   app.decorate("competitorAnalysisService", competitorAnalysisService);
+  app.decorate("shopifyService", shopifyService);
 
   app.setErrorHandler((error: unknown, request, reply) => {
     request.log.error(error);

@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+### Diagrams
+
+ALWAYS use mermaid when creating architecture diagrams in markdown do NOT create ASCII diagrams.
+
+
 ## Commands
 
 ### Root (price analysis CLI)

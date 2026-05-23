@@ -1,8 +1,8 @@
 import {
+  bigint,
   decimal,
   index,
   int,
-  json,
   mysqlTable,
   text,
   timestamp,
@@ -16,39 +16,64 @@ const moneyColumn = {
   mode: "number" as const
 };
 
+const shopifyId = {
+  mode: "number" as const,
+  unsigned: true
+} as const;
+
 export const products = mysqlTable(
   "products",
   {
     id: int("id").autoincrement().primaryKey(),
-    externalId: varchar("external_id", { length: 225 }),
-    status: varchar("status", { length: 32 }).notNull().default("pending"),
-    sourceUrlHash: varchar("source_url_hash", { length: 64 }).notNull(),
-    sourceUrl: varchar("source_url", { length: 2048 }).notNull(),
-    productName: varchar("product_name", { length: 500 }),
-    brand: varchar("brand", { length: 255 }),
-    modelOrVariant: varchar("model_or_variant", { length: 255 }),
+    externalId: bigint("external_id", shopifyId).notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("draft"),
     thumbnail: text("thumbnail"),
     price: decimal("price", moneyColumn),
-    salesPrice: decimal("sales_price", moneyColumn),
     currency: varchar("currency", { length: 16 }),
-    availability: varchar("availability", { length: 128 }),
-    sellerOrStore: varchar("seller_or_store", { length: 255 }),
-    productCategory: varchar("product_category", { length: 255 }),
-    keySpecs: json("key_specs").$type<string[] | null>(),
-    confidence: varchar("confidence", { length: 16 }),
-    rawReaderContent: text("raw_reader_content"),
-    extractionPayload: json("extraction_payload").$type<Record<string, unknown> | null>(),
-    lastExtractedAt: timestamp("last_extracted_at"),
+    handle: varchar("handle", { length: 500 }),
+    title: varchar("title", { length: 500 }),
+    brand: varchar("brand", { length: 255 }),
+    inventoryQuantity: int("inventory_quantity"),
+    weightUnit: varchar("weight_unit", { length: 16 }),
+    weight: decimal("weight", { precision: 10, scale: 3, mode: "number" }),
+    sku: varchar("sku", { length: 255 }),
+    tags: text("tags"),
+    description: text("description"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
   },
   (table) => ({
-    sourceUrlHashUnique: uniqueIndex("products_source_url_hash_unique").on(table.sourceUrlHash)
+    externalIdIdx: index("products_external_id_idx").on(table.externalId)
   })
 );
 
 export type ProductRow = typeof products.$inferSelect;
 export type NewProductRow = typeof products.$inferInsert;
+
+export const productImages = mysqlTable(
+  "product_images",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    productId: int("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    externalId: bigint("external_id", shopifyId).notNull(),
+    position: int("position").notNull(),
+    alt: varchar("alt", { length: 512 }).notNull(),
+    width: int("width"),
+    height: int("height"),
+    src: text("src").notNull()
+  },
+  (table) => ({
+    productImageUnique: uniqueIndex("product_images_product_external_unique").on(
+      table.productId,
+      table.externalId
+    )
+  })
+);
+
+export type ProductImageRow = typeof productImages.$inferSelect;
+export type NewProductImageRow = typeof productImages.$inferInsert;
 
 export const competitor = mysqlTable(
   "competitor",
@@ -77,31 +102,23 @@ export const competitorProducts = mysqlTable(
     competitorId: int("competitor_id")
       .notNull()
       .references(() => competitor.id, { onDelete: "restrict", onUpdate: "cascade" }),
-    state: varchar("state", { length: 32 }).notNull().default("active"),
     title: text("title").notNull(),
-    externalId: varchar("external_id", { length: 255 }),
-    productLinkHash: varchar("product_link_hash", { length: 64 }).notNull(),
+    externalId: text("external_id"),
     productLink: text("product_link").notNull(),
     source: varchar("source", { length: 255 }).notNull(),
-    price: varchar("price", { length: 64 }),
-    extractedPrice: decimal("extracted_price", moneyColumn).notNull(),
-    oldPrice: varchar("old_price", { length: 64 }),
-    extractedOldPrice: decimal("extracted_old_price", moneyColumn),
     currency: varchar("currency", { length: 16 }),
     thumbnail: text("thumbnail"),
     tag: text("tag"),
-    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
+    googlePosition: int("google_position"),
+    createdAt: timestamp("created_at").notNull().defaultNow()
   },
   (table) => ({
     productIdx: index("competitor_products_product_id_idx").on(table.productId),
     competitorIdx: index("competitor_products_competitor_id_idx").on(table.competitorId),
-    productStateIdx: index("competitor_products_product_state_idx").on(table.productId, table.state),
-    productListingUnique: uniqueIndex("competitor_products_product_listing_unique").on(
+    listingUnique: uniqueIndex("competitor_products_listing_unique").on(
       table.productId,
       table.competitorId,
-      table.productLinkHash
+      table.productLink
     )
   })
 );
@@ -116,14 +133,14 @@ export const priceHistory = mysqlTable(
     competitorProductId: int("competitor_product_id")
       .notNull()
       .references(() => competitorProducts.id, { onDelete: "cascade", onUpdate: "cascade" }),
-    price: decimal("price", moneyColumn).notNull(),
-    oldPrice: decimal("old_price", moneyColumn),
-    currency: varchar("currency", { length: 16 }),
-    observedAt: timestamp("observed_at").notNull().defaultNow()
+    price: varchar("price", { length: 64 }),
+    extractedPrice: decimal("extracted_price", moneyColumn).notNull(),
+    capturedAt: timestamp("captured_at").notNull().defaultNow()
   },
   (table) => ({
-    competitorProductIdx: index("price_history_competitor_product_id_idx").on(table.competitorProductId),
-    observedAtIdx: index("price_history_observed_at_idx").on(table.observedAt)
+    competitorProductIdx: index("price_history_competitor_product_id_idx").on(
+      table.competitorProductId
+    )
   })
 );
 
@@ -137,27 +154,14 @@ export const priceInsights = mysqlTable(
     productId: int("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "cascade", onUpdate: "cascade" }),
-    referenceCount: int("reference_count").notNull(),
-    minimumPrice: decimal("minimum_price", moneyColumn).notNull(),
-    maximumPrice: decimal("maximum_price", moneyColumn).notNull(),
-    averagePrice: decimal("average_price", moneyColumn).notNull(),
-    medianPrice: decimal("median_price", moneyColumn).notNull(),
-    positionLabel: varchar("position_label", { length: 32 }).notNull(),
-    percentile: decimal("percentile", { precision: 7, scale: 4, mode: "number" }).notNull(),
-    differenceToAverage: decimal("difference_to_average", moneyColumn).notNull(),
-    differenceToAveragePercent: decimal("difference_to_average_percent", {
-      precision: 8,
-      scale: 4,
-      mode: "number"
-    }).notNull(),
-    recommendation: text("recommendation").notNull(),
-    confidence: varchar("confidence", { length: 16 }).notNull(),
-    analysisPayload: json("analysis_payload").$type<Record<string, unknown> | null>(),
-    createdAt: timestamp("created_at").notNull().defaultNow()
+    minPrice: decimal("min_price", moneyColumn).notNull(),
+    maxPrice: decimal("max_price", moneyColumn).notNull(),
+    summary: text("summary").notNull(),
+    marketPosition: varchar("market_position", { length: 32 }).notNull(),
+    capturedAt: timestamp("captured_at").notNull().defaultNow()
   },
   (table) => ({
-    productIdx: index("price_insights_product_id_idx").on(table.productId),
-    productCreatedAtIdx: index("price_insights_product_created_at_idx").on(table.productId, table.createdAt)
+    productIdx: index("price_insights_product_id_idx").on(table.productId)
   })
 );
 
