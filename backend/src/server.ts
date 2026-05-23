@@ -47,7 +47,8 @@ const { db, pool } = createDatabase(env);
 try {
   await migrate(db, { migrationsFolder: "./drizzle" });
 } catch (err: any) {
-  if (err?.code === "ER_TABLE_EXISTS_ERROR") {
+  const code = err?.code ?? err?.cause?.code;
+  if (code === "ER_TABLE_EXISTS_ERROR") {
     // DB was initialised before migration tracking was introduced — bootstrap it.
     await bootstrapMigrationTracking(pool, "./drizzle");
     await migrate(db, { migrationsFolder: "./drizzle" });
