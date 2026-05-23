@@ -27,17 +27,17 @@ spec:
               value: "127.0.0.1"
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 50m
+              memory: 128Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 250m
+              memory: 256Mi
         - name: cloud-sql-proxy
           image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
           args:
             - "--structured-logs"
             - "--port=3306"
-            - "wd-tools:australia-southeast1:wd-tools"
+            - "wd-tools:australia-southeast1:wd-tools-dev"
           securityContext:
             runAsNonRoot: true
           resources:
