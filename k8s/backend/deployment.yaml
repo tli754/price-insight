@@ -53,7 +53,7 @@ spec:
           args:
             - "--structured-logs"
             - "--port=3306"
-            - "wd-tools:australia-southeast1:wd-tools"
+            - "wd-tools:australia-southeast1:wd-tools-dev"
           securityContext:
             runAsNonRoot: true
           resources:
