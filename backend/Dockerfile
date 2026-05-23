@@ -16,9 +16,10 @@ COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/drizzle.config.ts ./
 COPY --from=builder /app/backend/src/db ./src/db
 COPY prompts/ /app/prompts/
-RUN chown -R node:node /app
+COPY --from=builder /app/backend/start.sh ./start.sh
+RUN chown -R node:node /app && chmod +x /app/backend/start.sh
 ENV NODE_ENV=production
 USER node
 EXPOSE 4000
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "dist/server.js"]
+CMD ["sh", "start.sh"]

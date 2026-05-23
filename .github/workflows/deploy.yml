@@ -92,16 +92,6 @@ jobs:
             --from-literal=NUXT_DEV_AUTH_PASSWORD="$NUXT_DEV_AUTH_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Run database migrations
-        continue-on-error: true
-        run: |
-          kubectl delete job db-migrate -n price-insight --ignore-not-found
-          sed "s|IMAGE_TAG|${{ inputs.image_tag }}|g" k8s/backend/migration-job.yaml \
-            | kubectl apply -f -
-          kubectl wait --for=condition=complete \
-            --timeout=180s job/db-migrate \
-            -n price-insight
-
       - name: Roll out new images
         run: |
           kubectl set image deployment/backend \
