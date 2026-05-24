@@ -58,7 +58,8 @@ jobs:
           JINA_API_KEY=$(gcloud secrets versions access latest --secret="backend-jina-api-key" --project="$PROJECT")
           SERPAPI_API_KEY=$(gcloud secrets versions access latest --secret="backend-serpapi-api-key" --project="$PROJECT")
 
-          DATABASE_URL="mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:3306/${MYSQL_DATABASE}"
+          MYSQL_PASSWORD_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$MYSQL_PASSWORD")
+          DATABASE_URL="mysql://${MYSQL_USER}:${MYSQL_PASSWORD_ENCODED}@${MYSQL_HOST}:3306/${MYSQL_DATABASE}"
 
           kubectl create secret generic backend-secrets \
             --namespace=price-insight \
