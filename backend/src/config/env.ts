@@ -4,7 +4,6 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
   APP_URL: z.string().url().default("http://localhost:3000"),
-  DATABASE_URL: z.string().min(1),
   MYSQL_HOST: z.string().min(1),
   MYSQL_PORT: z.coerce.number().int().positive().default(3306),
   MYSQL_USER: z.string().min(1),

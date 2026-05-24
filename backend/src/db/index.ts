@@ -6,7 +6,11 @@ import * as schema from "./schema.js";
 
 export function createDatabase(env: AppEnv) {
   const pool = mysql.createPool({
-    uri: env.DATABASE_URL,
+    host: env.MYSQL_HOST,
+    port: env.MYSQL_PORT,
+    user: env.MYSQL_USER,
+    password: env.MYSQL_PASSWORD,
+    database: env.MYSQL_DATABASE,
     connectionLimit: 10
   });
 
