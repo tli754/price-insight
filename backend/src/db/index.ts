@@ -11,7 +11,8 @@ export function createDatabase(env: AppEnv) {
     user: env.MYSQL_USER,
     password: env.MYSQL_PASSWORD,
     database: env.MYSQL_DATABASE,
-    connectionLimit: 10
+    connectionLimit: 10,
+    ssl: { rejectUnauthorized: false }
   });
 
   const db = drizzle(pool, { schema, mode: "default" });
