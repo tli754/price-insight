@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: price-insight
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  template:
+    spec:
+      serviceAccountName: price-insight-ksa
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ${BACKEND_IMAGE}
+          command: ["node", "dist/db/run-migrations.js"]
+          envFrom:
+            - secretRef:
+                name: backend-secrets
+          env:
+            - name: NODE_ENV
+              value: production
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

@@ -49,7 +49,7 @@ jobs:
         run: |
           PROJECT=wd-tools
 
-          DATABASE_URL=$(gcloud secrets versions access latest --secret="backend-database-url" --project="$PROJECT")
+          MYSQL_HOST=$(gcloud secrets versions access latest --secret="backend-mysql-host" --project="$PROJECT")
           MYSQL_USER=$(gcloud secrets versions access latest --secret="backend-mysql-user" --project="$PROJECT")
           MYSQL_PASSWORD=$(gcloud secrets versions access latest --secret="backend-mysql-password" --project="$PROJECT")
           MYSQL_DATABASE=$(gcloud secrets versions access latest --secret="backend-mysql-database" --project="$PROJECT")
@@ -58,10 +58,12 @@ jobs:
           JINA_API_KEY=$(gcloud secrets versions access latest --secret="backend-jina-api-key" --project="$PROJECT")
           SERPAPI_API_KEY=$(gcloud secrets versions access latest --secret="backend-serpapi-api-key" --project="$PROJECT")
 
+          DATABASE_URL="mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:3306/${MYSQL_DATABASE}"
+
           kubectl create secret generic backend-secrets \
             --namespace=price-insight \
             --from-literal=DATABASE_URL="$DATABASE_URL" \
-            --from-literal=MYSQL_HOST="127.0.0.1" \
+            --from-literal=MYSQL_HOST="$MYSQL_HOST" \
             --from-literal=MYSQL_PORT="3306" \
             --from-literal=MYSQL_USER="$MYSQL_USER" \
             --from-literal=MYSQL_PASSWORD="$MYSQL_PASSWORD" \
@@ -92,13 +94,30 @@ jobs:
             --from-literal=NUXT_DEV_AUTH_PASSWORD="$NUXT_DEV_AUTH_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Roll out new images
+      - name: Run database migrations
+        run: |
+          kubectl delete job db-migrate --ignore-not-found -n price-insight
+
+          export BACKEND_IMAGE=${{ env.BACKEND_IMAGE }}:${{ inputs.image_tag }}
+          envsubst < .github/k8s/migration-job.yaml | kubectl apply -f -
+
+          if ! kubectl wait --for=condition=complete job/db-migrate \
+              -n price-insight --timeout=120s; then
+            echo "--- Migration logs ---"
+            kubectl logs -l job-name=db-migrate -n price-insight --tail=100
+            exit 1
+          fi
+
+      - name: Roll out backend
         run: |
           kubectl set image deployment/backend \
             backend=${{ env.BACKEND_IMAGE }}:${{ inputs.image_tag }} \
             -n price-insight
+          kubectl rollout status deployment/backend -n price-insight --timeout=120s
+
+      - name: Roll out frontend
+        run: |
           kubectl set image deployment/frontend \
             frontend=${{ env.FRONTEND_IMAGE }}:${{ inputs.image_tag }} \
             -n price-insight
-          kubectl rollout status deployment/backend -n price-insight --timeout=120s
           kubectl rollout status deployment/frontend -n price-insight --timeout=120s
