@@ -31,3 +31,45 @@ export interface FetchCompetitorsResponse {
   query: string
   competitors: CompetitorResult[]
 }
+
+export type CompetitorProductTableRow = {
+  id: string
+  thumbnail: string | null
+  title: string
+  productLink: string
+  source: string
+  googlePosition: number | null
+  currentPrice: number | null
+  currency: string
+  lastCheckedAt: string | null
+  matchedProduct: { id: string; title: string } | null
+}
+
+export interface CompetitorListItem {
+  id: number
+  name: string
+  state: string
+  thumbnail: string | null
+  createdAt: string
+  matchedProducts: number
+  lastScraped: string | null
+}
+
+export interface CompetitorDetailProduct {
+  id: number
+  thumbnail: string | null
+  title: string
+  productLink: string
+  source: string
+  googlePosition: number | null
+  currency: string | null
+  currentPrice: number | null
+  lastCheckedAt: string | null
+  matchedProductId: number | null
+  matchedProductTitle: string | null
+}
+
+export interface CompetitorDetailResponse {
+  competitor: { id: number; name: string; state: string }
+  items: CompetitorDetailProduct[]
+}

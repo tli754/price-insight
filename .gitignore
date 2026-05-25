@@ -5,7 +5,9 @@ logs/
 *.log
 .nuxt/
 .output/
+.claude
 .claude/
+.idea
 .idea/
 .vscode/
 .DS_Store

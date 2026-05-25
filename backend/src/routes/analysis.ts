@@ -4,6 +4,27 @@ import { AppError } from "../lib/app-error.js";
 import { saveCompetitorsSchema } from "../schemas/competitor.js";
 
 const competitorRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get("/competitors", async () => {
+    const items = await fastify.competitorRepository.getAllCompetitors();
+    return { items };
+  });
+
+  fastify.get("/competitors/:id/products", async (request) => {
+    const params = request.params as { id: string };
+    const id = Number(params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new AppError(400, "INVALID_COMPETITOR_ID", "Competitor id must be a positive integer.");
+    }
+
+    const comp = await fastify.competitorRepository.getCompetitorById(id);
+    if (!comp) {
+      throw new AppError(404, "COMPETITOR_NOT_FOUND", "Competitor not found.");
+    }
+
+    const items = await fastify.competitorRepository.getProductsByCompetitorId(id);
+    return { competitor: { id: comp.id, name: comp.name, state: comp.state }, items };
+  });
+
   fastify.get("/products/:id/saved-competitors", async (request) => {
     const params = request.params as { id: string };
     const id = parseProductId(params.id);

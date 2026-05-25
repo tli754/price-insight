@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq, max } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -6,6 +6,7 @@ import {
   competitorProducts,
   priceHistory,
   priceInsights,
+  products,
   type CompetitorProductRow,
   type CompetitorRow
 } from "../db/schema.js";
@@ -27,6 +28,54 @@ export type CompetitorProductInput = {
 
 export class CompetitorRepository {
   constructor(private readonly db: Database) {}
+
+  async getAllCompetitors() {
+    return this.db
+      .select({
+        id: competitor.id,
+        name: competitor.name,
+        state: competitor.state,
+        thumbnail: competitor.thumbnail,
+        createdAt: competitor.createdAt,
+        matchedProducts: count(competitorProducts.id),
+        lastScraped: max(competitorProducts.createdAt)
+      })
+      .from(competitor)
+      .leftJoin(competitorProducts, eq(competitorProducts.competitorId, competitor.id))
+      .groupBy(competitor.id)
+      .orderBy(asc(competitor.name));
+  }
+
+  async getCompetitorById(id: number): Promise<CompetitorRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(competitor)
+      .where(eq(competitor.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getProductsByCompetitorId(competitorId: number) {
+    return this.db
+      .select({
+        id: competitorProducts.id,
+        thumbnail: competitorProducts.thumbnail,
+        title: competitorProducts.title,
+        productLink: competitorProducts.productLink,
+        source: competitorProducts.source,
+        googlePosition: competitorProducts.googlePosition,
+        currency: competitorProducts.currency,
+        currentPrice: priceHistory.extractedPrice,
+        lastCheckedAt: priceHistory.capturedAt,
+        matchedProductId: products.id,
+        matchedProductTitle: products.title
+      })
+      .from(competitorProducts)
+      .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
+      .leftJoin(products, eq(products.id, competitorProducts.productId))
+      .where(eq(competitorProducts.competitorId, competitorId))
+      .orderBy(desc(competitorProducts.createdAt));
+  }
 
   async findOrCreateCompetitor(name: string): Promise<CompetitorRow> {
     const [existing] = await this.db

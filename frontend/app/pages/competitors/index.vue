@@ -1,39 +1,21 @@
 <script setup lang="ts">
-const competitors = [
-  {
-    id: 1,
-    name: 'amazon.com',
-    state: 'active',
-    matchedProducts: 12,
-    lastScraped: '2026-05-19T08:30:00Z'
-  },
-  {
-    id: 2,
-    name: 'trademe.co.nz',
-    state: 'active',
-    matchedProducts: 8,
-    lastScraped: '2026-05-19T06:00:00Z'
-  },
-  {
-    id: 3,
-    name: 'thewarehouse.co.nz',
-    state: 'active',
-    matchedProducts: 5,
-    lastScraped: '2026-05-18T22:15:00Z'
-  },
-  {
-    id: 4,
-    name: 'mitre10.co.nz',
-    state: 'inactive',
-    matchedProducts: 2,
-    lastScraped: '2026-05-10T14:00:00Z'
-  }
-]
+import type { CompetitorListItem } from '~/shared/types/competitor'
+
+const { public: { apiUrl } } = useRuntimeConfig()
+
+const { data, pending } = await useFetch<{ items: CompetitorListItem[] }>(
+  `${apiUrl}/api/competitors`,
+  { lazy: true }
+)
+
+const competitors = computed(() => data.value?.items ?? [])
 
 const stateColor = (state: string) => state === 'active' ? 'success' : 'neutral'
 
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })
+const formatDate = (iso: string | null) => {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })
+}
 
 const columns = [
   { accessorKey: 'name', header: 'Name' },
@@ -52,7 +34,11 @@ const columns = [
     </div>
 
     <UCard>
-      <UTable :data="competitors" :columns="columns">
+      <div v-if="pending" class="flex justify-center py-16">
+        <UIcon name="i-lucide-loader-circle" class="h-6 w-6 animate-spin text-gray-400" />
+      </div>
+
+      <UTable v-else :data="competitors" :columns="columns">
         <template #name-cell="{ row }">
           <div class="flex items-center gap-3">
             <UAvatar :alt="row.original.name" size="sm" />
@@ -70,8 +56,8 @@ const columns = [
         <template #lastScraped-cell="{ row }">
           <span class="text-sm text-gray-500">{{ formatDate(row.original.lastScraped) }}</span>
         </template>
-        <template #actions-cell>
-          <UButton size="sm" variant="ghost" color="neutral" label="View" />
+        <template #actions-cell="{ row }">
+          <UButton size="sm" variant="ghost" color="neutral" label="View" @click="navigateTo('/competitors/' + row.original.id)" />
         </template>
       </UTable>
     </UCard>
