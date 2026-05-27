@@ -20,6 +20,23 @@ npm install
 npm run dev
 ```
 
+## Testing
+
+Tests use [Vitest](https://vitest.dev/) with Fastify's built-in `inject()` for HTTP-level tests. No real database or Redis connection is required — all external dependencies are stubbed with `vi.fn()`.
+
+```bash
+# Run all backend tests once
+pnpm --filter @price-insight/backend test
+
+# Watch mode during development
+pnpm --filter @price-insight/backend test:watch
+
+# From the monorepo root (runs all packages)
+pnpm test
+```
+
+Test files live in `src/__tests__/`. The shared test helper is at `src/__tests__/helpers/build-app.ts` — import `buildTestApp()` and override any mock as needed per test.
+
 ## Routes
 
 - `GET /api/health`
