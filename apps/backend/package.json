@@ -1,5 +1,5 @@
 {
-  "name": "price-insight-backend",
+  "name": "@price-insight/backend",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,6 +21,7 @@
     "zod": "^3.24.4"
   },
   "devDependencies": {
+    "@types/node": "^25.9.1",
     "drizzle-kit": "^0.31.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"

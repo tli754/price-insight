@@ -3,6 +3,13 @@ dist/
 .env
 logs/
 *.log
+
+# pnpm
+.pnpm-store/
+pnpm-debug.log
+
+# Turbo
+.turbo/
 .nuxt/
 .output/
 .claude
@@ -32,5 +39,9 @@ override.tf.json
 
 # Local var files that may contain secrets
 *.auto.tfvars
+
+.ai
+.ai/
+AGENTS.md
 
 # NOTE: .terraform.lock.hcl SHOULD be committed — it pins provider versions

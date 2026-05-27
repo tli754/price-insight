@@ -9,38 +9,54 @@ ALWAYS use mermaid when creating architecture diagrams in markdown do NOT create
 
 ## Commands
 
-### Root (price analysis CLI)
+### Monorepo root (run from `/srv/price-insight`)
 ```bash
-npm test              # Run tests for core and extractor modules (Node.js native test runner)
-npm start             # Run price analysis CLI with sample data
-npm run extract:sample  # Run extractor CLI against sample reader output
+pnpm install          # Install all workspace dependencies
+pnpm dev              # Start all dev servers via Turbo
+pnpm build            # Build all packages via Turbo
+pnpm test             # Run all tests via Turbo
 ```
 
-### Backend (`/backend`)
+### Core CLI (`/packages/core`)
 ```bash
-npm run dev           # Start Fastify dev server with hot reload (tsx watch)
-npm run build         # TypeScript compilation
-npm run start         # Run compiled dist/server.js
-npm run db:generate   # Generate Drizzle migrations
-npm run db:push       # Apply migrations to database
-npm run db:studio     # Open Drizzle Studio for DB inspection
+pnpm --filter @price-insight/core test   # Run core and extractor tests
 ```
 
-### Frontend (`/frontend`)
+### Backend (`/apps/backend`)
 ```bash
-npm run dev           # Start Nuxt dev server (port 3000)
-npm run build         # Production build
-npm run preview       # Preview production build
+pnpm --filter @price-insight/backend dev          # Start Fastify dev server with hot reload
+pnpm --filter @price-insight/backend build        # TypeScript compilation
+pnpm --filter @price-insight/backend start        # Run compiled dist/server.js
+pnpm --filter @price-insight/backend db:generate  # Generate Drizzle migrations
+pnpm --filter @price-insight/backend db:push      # Apply migrations to database
+pnpm --filter @price-insight/backend db:studio    # Open Drizzle Studio for DB inspection
+```
+
+### Frontend (`/apps/frontend`)
+```bash
+pnpm --filter @price-insight/frontend dev      # Start Nuxt dev server (port 3000)
+pnpm --filter @price-insight/frontend build    # Production build
+pnpm --filter @price-insight/frontend preview  # Preview production build
 ```
 
 ## Architecture
 
-The repo contains three independent packages plus shared prompts:
+The repo is a Turborepo monorepo managed with pnpm workspaces:
 
-### Core (`/src`)
-A pure JavaScript, JSON-in/JSON-out price analysis library. `analyzePrice(payload)` in `src/core.js` is the single entry point — it normalizes input, computes statistical position (percentile, average, median) against `reference_prices`, and returns a recommendation with optional margin analysis when `cost` is provided. The root `package.json` exports two CLI bins (`price-insight`, `price-insight-extract`). `tool_call.json` documents the schema for LLM function-calling hosts.
+```
+price-insight/
+├── apps/
+│   ├── backend/    # @price-insight/backend — Fastify API
+│   └── frontend/   # @price-insight/frontend — Nuxt 4
+├── packages/
+│   └── core/       # @price-insight/core — CLI tools
+└── prompts/        # LLM prompt templates (shared)
+```
 
-### Backend (`/backend`)
+### Core (`/packages/core`)
+A pure JavaScript, JSON-in/JSON-out price analysis library. `analyzePrice(payload)` in `src/core.js` is the single entry point — it normalizes input, computes statistical position (percentile, average, median) against `reference_prices`, and returns a recommendation with optional margin analysis when `cost` is provided. Exports two CLI bins (`price-insight`, `price-insight-extract`). `tool_call.json` documents the schema for LLM function-calling hosts.
+
+### Backend (`/apps/backend`)
 A TypeScript Fastify 5 API server. The extraction pipeline is the core concern:
 
 1. `POST /api/products/extract` receives a URL
@@ -49,10 +65,10 @@ A TypeScript Fastify 5 API server. The extraction pipeline is the core concern:
 4. On parse failure, a single retry with `prompts/extractor-repair.md` is attempted
 5. Returns HTTP 201 on new extraction, 200 on cached result
 
-Database is MySQL + Drizzle ORM. The `products` table has a unique index on source URL hash to prevent duplicates. Schema is in `backend/src/db/schema.ts`.
+Database is MySQL + Drizzle ORM. The `products` table has a unique index on source URL hash to prevent duplicates. Schema is in `apps/backend/src/db/schema.ts`.
 
-### Frontend (`/frontend`)
-Nuxt 4 + Vue 3 + `@nuxt/ui` (Tailwind CSS v4). Authentication is Google OAuth via `nuxt-auth-utils`. The `auth` middleware protects all routes except `/login`. The OAuth callback handler lives in `frontend/server/routes/auth/google.get.ts`. The backend API is a separate process — the frontend calls it directly (CORS allowed via `APP_URL` env var on the backend).
+### Frontend (`/apps/frontend`)
+Nuxt 4 + Vue 3 + `@nuxt/ui` (Tailwind CSS v4). Authentication is Google OAuth via `nuxt-auth-utils`. The `auth` middleware protects all routes except `/login`. The OAuth callback handler lives in `apps/frontend/server/routes/auth/google.get.ts`. The backend API is a separate process — the frontend calls it directly (CORS allowed via `APP_URL` env var on the backend).
 
 ### Prompts (`/prompts`)
 Five markdown files drive the LLM extraction:
@@ -65,8 +81,8 @@ See `prompts/README.md` for the recommended full flow.
 
 ## Environment Setup
 
-Copy `.env.example` in each package before starting:
+Copy `.env.example` in each app before starting:
 
-**Backend** requires: MySQL connection, Redis connection, `OPENAI_API_KEY`, `OPENAI_MODEL`. Optional: `JINA_API_KEY` (higher rate limits), `SERPAPI_API_KEY`.
+**Backend** (`/apps/backend/.env`) requires: MySQL connection, Redis connection, `OPENAI_API_KEY`, `OPENAI_MODEL`. Optional: `JINA_API_KEY` (higher rate limits), `SERPAPI_API_KEY`.
 
-**Frontend** requires: `NUXT_SESSION_PASSWORD` (32+ char string), `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_OAUTH_GOOGLE_CLIENT_SECRET`. Google OAuth callback URL: `http://localhost:3000/auth/google`.
+**Frontend** (`/apps/frontend/.env`) requires: `NUXT_SESSION_PASSWORD` (32+ char string), `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_OAUTH_GOOGLE_CLIENT_SECRET`. Google OAuth callback URL: `http://localhost:3000/auth/google`.

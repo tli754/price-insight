@@ -1,5 +1,5 @@
 {
-  "name": "price-insight-frontend",
+  "name": "@price-insight/frontend",
   "private": true,
   "type": "module",
   "scripts": {
