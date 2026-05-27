@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect } from "vitest";
-import { buildTestApp, makeProductRepository } from "./helpers/build-app.js";
+import { buildTestApp, makeProductRepository, makeShopifyService } from "./helpers/build-app.js";
 import type { ProductRow, ProductImageRow } from "../db/schema.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -242,5 +242,40 @@ describe("DELETE /api/products/:id", () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe("PRODUCT_NOT_FOUND");
+  });
+});
+
+describe("POST /api/products/sync", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns 503 SHOPIFY_NOT_CONFIGURED when shopifyService is null", async () => {
+    ({ app } = await buildTestApp({ shopifyService: null }));
+
+    const response = await app.inject({ method: "POST", url: "/api/products/sync" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe("SHOPIFY_NOT_CONFIGURED");
+  });
+
+  it("returns 200 with synced count on success", async () => {
+    const productRepository = makeProductRepository();
+    productRepository.importProducts.mockResolvedValue(5);
+
+    const shopifyService = makeShopifyService();
+    shopifyService.getAccessToken.mockResolvedValue("tok_abc");
+    shopifyService.fetchAllProducts.mockResolvedValue([]);
+
+    ({ app } = await buildTestApp({ productRepository, shopifyService }));
+
+    const response = await app.inject({ method: "POST", url: "/api/products/sync" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ synced: 5 });
+    expect(shopifyService.getAccessToken).toHaveBeenCalledOnce();
+    expect(shopifyService.fetchAllProducts).toHaveBeenCalledWith("tok_abc");
   });
 });

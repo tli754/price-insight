@@ -71,11 +71,18 @@ export function makeCompetitorAnalysisService() {
 
 // ── App builder ───────────────────────────────────────────────────────────────
 
+export function makeShopifyService() {
+  return {
+    getAccessToken: vi.fn().mockResolvedValue("fake-access-token"),
+    fetchAllProducts: vi.fn().mockResolvedValue([])
+  };
+}
+
 export type TestMocks = {
   productRepository: ReturnType<typeof makeProductRepository>;
   competitorRepository: ReturnType<typeof makeCompetitorRepository>;
   competitorAnalysisService: ReturnType<typeof makeCompetitorAnalysisService>;
-  shopifyService: null;
+  shopifyService: ReturnType<typeof makeShopifyService> | null;
 };
 
 export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
@@ -83,7 +90,7 @@ export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
     productRepository: overrides.productRepository ?? makeProductRepository(),
     competitorRepository: overrides.competitorRepository ?? makeCompetitorRepository(),
     competitorAnalysisService: overrides.competitorAnalysisService ?? makeCompetitorAnalysisService(),
-    shopifyService: null
+    shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null
   };
 
   const app = Fastify({ logger: false });
