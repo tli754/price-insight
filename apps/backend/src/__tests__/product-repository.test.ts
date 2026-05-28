@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 
 import { ProductRepository } from "../services/product-repository.js";
 import type { ShopifyProduct } from "../services/product-repository.js";
-import { makeMockDb, makeInsertBuilder } from "./helpers/mock-db.js";
+import { makeMockDb } from "./helpers/mock-db.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

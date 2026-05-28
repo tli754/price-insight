@@ -24,6 +24,9 @@
     "db:studio": {
       "persistent": true,
       "cache": false
+    },
+    "lint": {
+      "outputs": []
     }
   }
 }

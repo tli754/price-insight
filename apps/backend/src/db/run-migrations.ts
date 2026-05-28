@@ -46,8 +46,8 @@ export async function runMigrations(migrationsFolder = "./drizzle") {
 
   try {
     await migrate(db, { migrationsFolder });
-  } catch (err: any) {
-    const code = err?.code ?? err?.cause?.code;
+  } catch (err: unknown) {
+    const code = (err as { code?: string; cause?: { code?: string } })?.code ?? (err as { cause?: { code?: string } })?.cause?.code;
     if (code === "ER_TABLE_EXISTS_ERROR") {
       await bootstrapMigrationTracking(pool, migrationsFolder);
       await migrate(db, { migrationsFolder });
