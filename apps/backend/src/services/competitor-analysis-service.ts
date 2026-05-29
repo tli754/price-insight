@@ -18,7 +18,8 @@ export class CompetitorAnalysisService {
   constructor(
     private readonly serpApi: SerpApiService,
     private readonly redis: RedisClient,
-    private readonly competitorRepository: CompetitorRepository
+    private readonly competitorRepository: CompetitorRepository,
+    private readonly ownStoreName?: string
   ) {}
 
   async fetchCompetitors(product: ProductRow): Promise<FetchCompetitorsResponse> {
@@ -59,16 +60,21 @@ export class CompetitorAnalysisService {
       throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
     }
 
+    const ownStore = this.ownStoreName?.trim().toLowerCase();
+    const filtered = ownStore
+      ? results.filter(r => normalizeSource(r.source).toLowerCase() !== ownStore)
+      : results;
+
     await this.competitorRepository.deleteSuggestedByProduct(product.id);
 
-    const uniqueSources = [...new Set(results.map((r) => normalizeSource(r.source)))];
+    const uniqueSources = [...new Set(filtered.map((r) => normalizeSource(r.source)))];
     const competitorMap = new Map<string, number>();
     for (const source of uniqueSources) {
       const comp = await this.competitorRepository.findOrCreateCompetitor(source);
       competitorMap.set(source, comp.id);
     }
 
-    const rows = results.map((r) => ({
+    const rows = filtered.map((r) => ({
       competitorId: competitorMap.get(normalizeSource(r.source)) ?? 0,
       title: r.title,
       externalId: r.externalId,
@@ -94,7 +100,7 @@ export class CompetitorAnalysisService {
 
     await this.competitorRepository.insertSuggestedCompetitors(product.id, rows);
 
-    return results;
+    return filtered;
   }
 
   async saveCompetitors(product: ProductRow, selected: CompetitorResult[]): Promise<CompetitorProductRow[]> {
