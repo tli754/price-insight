@@ -12,6 +12,7 @@ import { vi } from "vitest";
 import { AppError } from "../../lib/app-error.js";
 import analysisRoutes from "../../routes/analysis.js";
 import healthRoutes from "../../routes/health.js";
+import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
 
 // ── Minimal fake env ──────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ export const fakeEnv = {
   OPENAI_MODEL: "gpt-4.1-mini",
   SHOPIFY_TOKEN_URL: undefined,
   SHOPIFY_PRODUCTS_URL: undefined,
+  SHOPIFY_ORDERS_URL: undefined,
   SHOPIFY_CLIENT_ID: undefined,
   SHOPIFY_CLIENT_SECRET: undefined
 };
@@ -74,7 +76,15 @@ export function makeCompetitorAnalysisService() {
 export function makeShopifyService() {
   return {
     getAccessToken: vi.fn().mockResolvedValue("fake-access-token"),
-    fetchAllProducts: vi.fn().mockResolvedValue([])
+    fetchAllProducts: vi.fn().mockResolvedValue([]),
+    fetchOrders: vi.fn().mockResolvedValue([])
+  };
+}
+
+export function makeOrderRepository() {
+  return {
+    getLastSyncedAt: vi.fn().mockResolvedValue(null),
+    importOrders: vi.fn().mockResolvedValue(0)
   };
 }
 
@@ -82,6 +92,7 @@ export type TestMocks = {
   productRepository: ReturnType<typeof makeProductRepository>;
   competitorRepository: ReturnType<typeof makeCompetitorRepository>;
   competitorAnalysisService: ReturnType<typeof makeCompetitorAnalysisService>;
+  orderRepository: ReturnType<typeof makeOrderRepository>;
   shopifyService: ReturnType<typeof makeShopifyService> | null;
 };
 
@@ -90,6 +101,7 @@ export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
     productRepository: overrides.productRepository ?? makeProductRepository(),
     competitorRepository: overrides.competitorRepository ?? makeCompetitorRepository(),
     competitorAnalysisService: overrides.competitorAnalysisService ?? makeCompetitorAnalysisService(),
+    orderRepository: overrides.orderRepository ?? makeOrderRepository(),
     shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null
   };
 
@@ -98,10 +110,11 @@ export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
   await app.register(cors, { origin: fakeEnv.APP_URL, credentials: true });
 
   app.decorate("env", fakeEnv);
-  app.decorate("productRepository", mocks.productRepository);
-  app.decorate("competitorRepository", mocks.competitorRepository);
-  app.decorate("competitorAnalysisService", mocks.competitorAnalysisService);
-  app.decorate("shopifyService", mocks.shopifyService);
+  app.decorate("productRepository", mocks.productRepository as any);
+  app.decorate("competitorRepository", mocks.competitorRepository as any);
+  app.decorate("competitorAnalysisService", mocks.competitorAnalysisService as any);
+  app.decorate("orderRepository", mocks.orderRepository as any);
+  app.decorate("shopifyService", mocks.shopifyService as any);
 
   app.setErrorHandler((error: unknown, request, reply) => {
     if (error instanceof AppError) {
@@ -121,6 +134,7 @@ export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
 
   await app.register(healthRoutes, { prefix: "/api" });
   await app.register(productRoutes, { prefix: "/api" });
+  await app.register(ordersRoutes, { prefix: "/api" });
   await app.register(analysisRoutes, { prefix: "/api" });
 
   await app.ready();
