@@ -11,7 +11,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "lint": "eslint .",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "investigate:serp": "tsx src/scripts/investigate-serp.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",

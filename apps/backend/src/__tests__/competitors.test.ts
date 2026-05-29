@@ -243,3 +243,202 @@ describe("POST /api/products/:id/competitors", () => {
     expect(response.json().items).toHaveLength(1);
   });
 });
+
+// ── CORS preflight for mutating verbs ─────────────────────────────────────────
+
+describe("CORS preflight", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("allows DELETE in Access-Control-Allow-Methods", async () => {
+    ({ app } = await buildTestApp());
+
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/api/products/1/competitors/1",
+      headers: {
+        Origin: "http://localhost:3000",
+        "Access-Control-Request-Method": "DELETE"
+      }
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-methods"]).toMatch(/DELETE/);
+  });
+
+  it("allows PATCH in Access-Control-Allow-Methods", async () => {
+    ({ app } = await buildTestApp());
+
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/api/products/1/competitors/1",
+      headers: {
+        Origin: "http://localhost:3000",
+        "Access-Control-Request-Method": "PATCH"
+      }
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-methods"]).toMatch(/PATCH/);
+  });
+});
+
+// ── GET /api/products/:id/competitors ─────────────────────────────────────────
+
+describe("GET /api/products/:id/competitors", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns 200 with linked competitor products", async () => {
+    const productRepository = makeProductRepository();
+    const competitorRepository = makeCompetitorRepository();
+    productRepository.getProductById.mockResolvedValue(makeProductRow());
+    competitorRepository.getCompetitorsByProductId.mockResolvedValue([
+      { id: 3, title: "Rival Widget", source: "Rival Store", extractedPrice: 79.99 }
+    ]);
+    ({ app } = await buildTestApp({ productRepository, competitorRepository }));
+
+    const response = await app.inject({ method: "GET", url: "/api/products/1/competitors" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().items).toHaveLength(1);
+  });
+
+  it("returns 404 when product does not exist", async () => {
+    const productRepository = makeProductRepository();
+    productRepository.getProductById.mockResolvedValue(null);
+    ({ app } = await buildTestApp({ productRepository }));
+
+    const response = await app.inject({ method: "GET", url: "/api/products/99/competitors" });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe("PRODUCT_NOT_FOUND");
+  });
+});
+
+// ── DELETE /api/products/:id/competitors/:competitorId ────────────────────────
+
+describe("DELETE /api/products/:id/competitors/:competitorId", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns 204 on successful delete", async () => {
+    const productRepository = makeProductRepository();
+    const competitorRepository = makeCompetitorRepository();
+    productRepository.getProductById.mockResolvedValue(makeProductRow());
+    ({ app } = await buildTestApp({ productRepository, competitorRepository }));
+
+    const response = await app.inject({ method: "DELETE", url: "/api/products/1/competitors/5" });
+
+    expect(response.statusCode).toBe(204);
+    expect(competitorRepository.deleteCompetitorProduct).toHaveBeenCalledWith(5);
+  });
+
+  it("returns 404 when product does not exist", async () => {
+    const productRepository = makeProductRepository();
+    productRepository.getProductById.mockResolvedValue(null);
+    ({ app } = await buildTestApp({ productRepository }));
+
+    const response = await app.inject({ method: "DELETE", url: "/api/products/99/competitors/5" });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe("PRODUCT_NOT_FOUND");
+  });
+
+  it("returns 400 for a non-integer competitor id", async () => {
+    ({ app } = await buildTestApp());
+
+    const response = await app.inject({ method: "DELETE", url: "/api/products/1/competitors/abc" });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_COMPETITOR_ID");
+  });
+
+  it("returns 400 for competitor id zero", async () => {
+    ({ app } = await buildTestApp());
+
+    const response = await app.inject({ method: "DELETE", url: "/api/products/1/competitors/0" });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_COMPETITOR_ID");
+  });
+});
+
+// ── PATCH /api/products/:id/competitors/:competitorId ─────────────────────────
+
+describe("PATCH /api/products/:id/competitors/:competitorId", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns 200 when status confirmed", async () => {
+    const productRepository = makeProductRepository();
+    const competitorRepository = makeCompetitorRepository();
+    productRepository.getProductById.mockResolvedValue(makeProductRow());
+    ({ app } = await buildTestApp({ productRepository, competitorRepository }));
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/products/1/competitors/5",
+      payload: { status: "confirmed" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true });
+    expect(competitorRepository.updateCompetitorProductStatus).toHaveBeenCalledWith(5, "confirmed");
+  });
+
+  it("returns 400 when status is not 'confirmed'", async () => {
+    const productRepository = makeProductRepository();
+    productRepository.getProductById.mockResolvedValue(makeProductRow());
+    ({ app } = await buildTestApp({ productRepository }));
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/products/1/competitors/5",
+      payload: { status: "rejected" }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_STATUS");
+  });
+
+  it("returns 404 when product does not exist", async () => {
+    const productRepository = makeProductRepository();
+    productRepository.getProductById.mockResolvedValue(null);
+    ({ app } = await buildTestApp({ productRepository }));
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/products/99/competitors/5",
+      payload: { status: "confirmed" }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe("PRODUCT_NOT_FOUND");
+  });
+
+  it("returns 400 for a non-integer competitor id", async () => {
+    ({ app } = await buildTestApp());
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/products/1/competitors/abc",
+      payload: { status: "confirmed" }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_COMPETITOR_ID");
+  });
+});

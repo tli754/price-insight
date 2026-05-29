@@ -163,23 +163,32 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
           <span>Competitors</span>
         </template>
 
-        <!-- Confirmed competitors -->
-        <div v-if="confirmedCompetitors.length" class="overflow-hidden rounded-lg border border-default/50">
+        <!-- Loading -->
+        <div v-if="competitorsPending" class="space-y-2">
+          <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
+        </div>
+
+        <div v-else-if="!allCompetitors.length" class="py-6 text-center text-sm text-toned">
+          No competitors found — click Find Competitors to search.
+        </div>
+
+        <!-- Unified competitors table -->
+        <div v-else class="overflow-hidden rounded-lg border border-default/50">
           <table class="w-full table-fixed text-sm">
             <thead>
               <tr class="border-b border-default/50 bg-default/20">
                 <th class="w-[60px] px-3 py-2" />
-                <th class="w-[250px] px-3 py-2 text-left font-medium text-toned">Product</th>
-                <th class="w-[200px] px-3 py-2 text-left font-medium text-toned">Store</th>
-                <th class="w-[100px] px-3 py-2 text-left font-medium text-toned">Added</th>
+                <th class="w-[220px] px-3 py-2 text-left font-medium text-toned">Product</th>
+                <th class="w-[160px] px-3 py-2 text-left font-medium text-toned">Store</th>
+                <th class="w-[100px] px-3 py-2 text-left font-medium text-toned">Status</th>
                 <th class="px-3 py-2 text-right font-medium text-toned">Price</th>
                 <th class="px-3 py-2 text-right font-medium text-toned">Diff</th>
-                <th class="w-10 px-3 py-2" />
+                <th class="w-20 px-3 py-2" />
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="c in confirmedCompetitors"
+                v-for="c in allCompetitors"
                 :key="c.id"
                 class="border-b border-default/30 last:border-0"
               >
@@ -210,109 +219,15 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                   </div>
                 </td>
                 <td class="truncate px-3 py-2 text-toned" :title="c.source">{{ c.source }}</td>
-                <td class="px-3 py-2 text-toned">{{ new Date(c.createdAt).toLocaleDateString() }}</td>
-                <td class="whitespace-nowrap px-3 py-2 text-right">
-                  <span class="font-medium text-highlighted">
-                    {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
-                  </span>
-                </td>
-                <td class="whitespace-nowrap px-3 py-2 text-right">
-                  <span v-if="priceDiff(c.extractedPrice)" :class="priceDiff(c.extractedPrice)!.color" class="font-medium">
-                    {{ priceDiff(c.extractedPrice)!.label }}
-                  </span>
-                  <span v-else class="text-toned">—</span>
-                </td>
-                <td class="px-2 py-2 text-right">
-                  <UButton
-                    size="xs"
-                    variant="ghost"
-                    color="error"
-                    icon="i-lucide-trash-2"
-                    :loading="actioningId === c.id"
-                    @click="deleteCompetitor(c.id)"
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Price charts -->
-        <div v-if="chartPrices.length >= 2" class="mt-4 grid grid-cols-2 gap-4">
-          <div>
-            <p class="mb-1 text-xs font-medium text-toned">Scatter Plot</p>
-            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
-              <PriceScatterChart :prices="chartPrices" :labels="chartLabels" :our-price="product.price" />
-            </div>
-          </div>
-          <div>
-            <p class="mb-1 text-xs font-medium text-toned">Price Distribution</p>
-            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
-              <PriceBoxChart :prices="chartPrices" :our-price="product.price" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Divider between confirmed and suggested -->
-        <div v-if="confirmedCompetitors.length && suggestedCompetitors.length" class="my-4 flex items-center gap-3">
-          <div class="h-px flex-1 bg-default/40" />
-          <span class="text-xs font-medium text-toned uppercase tracking-wide">Suggested</span>
-          <div class="h-px flex-1 bg-default/40" />
-        </div>
-
-        <!-- New / cached competitors (bottom) -->
-        <div v-if="competitorsPending" class="space-y-2">
-          <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
-        </div>
-
-        <div v-else-if="!allCompetitors.length" class="py-6 text-center text-sm text-toned">
-          No competitors found — click Find Competitors to search.
-        </div>
-
-        <div v-else-if="suggestedCompetitors.length" class="overflow-hidden rounded-lg border border-default/50">
-          <table class="w-full table-fixed text-sm">
-            <thead>
-              <tr class="border-b border-default/50 bg-default/20">
-                <th class="w-[60px] px-3 py-2" />
-                <th class="w-[250px] px-3 py-2 text-left font-medium text-toned">Product</th>
-                <th class="w-[200px] px-3 py-2 text-left font-medium text-toned">Store</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Price</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Diff</th>
-                <th class="w-24 px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="c in suggestedCompetitors"
-                :key="c.id"
-                class="border-b border-default/30 last:border-0"
-              >
                 <td class="px-3 py-2">
-                  <img
-                    v-if="c.thumbnail"
-                    :src="c.thumbnail"
-                    :alt="c.title"
-                    class="h-[60px] w-[60px] rounded object-contain bg-white"
-                  />
-                  <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
+                  <UBadge
+                    :color="c.status === 'confirmed' ? 'success' : 'warning'"
+                    variant="soft"
+                    size="sm"
+                  >
+                    {{ c.status }}
+                  </UBadge>
                 </td>
-                <td class="overflow-hidden px-3 py-2">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <a
-                      :href="c.productLink"
-                      :title="c.title"
-                      target="_blank"
-                      rel="noopener"
-                      class="min-w-0 truncate text-primary-600 hover:underline"
-                    >
-                      {{ c.title }}
-                    </a>
-                    <UBadge v-if="c.tag" size="xs" color="neutral" variant="soft" class="shrink-0">
-                      {{ c.tag }}
-                    </UBadge>
-                  </div>
-                </td>
-                <td class="truncate px-3 py-2 text-toned" :title="c.source">{{ c.source }}</td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
                   <span class="font-medium text-highlighted">
                     {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
@@ -330,6 +245,7 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                 <td class="px-2 py-2 text-right">
                   <div class="flex items-center justify-end gap-1">
                     <UButton
+                      v-if="c.status === 'suggested'"
                       size="xs"
                       variant="soft"
                       color="primary"
@@ -341,7 +257,7 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                       size="xs"
                       variant="ghost"
                       color="error"
-                      icon="i-lucide-x"
+                      icon="i-lucide-trash-2"
                       :loading="actioningId === c.id"
                       @click="deleteCompetitor(c.id)"
                     />
@@ -350,6 +266,22 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Price charts (confirmed only) -->
+        <div v-if="chartPrices.length >= 2" class="mt-4 grid grid-cols-2 gap-4">
+          <div>
+            <p class="mb-1 text-xs font-medium text-toned">Scatter Plot</p>
+            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
+              <PriceScatterChart :prices="chartPrices" :labels="chartLabels" :our-price="product.price" />
+            </div>
+          </div>
+          <div>
+            <p class="mb-1 text-xs font-medium text-toned">Price Distribution</p>
+            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
+              <PriceBoxChart :prices="chartPrices" :our-price="product.price" />
+            </div>
+          </div>
         </div>
       </UCard>
 
