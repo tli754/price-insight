@@ -1,51 +1,16 @@
 import type { CompetitorProductRow, ProductRow } from "../db/schema.js";
 import { AppError } from "../lib/app-error.js";
 import { analyzePrice } from "../lib/price-analysis.js";
-import { getJson, setJson, type RedisClient } from "./cache.js";
 import { CompetitorRepository } from "./competitor-repository.js";
 import type { CompetitorResult } from "./serp-api-service.js";
 import { SerpApiService } from "./serp-api-service.js";
 
-const CACHE_TTL_SECONDS = 604800; // 7 days
-
-export type FetchCompetitorsResponse = {
-  cached: boolean;
-  query: string;
-  competitors: CompetitorResult[];
-};
-
 export class CompetitorAnalysisService {
   constructor(
     private readonly serpApi: SerpApiService,
-    private readonly redis: RedisClient,
     private readonly competitorRepository: CompetitorRepository,
     private readonly ownStoreName?: string
   ) {}
-
-  async fetchCompetitors(product: ProductRow): Promise<FetchCompetitorsResponse> {
-    const cacheKey = `competitors:product:${product.id}`;
-    const cached = await getJson<CompetitorResult[]>(this.redis, cacheKey);
-
-    if (cached) {
-      return { cached: true, query: "", competitors: cached };
-    }
-
-    const query = [product.brand, product.title].filter(Boolean).join(" ");
-
-    if (!query) {
-      throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
-    }
-
-    const results = await this.serpApi.searchShoppingPrices(query);
-
-    if (results.length === 0) {
-      throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
-    }
-
-    await setJson(this.redis, cacheKey, results, CACHE_TTL_SECONDS);
-
-    return { cached: false, query, competitors: results };
-  }
 
   async searchAndSuggest(product: ProductRow): Promise<CompetitorResult[]> {
     const query = [product.brand, product.title].filter(Boolean).join(" ");
@@ -136,8 +101,6 @@ export class CompetitorAnalysisService {
       });
       await this.competitorRepository.recordPriceInsight(product.id, analysis);
     }
-
-    await this.redis.del(`competitors:product:${product.id}`);
 
     return saved;
   }

@@ -59,6 +59,8 @@ function mockFetch(shoppingData: object, immersiveData?: object) {
   });
 }
 
+// ── SerpApiService ────────────────────────────────────────────────────────────
+
 describe("SerpApiService", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -78,6 +80,34 @@ describe("SerpApiService", () => {
       expect(calledUrl.searchParams.get("gl")).toBe("nz");
       expect(calledUrl.searchParams.get("hl")).toBe("en");
       expect(calledUrl.searchParams.get("google_domain")).toBe("google.co.nz");
+    });
+
+    it("sends num param defaulting to 40", async () => {
+      const fetchSpy = mockFetch(makeShoppingResponse(), makeImmersiveResponse([makeStore()]));
+      const service = new SerpApiService(FAKE_KEY);
+
+      await service.searchShoppingPrices("Widget");
+
+      const shoppingCall = fetchSpy.mock.calls.find(([url]) =>
+        url.toString().includes("google_shopping")
+      );
+      const calledUrl = new URL(shoppingCall![0].toString());
+      expect(calledUrl.searchParams.get("num")).toBe("40");
+    });
+
+    it("sends num param from locale options", async () => {
+      const fetchSpy = mockFetch(makeShoppingResponse(), makeImmersiveResponse([makeStore()]));
+      const service = new SerpApiService(FAKE_KEY, {
+        location: "New Zealand", gl: "nz", hl: "en", google_domain: "google.co.nz", num: 100
+      });
+
+      await service.searchShoppingPrices("Widget");
+
+      const shoppingCall = fetchSpy.mock.calls.find(([url]) =>
+        url.toString().includes("google_shopping")
+      );
+      const calledUrl = new URL(shoppingCall![0].toString());
+      expect(calledUrl.searchParams.get("num")).toBe("100");
     });
 
     it("uses custom locale when provided", async () => {
@@ -150,7 +180,7 @@ describe("SerpApiService", () => {
       expect(result.googlePosition).toBe(1);
     });
 
-    it("filters out stores with no extracted_price", async () => {
+    it("filters out stores with no extracted_price, keeps priced ones", async () => {
       mockFetch(
         makeShoppingResponse(),
         makeImmersiveResponse([makeStore(), makeStore({ extracted_price: undefined, price: undefined })])
@@ -160,6 +190,24 @@ describe("SerpApiService", () => {
       const results = await service.searchShoppingPrices("Widget");
 
       expect(results).toHaveLength(1);
+      expect(results[0].extractedPrice).toBe(95.0);
+    });
+
+    it("falls back to shopping result when all immersive stores have no price", async () => {
+      mockFetch(
+        makeShoppingResponse(),
+        makeImmersiveResponse([
+          makeStore({ extracted_price: undefined, price: undefined }),
+          makeStore({ extracted_price: undefined, price: undefined })
+        ])
+      );
+      const service = new SerpApiService(FAKE_KEY);
+
+      const results = await service.searchShoppingPrices("Widget");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].source).toBe("Store NZ");
+      expect(results[0].extractedPrice).toBe(99.0);
     });
   });
 
@@ -244,6 +292,130 @@ describe("SerpApiService", () => {
       const service = new SerpApiService(FAKE_KEY);
       const [result] = await service.searchShoppingPrices("Widget");
       expect(result.country).toBe("NZ");
+    });
+  });
+
+  describe("pagination", () => {
+    it("fetches a second page when the first page equals num results", async () => {
+      let callCount = 0;
+      vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+        const url = input.toString();
+        if (url.includes("google_immersive_product")) {
+          return new Response(JSON.stringify({ stores: [] }), { status: 200 });
+        }
+        callCount++;
+        // Page 1: full page of 2; page 2: empty → stop
+        const body = callCount === 1
+          ? { shopping_results: [
+              { position: 1, title: "A", product_id: "a", extracted_price: 10, source: "S" },
+              { position: 2, title: "B", product_id: "b", extracted_price: 20, source: "S" }
+            ] }
+          : { shopping_results: [] };
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+
+      const service = new SerpApiService(FAKE_KEY, {
+        location: "New Zealand", gl: "nz", hl: "en", google_domain: "google.co.nz", num: 2
+      });
+
+      const results = await service.searchShoppingPrices("Widget");
+
+      expect(callCount).toBe(2);
+      expect(results).toHaveLength(2);
+    });
+
+    it("stops after one page when the page has fewer results than num", async () => {
+      let shoppingCallCount = 0;
+      vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+        const url = input.toString();
+        if (url.includes("google_immersive_product")) {
+          return new Response(JSON.stringify({ stores: [] }), { status: 200 });
+        }
+        shoppingCallCount++;
+        // Returns only 1 result when num=2 → no more pages
+        return new Response(
+          JSON.stringify({ shopping_results: [
+            { position: 1, title: "A", product_id: "a", extracted_price: 10, source: "S" }
+          ] }),
+          { status: 200 }
+        );
+      });
+
+      const service = new SerpApiService(FAKE_KEY, {
+        location: "New Zealand", gl: "nz", hl: "en", google_domain: "google.co.nz", num: 2
+      });
+
+      await service.searchShoppingPrices("Widget");
+
+      expect(shoppingCallCount).toBe(1);
+    });
+
+    it("sets the start param on subsequent pages", async () => {
+      const calledUrls: string[] = [];
+      vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+        const url = input.toString();
+        if (url.includes("google_immersive_product")) {
+          return new Response(JSON.stringify({ stores: [] }), { status: 200 });
+        }
+        calledUrls.push(url);
+        const isFirst = !url.includes("start=");
+        const body = isFirst
+          ? { shopping_results: [
+              { position: 1, title: "A", product_id: "a", extracted_price: 10, source: "S" },
+              { position: 2, title: "B", product_id: "b", extracted_price: 20, source: "S" }
+            ] }
+          : { shopping_results: [] };
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+
+      const service = new SerpApiService(FAKE_KEY, {
+        location: "New Zealand", gl: "nz", hl: "en", google_domain: "google.co.nz", num: 2
+      });
+
+      await service.searchShoppingPrices("Widget");
+
+      const secondPage = calledUrls.find(u => u.includes("start="));
+      expect(secondPage).toBeDefined();
+      expect(new URL(secondPage!).searchParams.get("start")).toBe("2");
+    });
+  });
+
+  describe("fallback price guard", () => {
+    it("skips shopping result with no extracted_price in fallback path", async () => {
+      mockFetch(
+        makeShoppingResponse({ immersive_product_page_token: undefined, extracted_price: undefined }),
+        makeImmersiveResponse([])
+      );
+      const service = new SerpApiService(FAKE_KEY);
+
+      const results = await service.searchShoppingPrices("Widget");
+
+      expect(results).toHaveLength(0);
+    });
+
+    it("skips shopping result with extracted_price of zero in fallback path", async () => {
+      mockFetch(
+        makeShoppingResponse({ immersive_product_page_token: undefined, extracted_price: 0 }),
+        makeImmersiveResponse([])
+      );
+      const service = new SerpApiService(FAKE_KEY);
+
+      const results = await service.searchShoppingPrices("Widget");
+
+      expect(results).toHaveLength(0);
+    });
+
+    it("includes shopping result with valid extracted_price in fallback path", async () => {
+      mockFetch(
+        makeShoppingResponse({ immersive_product_page_token: undefined, extracted_price: 49.99 }),
+        makeImmersiveResponse([])
+      );
+      const service = new SerpApiService(FAKE_KEY);
+
+      const results = await service.searchShoppingPrices("Widget");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].extractedPrice).toBe(49.99);
     });
   });
 

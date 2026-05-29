@@ -28,6 +28,7 @@ type SerpApiLocale = {
   gl: string;
   hl: string;
   google_domain: string;
+  num?: number;
 };
 
 const NZ_LOCALE: SerpApiLocale = {
@@ -97,33 +98,45 @@ export class SerpApiService {
   ) {}
 
   async searchShoppingPrices(query: string): Promise<CompetitorResult[]> {
-    const url = new URL("https://serpapi.com/search.json");
-    url.searchParams.set("engine", "google_shopping");
-    url.searchParams.set("q", query);
-    url.searchParams.set("api_key", this.apiKey);
-    url.searchParams.set("location", this.locale.location);
-    url.searchParams.set("gl", this.locale.gl);
-    url.searchParams.set("hl", this.locale.hl);
-    url.searchParams.set("google_domain", this.locale.google_domain);
+    const num = this.locale.num ?? 40;
+    const allResults: CompetitorResult[] = [];
 
-    const response = await fetch(url.toString());
+    // Paginate until we have no more results or hit the num limit.
+    // SerpAPI returns at most 100 per page; we step by num.
+    for (let start = 0; ; start += num) {
+      const url = new URL("https://serpapi.com/search.json");
+      url.searchParams.set("engine", "google_shopping");
+      url.searchParams.set("q", query);
+      url.searchParams.set("api_key", this.apiKey);
+      url.searchParams.set("location", this.locale.location);
+      url.searchParams.set("gl", this.locale.gl);
+      url.searchParams.set("hl", this.locale.hl);
+      url.searchParams.set("google_domain", this.locale.google_domain);
+      url.searchParams.set("num", String(num));
+      if (start > 0) url.searchParams.set("start", String(start));
 
-    if (!response.ok) {
-      throw new AppError(
-        502,
-        "SERPAPI_FAILED",
-        `SerpAPI request failed with ${response.status} ${response.statusText}`
-      );
+      const response = await fetch(url.toString());
+
+      if (!response.ok) {
+        throw new AppError(
+          502,
+          "SERPAPI_FAILED",
+          `SerpAPI request failed with ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = (await response.json()) as SerpApiResponse;
+      const page = data.shopping_results ?? [];
+      if (page.length === 0) break;
+
+      const expanded = await Promise.all(page.map((r) => this.expandToStores(r)));
+      allResults.push(...expanded.flat());
+
+      // Stop if this page was shorter than requested — no more pages.
+      if (page.length < num) break;
     }
 
-    const data = (await response.json()) as SerpApiResponse;
-
-    const candidates = (data.shopping_results ?? []).filter(
-      (r) => typeof r.extracted_price === "number" && r.extracted_price > 0
-    );
-
-    const results = await Promise.all(candidates.map((r) => this.expandToStores(r)));
-    return results.flat();
+    return allResults;
   }
 
   private async expandToStores(r: SerpApiShoppingResult): Promise<CompetitorResult[]> {
@@ -131,13 +144,19 @@ export class SerpApiService {
       ? await this.fetchStores(r.immersive_product_page_token)
       : null;
 
-    if (!stores || stores.length === 0) {
+    const pricedStores = stores?.filter(
+      (s) => typeof s.extracted_price === "number" && s.extracted_price > 0
+    ) ?? null;
+
+    // No token, immersive failed, empty stores, or all stores had no price — fall back to shopping result
+    if (!pricedStores || pricedStores.length === 0) {
+      if (typeof r.extracted_price !== "number" || r.extracted_price <= 0) return [];
       return [
         {
           title: r.title ?? "",
           externalId: r.product_id ?? null,
           rawPrice: r.price ?? null,
-          extractedPrice: r.extracted_price as number,
+          extractedPrice: r.extracted_price,
           rawOldPrice: r.old_price ?? null,
           extractedOldPrice: r.extracted_old_price ?? null,
           currency: null,
@@ -158,9 +177,7 @@ export class SerpApiService {
       ];
     }
 
-    return stores
-      .filter((s) => typeof s.extracted_price === "number" && (s.extracted_price ?? 0) > 0)
-      .map((s) => ({
+    return pricedStores.map((s) => ({
         title: s.title ?? r.title ?? "",
         externalId: r.product_id ?? null,
         rawPrice: s.price ?? null,
