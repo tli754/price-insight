@@ -32,8 +32,13 @@ export async function buildApp(env: AppEnv) {
 
   const productRepository = new ProductRepository(db);
   const competitorRepository = new CompetitorRepository(db);
-  const serpApi = new SerpApiService(env.SERPAPI_API_KEY);
-  const competitorAnalysisService = new CompetitorAnalysisService(serpApi, redis, competitorRepository);
+  const serpApi = new SerpApiService(env.SERPAPI_API_KEY, {
+    location: env.SERPAPI_LOCATION,
+    gl: env.SERPAPI_GL,
+    hl: env.SERPAPI_HL,
+    google_domain: env.SERPAPI_GOOGLE_DOMAIN
+  });
+  const competitorAnalysisService = new CompetitorAnalysisService(serpApi, redis, competitorRepository, env.OWN_STORE_NAME);
   const shopifyService = env.SHOPIFY_TOKEN_URL && env.SHOPIFY_PRODUCTS_URL && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET
     ? new ShopifyService(env.SHOPIFY_TOKEN_URL, env.SHOPIFY_PRODUCTS_URL, env.SHOPIFY_CLIENT_ID, env.SHOPIFY_CLIENT_SECRET, env.SHOPIFY_ORDERS_URL)
     : null;

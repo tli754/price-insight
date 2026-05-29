@@ -37,7 +37,11 @@ export const fakeEnv = {
   SHOPIFY_PRODUCTS_URL: undefined,
   SHOPIFY_ORDERS_URL: undefined,
   SHOPIFY_CLIENT_ID: undefined,
-  SHOPIFY_CLIENT_SECRET: undefined
+  SHOPIFY_CLIENT_SECRET: undefined,
+  SERPAPI_LOCATION: "New Zealand",
+  SERPAPI_GL: "nz",
+  SERPAPI_HL: "en",
+  SERPAPI_GOOGLE_DOMAIN: "google.co.nz"
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -56,10 +60,14 @@ export function makeCompetitorRepository() {
     getAllCompetitors: vi.fn().mockResolvedValue([]),
     getCompetitorById: vi.fn().mockResolvedValue(null),
     getProductsByCompetitorId: vi.fn().mockResolvedValue([]),
+    getCompetitorsByProductId: vi.fn().mockResolvedValue([]),
     getSavedCompetitorsWithPrice: vi.fn().mockResolvedValue([]),
     findOrCreateCompetitor: vi.fn().mockResolvedValue({ id: 1, name: "Acme", state: "active" }),
     replaceCompetitorProducts: vi.fn().mockResolvedValue([]),
     deleteCompetitorProduct: vi.fn().mockResolvedValue(undefined),
+    deleteSuggestedByProduct: vi.fn().mockResolvedValue(undefined),
+    insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined),
+    updateCompetitorProductStatus: vi.fn().mockResolvedValue(undefined),
     recordPriceInsight: vi.fn().mockResolvedValue(undefined)
   };
 }
@@ -67,7 +75,8 @@ export function makeCompetitorRepository() {
 export function makeCompetitorAnalysisService() {
   return {
     fetchCompetitors: vi.fn().mockResolvedValue({ cached: false, query: "", competitors: [] }),
-    saveCompetitors: vi.fn().mockResolvedValue([])
+    saveCompetitors: vi.fn().mockResolvedValue([]),
+    searchAndSuggest: vi.fn().mockResolvedValue([])
   };
 }
 

@@ -1,4 +1,4 @@
-import { asc, count, desc, eq, max } from "drizzle-orm";
+import { asc, and, count, desc, eq, max } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -24,6 +24,16 @@ export type CompetitorProductInput = {
   googlePosition?: number | null;
   rawPrice: string | null;
   extractedPrice: number;
+  sourceIcon?: string | null;
+  country?: string | null;
+  rating?: number | null;
+  reviewCount?: number | null;
+  shippingRaw?: string | null;
+  shippingExtracted?: number | null;
+  totalRaw?: string | null;
+  totalExtracted?: number | null;
+  rawOldPrice?: string | null;
+  extractedOldPrice?: number | null;
 };
 
 export class CompetitorRepository {
@@ -164,6 +174,99 @@ export class CompetitorRepository {
 
   async deleteCompetitorProduct(id: number): Promise<void> {
     await this.db.delete(competitorProducts).where(eq(competitorProducts.id, id));
+  }
+
+  async deleteSuggestedByProduct(productId: number): Promise<void> {
+    await this.db
+      .delete(competitorProducts)
+      .where(and(eq(competitorProducts.productId, productId), eq(competitorProducts.status, "suggested")));
+  }
+
+  async insertSuggestedCompetitors(
+    productId: number,
+    items: CompetitorProductInput[]
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      for (const item of items) {
+        const result = await tx
+          .insert(competitorProducts)
+          .values({
+            productId,
+            competitorId: item.competitorId,
+            title: item.title,
+            externalId: item.externalId,
+            productLink: item.productLink,
+            source: item.source,
+            currency: item.currency,
+            thumbnail: item.thumbnail,
+            tag: item.tag,
+            googlePosition: item.googlePosition ?? null,
+            status: "suggested",
+            sourceIcon: item.sourceIcon ?? null,
+            country: item.country ?? null,
+            rating: item.rating ?? null,
+            reviewCount: item.reviewCount ?? null,
+            shippingRaw: item.shippingRaw ?? null,
+            shippingExtracted: item.shippingExtracted ?? null,
+            totalRaw: item.totalRaw ?? null,
+            totalExtracted: item.totalExtracted ?? null,
+            rawOldPrice: item.rawOldPrice ?? null,
+            extractedOldPrice: item.extractedOldPrice ?? null
+          })
+          .$returningId();
+
+        const competitorProductId = Number(result[0]?.id);
+
+        await tx.insert(priceHistory).values({
+          competitorProductId,
+          price: item.rawPrice,
+          extractedPrice: item.extractedPrice
+        });
+      }
+    });
+  }
+
+  async updateCompetitorProductStatus(
+    id: number,
+    status: "suggested" | "confirmed"
+  ): Promise<void> {
+    await this.db
+      .update(competitorProducts)
+      .set({ status })
+      .where(eq(competitorProducts.id, id));
+  }
+
+  async getCompetitorsByProductId(productId: number) {
+    return this.db
+      .select({
+        id: competitorProducts.id,
+        title: competitorProducts.title,
+        source: competitorProducts.source,
+        sourceIcon: competitorProducts.sourceIcon,
+        thumbnail: competitorProducts.thumbnail,
+        productLink: competitorProducts.productLink,
+        currency: competitorProducts.currency,
+        tag: competitorProducts.tag,
+        country: competitorProducts.country,
+        googlePosition: competitorProducts.googlePosition,
+        status: competitorProducts.status,
+        rating: competitorProducts.rating,
+        reviewCount: competitorProducts.reviewCount,
+        shippingRaw: competitorProducts.shippingRaw,
+        shippingExtracted: competitorProducts.shippingExtracted,
+        totalRaw: competitorProducts.totalRaw,
+        totalExtracted: competitorProducts.totalExtracted,
+        rawOldPrice: competitorProducts.rawOldPrice,
+        extractedOldPrice: competitorProducts.extractedOldPrice,
+        createdAt: competitorProducts.createdAt,
+        rawPrice: priceHistory.price,
+        extractedPrice: priceHistory.extractedPrice,
+        capturedAt: priceHistory.capturedAt
+      })
+      .from(competitorProducts)
+      .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
+      .where(eq(competitorProducts.productId, productId))
+      .orderBy(desc(competitorProducts.createdAt));
   }
 
   async recordPriceInsight(productId: number, analysis: PriceAnalysisResult): Promise<void> {

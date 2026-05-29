@@ -22,7 +22,12 @@ const envSchema = z.object({
   SHOPIFY_PRODUCTS_URL: z.string().url().optional(),
   SHOPIFY_ORDERS_URL: z.string().url().optional(),
   SHOPIFY_CLIENT_ID: z.string().min(1).optional(),
-  SHOPIFY_CLIENT_SECRET: z.string().min(1).optional()
+  SHOPIFY_CLIENT_SECRET: z.string().min(1).optional(),
+  SERPAPI_LOCATION: z.string().default("New Zealand"),
+  SERPAPI_GL: z.string().default("nz"),
+  SERPAPI_HL: z.string().default("en"),
+  SERPAPI_GOOGLE_DOMAIN: z.string().default("google.co.nz"),
+  OWN_STORE_NAME: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
