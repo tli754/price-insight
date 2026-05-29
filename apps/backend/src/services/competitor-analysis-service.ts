@@ -46,6 +46,57 @@ export class CompetitorAnalysisService {
     return { cached: false, query, competitors: results };
   }
 
+  async searchAndSuggest(product: ProductRow): Promise<CompetitorResult[]> {
+    const query = [product.brand, product.title].filter(Boolean).join(" ");
+
+    if (!query) {
+      throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
+    }
+
+    const results = await this.serpApi.searchShoppingPrices(query);
+
+    if (results.length === 0) {
+      throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
+    }
+
+    await this.competitorRepository.deleteSuggestedByProduct(product.id);
+
+    const uniqueSources = [...new Set(results.map((r) => normalizeSource(r.source)))];
+    const competitorMap = new Map<string, number>();
+    for (const source of uniqueSources) {
+      const comp = await this.competitorRepository.findOrCreateCompetitor(source);
+      competitorMap.set(source, comp.id);
+    }
+
+    const rows = results.map((r) => ({
+      competitorId: competitorMap.get(normalizeSource(r.source)) ?? 0,
+      title: r.title,
+      externalId: r.externalId,
+      productLink: r.link,
+      source: normalizeSource(r.source),
+      currency: r.currency,
+      thumbnail: r.thumbnail,
+      tag: r.tag,
+      googlePosition: r.googlePosition ?? null,
+      rawPrice: r.rawPrice,
+      extractedPrice: r.extractedPrice,
+      sourceIcon: r.sourceIcon ?? null,
+      country: r.country ?? null,
+      rating: r.rating ?? null,
+      reviewCount: r.reviewCount ?? null,
+      shippingRaw: r.shippingRaw ?? null,
+      shippingExtracted: r.shippingExtracted ?? null,
+      totalRaw: r.totalRaw ?? null,
+      totalExtracted: r.totalExtracted ?? null,
+      rawOldPrice: r.rawOldPrice ?? null,
+      extractedOldPrice: r.extractedOldPrice ?? null
+    }));
+
+    await this.competitorRepository.insertSuggestedCompetitors(product.id, rows);
+
+    return results;
+  }
+
   async saveCompetitors(product: ProductRow, selected: CompetitorResult[]): Promise<CompetitorProductRow[]> {
     const uniqueSources = [...new Set(selected.map((r) => normalizeSource(r.source)))];
     const competitorMap = new Map<string, number>();

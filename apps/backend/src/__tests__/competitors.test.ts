@@ -227,7 +227,8 @@ describe("POST /api/products/:id/competitors", () => {
     const productRepository = makeProductRepository();
     const competitorAnalysisService = {
       fetchCompetitors: vi.fn(),
-      saveCompetitors: vi.fn().mockResolvedValue([{ id: 1, title: "Blue Widget XL" }])
+      saveCompetitors: vi.fn().mockResolvedValue([{ id: 1, title: "Blue Widget XL" }]),
+      searchAndSuggest: vi.fn().mockResolvedValue([])
     };
     productRepository.getProductById.mockResolvedValue(makeProductRow());
     ({ app } = await buildTestApp({ productRepository, competitorAnalysisService }));
