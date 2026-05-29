@@ -1,0 +1,846 @@
+{
+  "orders": [
+    {
+      "id": 6283106812059,
+      "admin_graphql_api_id": "gid:\/\/shopify\/Order\/6283106812059",
+      "app_id": 580111,
+      "browser_ip": "118.149.71.215",
+      "buyer_accepts_marketing": false,
+      "cancel_reason": null,
+      "cancelled_at": null,
+      "cart_token": "hWNCdcJZ5dNg3Dequ6vI1Bkv",
+      "checkout_id": 29776205578395,
+      "checkout_token": "0587e8b2aad8dde6ff1717a2fbbcab18",
+      "client_details": {
+        "accept_language": "en-NZ",
+        "browser_height": null,
+        "browser_ip": "118.149.71.215",
+        "browser_width": null,
+        "session_hash": null,
+        "user_agent": "Mozilla\/5.0 (Linux; Android 10; K) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/148.0.0.0 Mobile Safari\/537.36"
+      },
+      "closed_at": null,
+      "company": null,
+      "confirmation_number": "8A36XG37A",
+      "confirmed": true,
+      "contact_email": "knitpurl55@gmail.com",
+      "created_at": "2026-05-27T19:19:44+12:00",
+      "currency": "NZD",
+      "current_subtotal_price": "81.00",
+      "current_subtotal_price_set": {
+        "shop_money": {
+          "amount": "81.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "81.00",
+          "currency_code": "NZD"
+        }
+      },
+      "current_total_additional_fees_set": null,
+      "current_total_discounts": "0.00",
+      "current_total_discounts_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "current_total_duties_set": null,
+      "current_total_price": "99.00",
+      "current_total_price_set": {
+        "shop_money": {
+          "amount": "99.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "99.00",
+          "currency_code": "NZD"
+        }
+      },
+      "current_total_tax": "2.35",
+      "current_total_tax_set": {
+        "shop_money": {
+          "amount": "2.35",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "2.35",
+          "currency_code": "NZD"
+        }
+      },
+      "customer_locale": "en-NZ",
+      "device_id": null,
+      "discount_codes": [],
+      "duties_included": false,
+      "email": "knitpurl55@gmail.com",
+      "estimated_taxes": false,
+      "financial_status": "paid",
+      "fulfillment_status": null,
+      "landing_site": "\/products\/electric-gooseneck-kettle-temperature-control-keep-warm-800ml-white?variant=45673272836251\u0026country=NZ\u0026currency=NZD\u0026utm_medium=product_sync\u0026utm_source=google\u0026utm_content=sag_organic\u0026utm_campaign=sag_organic\u0026utm_source=google\u0026utm_medium=cpc\u0026utm_ca",
+      "landing_site_ref": null,
+      "location_id": null,
+      "merchant_business_entity_id": "MTYyODE0MjkwMDc1",
+      "merchant_of_record_app_id": null,
+      "name": "#WD3550",
+      "note": null,
+      "note_attributes": [],
+      "number": 2550,
+      "order_number": 3550,
+      "order_status_url": "https:\/\/www.whitedonkey.co.nz\/62814290075\/orders\/ef53e9d58d31d233534cee3a8f8a3adb\/authenticate?key=40998db161f946465652723ffd3f9c9e",
+      "original_total_additional_fees_set": null,
+      "original_total_duties_set": null,
+      "payment_gateway_names": [
+        "shopify_payments"
+      ],
+      "phone": null,
+      "po_number": null,
+      "presentment_currency": "NZD",
+      "processed_at": "2026-05-27T19:19:40+12:00",
+      "reference": null,
+      "referring_site": "android-app:\/\/com.google.android.googlequicksearchbox\/",
+      "source_identifier": null,
+      "source_name": "web",
+      "source_url": null,
+      "subtotal_price": "81.00",
+      "subtotal_price_set": {
+        "shop_money": {
+          "amount": "81.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "81.00",
+          "currency_code": "NZD"
+        }
+      },
+      "tags": "",
+      "tax_exempt": false,
+      "tax_lines": [
+        {
+          "price": "2.35",
+          "rate": 0.15,
+          "title": "GST",
+          "price_set": {
+            "shop_money": {
+              "amount": "2.35",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "2.35",
+              "currency_code": "NZD"
+            }
+          },
+          "channel_liable": false
+        }
+      ],
+      "taxes_included": true,
+      "test": false,
+      "token": "ef53e9d58d31d233534cee3a8f8a3adb",
+      "total_cash_rounding_payment_adjustment_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_cash_rounding_refund_adjustment_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_discounts": "0.00",
+      "total_discounts_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_line_items_price": "81.00",
+      "total_line_items_price_set": {
+        "shop_money": {
+          "amount": "81.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "81.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_outstanding": "0.00",
+      "total_price": "99.00",
+      "total_price_set": {
+        "shop_money": {
+          "amount": "99.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "99.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_shipping_price_set": {
+        "shop_money": {
+          "amount": "18.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "18.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_tax": "2.35",
+      "total_tax_set": {
+        "shop_money": {
+          "amount": "2.35",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "2.35",
+          "currency_code": "NZD"
+        }
+      },
+      "total_tip_received": "0.00",
+      "total_weight": 700,
+      "updated_at": "2026-05-27T19:19:46+12:00",
+      "user_id": null,
+      "billing_address": {
+        "first_name": "Linda",
+        "address1": "17 Rhodes Street",
+        "phone": "+64223332642",
+        "city": "Timaru District",
+        "zip": "7912",
+        "province": "Canterbury",
+        "country": "New Zealand",
+        "last_name": "Hopkinson",
+        "address2": "Pareora",
+        "company": null,
+        "latitude": -44.4870367,
+        "longitude": 171.2094921,
+        "name": "Linda Hopkinson",
+        "country_code": "NZ",
+        "province_code": "CAN"
+      },
+      "customer": {
+        "id": 8988196012187,
+        "created_at": "2026-05-25T20:27:34+12:00",
+        "updated_at": "2026-05-27T19:19:45+12:00",
+        "first_name": "Linda",
+        "last_name": "Hopkinson",
+        "state": "disabled",
+        "note": null,
+        "verified_email": true,
+        "multipass_identifier": null,
+        "tax_exempt": false,
+        "email_marketing_consent": {
+          "state": "not_subscribed",
+          "opt_in_level": "single_opt_in",
+          "consent_updated_at": null
+        },
+        "sms_marketing_consent": null,
+        "tags": "Login with Shop, Shop",
+        "email": "knitpurl55@gmail.com",
+        "phone": null,
+        "currency": "NZD",
+        "tax_exemptions": [],
+        "admin_graphql_api_id": "gid:\/\/shopify\/Customer\/8988196012187",
+        "default_address": {
+          "id": 9868902006939,
+          "customer_id": 8988196012187,
+          "first_name": "Linda",
+          "last_name": "Hopkinson",
+          "company": null,
+          "address1": "17 Rhodes Street",
+          "address2": "Pareora",
+          "city": "Timaru District",
+          "province": null,
+          "country": "New Zealand",
+          "zip": "7912",
+          "phone": "022 333 2642",
+          "name": "Linda Hopkinson",
+          "province_code": null,
+          "country_code": "NZ",
+          "country_name": "New Zealand",
+          "default": true
+        }
+      },
+      "discount_applications": [],
+      "fulfillments": [],
+      "line_items": [
+        {
+          "id": 14436684562587,
+          "admin_graphql_api_id": "gid:\/\/shopify\/LineItem\/14436684562587",
+          "attributed_staffs": [],
+          "current_quantity": 1,
+          "fulfillable_quantity": 1,
+          "fulfillment_service": "manual",
+          "fulfillment_status": null,
+          "gift_card": false,
+          "grams": 700,
+          "name": "800ML Electric Hot Water Kettle White",
+          "price": "81.00",
+          "price_set": {
+            "shop_money": {
+              "amount": "81.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "81.00",
+              "currency_code": "NZD"
+            }
+          },
+          "product_exists": true,
+          "product_id": 8304185606299,
+          "properties": [],
+          "quantity": 1,
+          "requires_shipping": true,
+          "sku": "EK-W-800",
+          "taxable": false,
+          "title": "800ML Electric Hot Water Kettle White",
+          "total_discount": "0.00",
+          "total_discount_set": {
+            "shop_money": {
+              "amount": "0.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "0.00",
+              "currency_code": "NZD"
+            }
+          },
+          "variant_id": 45676366168219,
+          "variant_inventory_management": "shopify",
+          "variant_title": null,
+          "vendor": "White Donkey",
+          "tax_lines": [
+            {
+              "channel_liable": false,
+              "price": "0.00",
+              "price_set": {
+                "shop_money": {
+                  "amount": "0.00",
+                  "currency_code": "NZD"
+                },
+                "presentment_money": {
+                  "amount": "0.00",
+                  "currency_code": "NZD"
+                }
+              },
+              "rate": 0.15,
+              "title": "GST"
+            }
+          ],
+          "duties": [],
+          "discount_allocations": []
+        }
+      ],
+      "payment_terms": null,
+      "refunds": [],
+      "shipping_address": {
+        "first_name": "Linda",
+        "address1": "17 Rhodes Street",
+        "phone": "022 333 2642",
+        "city": "Timaru District",
+        "zip": "7912",
+        "province": "Canterbury",
+        "country": "New Zealand",
+        "last_name": "Hopkinson",
+        "address2": "Pareora",
+        "company": null,
+        "latitude": -44.4870367,
+        "longitude": 171.2094921,
+        "name": "Linda Hopkinson",
+        "country_code": "NZ",
+        "province_code": "CAN"
+      },
+      "shipping_lines": [
+        {
+          "id": 5208156569755,
+          "carrier_identifier": null,
+          "code": "South Island Door to Door",
+          "discounted_price": "18.00",
+          "discounted_price_set": {
+            "shop_money": {
+              "amount": "18.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "18.00",
+              "currency_code": "NZD"
+            }
+          },
+          "is_removed": false,
+          "phone": null,
+          "price": "18.00",
+          "price_set": {
+            "shop_money": {
+              "amount": "18.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "18.00",
+              "currency_code": "NZD"
+            }
+          },
+          "requested_fulfillment_service_id": null,
+          "source": "shopify",
+          "title": "South Island Door to Door",
+          "tax_lines": [
+            {
+              "channel_liable": false,
+              "price": "2.35",
+              "price_set": {
+                "shop_money": {
+                  "amount": "2.35",
+                  "currency_code": "NZD"
+                },
+                "presentment_money": {
+                  "amount": "2.35",
+                  "currency_code": "NZD"
+                }
+              },
+              "rate": 0.15,
+              "title": "GST"
+            }
+          ],
+          "discount_allocations": []
+        }
+      ]
+    },
+    {
+      "id": 6282951688347,
+      "admin_graphql_api_id": "gid:\/\/shopify\/Order\/6282951688347",
+      "app_id": 580111,
+      "browser_ip": "2404:4400:a100:55e3:2028:c966:841d:a7ad",
+      "buyer_accepts_marketing": false,
+      "cancel_reason": null,
+      "cancelled_at": null,
+      "cart_token": "hWNCdbNVGzudC9PZLoDikhm8",
+      "checkout_id": 29776045736091,
+      "checkout_token": "1cc1b2cc066065f012186d7c178815d4",
+      "client_details": {
+        "accept_language": "en-NZ",
+        "browser_height": null,
+        "browser_ip": "2404:4400:a100:55e3:2028:c966:841d:a7ad",
+        "browser_width": null,
+        "session_hash": null,
+        "user_agent": "Mozilla\/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit\/605.1.15 (KHTML, like Gecko) Version\/26.3 Mobile\/15E148 Safari\/604.1"
+      },
+      "closed_at": null,
+      "company": null,
+      "confirmation_number": "7A0YRKENJ",
+      "confirmed": true,
+      "contact_email": "jody@hqclean.co.nz",
+      "created_at": "2026-05-27T19:02:36+12:00",
+      "currency": "NZD",
+      "current_subtotal_price": "30.00",
+      "current_subtotal_price_set": {
+        "shop_money": {
+          "amount": "30.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "30.00",
+          "currency_code": "NZD"
+        }
+      },
+      "current_total_additional_fees_set": null,
+      "current_total_discounts": "0.00",
+      "current_total_discounts_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "current_total_duties_set": null,
+      "current_total_price": "37.00",
+      "current_total_price_set": {
+        "shop_money": {
+          "amount": "37.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "37.00",
+          "currency_code": "NZD"
+        }
+      },
+      "current_total_tax": "0.91",
+      "current_total_tax_set": {
+        "shop_money": {
+          "amount": "0.91",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.91",
+          "currency_code": "NZD"
+        }
+      },
+      "customer_locale": "en-NZ",
+      "device_id": null,
+      "discount_codes": [],
+      "duties_included": false,
+      "email": "jody@hqclean.co.nz",
+      "estimated_taxes": false,
+      "financial_status": "paid",
+      "fulfillment_status": null,
+      "landing_site": "\/en-nz?gad_source=1\u0026gad_campaignid=21730350120\u0026gbraid=0AAAAADJcBXvUMhJPCV5kicy9lbucRmciV\u0026gclid=Cj0KCQjww8rQBhDjARIsAE43KPOy4jTsnq7etT4prsntdOLFCFi3t2bBiTJ3tBM33310H6R0so_LzCsaAmKMEALw_wcB",
+      "landing_site_ref": null,
+      "location_id": null,
+      "merchant_business_entity_id": "MTYyODE0MjkwMDc1",
+      "merchant_of_record_app_id": null,
+      "name": "#WD3549",
+      "note": null,
+      "note_attributes": [],
+      "number": 2549,
+      "order_number": 3549,
+      "order_status_url": "https:\/\/www.whitedonkey.co.nz\/62814290075\/orders\/cce6a1cfaa69c8bd9b085718659f696d\/authenticate?key=3e716d5f4bacbb8a906df3ce853d174c",
+      "original_total_additional_fees_set": null,
+      "original_total_duties_set": null,
+      "payment_gateway_names": [
+        "shopify_payments"
+      ],
+      "phone": null,
+      "po_number": null,
+      "presentment_currency": "NZD",
+      "processed_at": "2026-05-27T19:02:32+12:00",
+      "reference": null,
+      "referring_site": "https:\/\/www.google.com\/",
+      "source_identifier": null,
+      "source_name": "web",
+      "source_url": null,
+      "subtotal_price": "30.00",
+      "subtotal_price_set": {
+        "shop_money": {
+          "amount": "30.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "30.00",
+          "currency_code": "NZD"
+        }
+      },
+      "tags": "",
+      "tax_exempt": false,
+      "tax_lines": [
+        {
+          "price": "0.91",
+          "rate": 0.15,
+          "title": "GST",
+          "price_set": {
+            "shop_money": {
+              "amount": "0.91",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "0.91",
+              "currency_code": "NZD"
+            }
+          },
+          "channel_liable": false
+        }
+      ],
+      "taxes_included": true,
+      "test": false,
+      "token": "cce6a1cfaa69c8bd9b085718659f696d",
+      "total_cash_rounding_payment_adjustment_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_cash_rounding_refund_adjustment_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_discounts": "0.00",
+      "total_discounts_set": {
+        "shop_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_line_items_price": "30.00",
+      "total_line_items_price_set": {
+        "shop_money": {
+          "amount": "30.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "30.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_outstanding": "0.00",
+      "total_price": "37.00",
+      "total_price_set": {
+        "shop_money": {
+          "amount": "37.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "37.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_shipping_price_set": {
+        "shop_money": {
+          "amount": "7.00",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "7.00",
+          "currency_code": "NZD"
+        }
+      },
+      "total_tax": "0.91",
+      "total_tax_set": {
+        "shop_money": {
+          "amount": "0.91",
+          "currency_code": "NZD"
+        },
+        "presentment_money": {
+          "amount": "0.91",
+          "currency_code": "NZD"
+        }
+      },
+      "total_tip_received": "0.00",
+      "total_weight": 500,
+      "updated_at": "2026-05-27T19:02:37+12:00",
+      "user_id": null,
+      "billing_address": {
+        "first_name": "Jody",
+        "address1": "66\/38 Golf Road",
+        "phone": "+6421641133",
+        "city": "Auckland",
+        "zip": "0600",
+        "province": "Auckland",
+        "country": "New Zealand",
+        "last_name": "McDonald",
+        "address2": "New Lynn",
+        "company": null,
+        "latitude": -36.9250624,
+        "longitude": 174.6820828,
+        "name": "Jody McDonald",
+        "country_code": "NZ",
+        "province_code": "AUK"
+      },
+      "customer": {
+        "id": 8997176967323,
+        "created_at": "2026-05-27T19:02:32+12:00",
+        "updated_at": "2026-05-27T20:29:53+12:00",
+        "first_name": "Jody",
+        "last_name": "McDonald",
+        "state": "disabled",
+        "note": null,
+        "verified_email": true,
+        "multipass_identifier": null,
+        "tax_exempt": false,
+        "email_marketing_consent": {
+          "state": "not_subscribed",
+          "opt_in_level": "single_opt_in",
+          "consent_updated_at": null
+        },
+        "sms_marketing_consent": null,
+        "tags": "Login with Shop, Shop",
+        "email": "jody@hqclean.co.nz",
+        "phone": null,
+        "currency": "NZD",
+        "tax_exemptions": [],
+        "admin_graphql_api_id": "gid:\/\/shopify\/Customer\/8997176967323",
+        "default_address": {
+          "id": 9874758434971,
+          "customer_id": 8997176967323,
+          "first_name": "Jody",
+          "last_name": "McDonald",
+          "company": "Apartment 42",
+          "address1": "68 Mountain Road",
+          "address2": "Mount Wellington",
+          "city": "Auckland",
+          "province": null,
+          "country": "New Zealand",
+          "zip": "1072",
+          "phone": "+6421641133",
+          "name": "Jody McDonald",
+          "province_code": null,
+          "country_code": "NZ",
+          "country_name": "New Zealand",
+          "default": true
+        }
+      },
+      "discount_applications": [],
+      "fulfillments": [],
+      "line_items": [
+        {
+          "id": 14436203724955,
+          "admin_graphql_api_id": "gid:\/\/shopify\/LineItem\/14436203724955",
+          "attributed_staffs": [],
+          "current_quantity": 1,
+          "fulfillable_quantity": 1,
+          "fulfillment_service": "manual",
+          "fulfillment_status": null,
+          "gift_card": false,
+          "grams": 500,
+          "name": "Electric Coffee Grinder and Spice Grinder White 330ML",
+          "price": "30.00",
+          "price_set": {
+            "shop_money": {
+              "amount": "30.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "30.00",
+              "currency_code": "NZD"
+            }
+          },
+          "product_exists": true,
+          "product_id": 8489666871451,
+          "properties": [],
+          "quantity": 1,
+          "requires_shipping": true,
+          "sku": "ECG-W-330",
+          "taxable": false,
+          "title": "Electric Coffee Grinder and Spice Grinder White 330ML",
+          "total_discount": "0.00",
+          "total_discount_set": {
+            "shop_money": {
+              "amount": "0.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "0.00",
+              "currency_code": "NZD"
+            }
+          },
+          "variant_id": 46400402686107,
+          "variant_inventory_management": "shopify",
+          "variant_title": null,
+          "vendor": "White Donkey",
+          "tax_lines": [
+            {
+              "channel_liable": false,
+              "price": "0.00",
+              "price_set": {
+                "shop_money": {
+                  "amount": "0.00",
+                  "currency_code": "NZD"
+                },
+                "presentment_money": {
+                  "amount": "0.00",
+                  "currency_code": "NZD"
+                }
+              },
+              "rate": 0.15,
+              "title": "GST"
+            }
+          ],
+          "duties": [],
+          "discount_allocations": []
+        }
+      ],
+      "payment_terms": null,
+      "refunds": [],
+      "shipping_address": {
+        "first_name": "Jody",
+        "address1": "68 Mountain Road",
+        "phone": "+6421641133",
+        "city": "Auckland",
+        "zip": "1072",
+        "province": "Auckland",
+        "country": "New Zealand",
+        "last_name": "McDonald",
+        "address2": "Mount Wellington",
+        "company": "Apartment 42",
+        "latitude": -36.8956581,
+        "longitude": 174.8499729,
+        "name": "Jody McDonald",
+        "country_code": "NZ",
+        "province_code": "AUK"
+      },
+      "shipping_lines": [
+        {
+          "id": 5208005050523,
+          "carrier_identifier": null,
+          "code": "Auckland Door to Door",
+          "discounted_price": "7.00",
+          "discounted_price_set": {
+            "shop_money": {
+              "amount": "7.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "7.00",
+              "currency_code": "NZD"
+            }
+          },
+          "is_removed": false,
+          "phone": null,
+          "price": "7.00",
+          "price_set": {
+            "shop_money": {
+              "amount": "7.00",
+              "currency_code": "NZD"
+            },
+            "presentment_money": {
+              "amount": "7.00",
+              "currency_code": "NZD"
+            }
+          },
+          "requested_fulfillment_service_id": null,
+          "source": "shopify",
+          "title": "Auckland Door to Door",
+          "tax_lines": [
+            {
+              "channel_liable": false,
+              "price": "0.91",
+              "price_set": {
+                "shop_money": {
+                  "amount": "0.91",
+                  "currency_code": "NZD"
+                },
+                "presentment_money": {
+                  "amount": "0.91",
+                  "currency_code": "NZD"
+                }
+              },
+              "rate": 0.15,
+              "title": "GST"
+            }
+          ],
+          "discount_allocations": []
+        }
+      ]
+    }
+  ]
+}
