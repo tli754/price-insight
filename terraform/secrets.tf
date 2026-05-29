@@ -8,6 +8,7 @@ locals {
     "backend-openai-model",
     "backend-jina-api-key",
     "backend-serpapi-api-key",
+    "backend-own-store-name",
   ]
 
   frontend_secrets = [
