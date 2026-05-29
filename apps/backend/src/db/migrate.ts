@@ -14,6 +14,10 @@ for (const table of [
   "price_history",
   "competitor_products",
   "competitor",
+  "order_items",
+  "customer_addresses",
+  "orders",
+  "customers",
   "product_images",
   "products"
 ]) {
@@ -133,6 +137,100 @@ await conn.query(`
   )
 `);
 console.log("created price_insights");
+
+// customers
+await conn.query(`
+  CREATE TABLE customers (
+    id                    INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    shopify_customer_id   BIGINT UNSIGNED NOT NULL,
+    email                 VARCHAR(255)  NOT NULL,
+    first_name            VARCHAR(255)  NOT NULL,
+    last_name             VARCHAR(255)  NOT NULL,
+    phone                 VARCHAR(64),
+    created_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX customers_shopify_customer_id_unique (shopify_customer_id)
+  )
+`);
+console.log("created customers");
+
+// customer_addresses
+await conn.query(`
+  CREATE TABLE customer_addresses (
+    id                  INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    customer_id         INT           NOT NULL,
+    shopify_address_id  BIGINT UNSIGNED,
+    address1            VARCHAR(255),
+    address2            VARCHAR(255),
+    city                VARCHAR(128),
+    province            VARCHAR(128),
+    country             VARCHAR(128),
+    zip                 VARCHAR(32),
+    created_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE INDEX customer_addresses_shopify_address_id_unique (shopify_address_id),
+    INDEX customer_addresses_customer_id_idx (customer_id),
+    CONSTRAINT fk_ca_customer FOREIGN KEY (customer_id)
+      REFERENCES customers (id) ON DELETE CASCADE ON UPDATE CASCADE
+  )
+`);
+console.log("created customer_addresses");
+
+// orders
+await conn.query(`
+  CREATE TABLE orders (
+    id                  INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    shopify_order_id    BIGINT UNSIGNED NOT NULL,
+    customer_id         INT,
+    order_number        VARCHAR(64)   NOT NULL,
+    email               VARCHAR(255),
+    financial_status    VARCHAR(64),
+    fulfillment_status  VARCHAR(64),
+    currency            VARCHAR(16),
+    subtotal_price      DECIMAL(12,4),
+    total_price         DECIMAL(12,4),
+    total_tax           DECIMAL(12,4),
+    total_shipping      DECIMAL(12,4),
+    total_discounts     DECIMAL(12,4),
+    cancelled_at        TIMESTAMP     NULL,
+    shopify_created_at  TIMESTAMP     NULL,
+    shopify_updated_at  TIMESTAMP     NULL,
+    created_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX orders_shopify_order_id_unique (shopify_order_id),
+    INDEX orders_customer_id_idx (customer_id),
+    INDEX orders_shopify_updated_at_idx (shopify_updated_at),
+    CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id)
+      REFERENCES customers (id) ON DELETE SET NULL ON UPDATE CASCADE
+  )
+`);
+console.log("created orders");
+
+// order_items
+await conn.query(`
+  CREATE TABLE order_items (
+    id                    INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    order_id              INT           NOT NULL,
+    product_id            INT,
+    shopify_line_item_id  BIGINT UNSIGNED NOT NULL,
+    shopify_product_id    BIGINT UNSIGNED,
+    shopify_variant_id    BIGINT UNSIGNED,
+    title                 VARCHAR(500)  NOT NULL,
+    variant_title         VARCHAR(255),
+    sku                   VARCHAR(255),
+    quantity              INT           NOT NULL,
+    unit_price            DECIMAL(12,4),
+    total_discount        DECIMAL(12,4),
+    created_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE INDEX order_items_shopify_line_item_id_unique (shopify_line_item_id),
+    INDEX order_items_order_id_idx (order_id),
+    INDEX order_items_product_id_idx (product_id),
+    CONSTRAINT fk_oi_order FOREIGN KEY (order_id)
+      REFERENCES orders (id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_oi_product FOREIGN KEY (product_id)
+      REFERENCES products (id) ON DELETE SET NULL ON UPDATE CASCADE
+  )
+`);
+console.log("created order_items");
 
 await conn.query("SET FOREIGN_KEY_CHECKS = 1");
 await conn.end();

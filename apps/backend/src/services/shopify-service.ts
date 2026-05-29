@@ -1,4 +1,5 @@
 import { AppError } from "../lib/app-error.js";
+import type { ShopifyOrder } from "./order-repository.js";
 import type { ShopifyProduct } from "./product-repository.js";
 
 export class ShopifyService {
@@ -6,7 +7,8 @@ export class ShopifyService {
     private readonly tokenUrl: string,
     private readonly productsUrl: string,
     private readonly clientId: string,
-    private readonly clientSecret: string
+    private readonly clientSecret: string,
+    private readonly ordersUrl?: string
   ) {}
 
   async getAccessToken(): Promise<string> {
@@ -53,6 +55,32 @@ export class ShopifyService {
       }
       const data = (await res.json()) as { products: ShopifyProduct[] };
       all.push(...data.products);
+      url = parseNextLink(res.headers.get("Link"));
+    }
+
+    return all;
+  }
+
+  async fetchOrders(accessToken: string, updatedAtMin?: string): Promise<ShopifyOrder[]> {
+    if (!this.ordersUrl) {
+      throw new AppError(503, "SHOPIFY_ORDERS_NOT_CONFIGURED", "Shopify orders URL is not configured.");
+    }
+
+    const all: ShopifyOrder[] = [];
+    let url: string | null = `${this.ordersUrl}?limit=100&status=any`;
+    if (updatedAtMin) {
+      url += `&updated_at_min=${encodeURIComponent(updatedAtMin)}`;
+    }
+
+    while (url) {
+      const res = await fetch(url, {
+        headers: { "X-Shopify-Access-Token": accessToken }
+      });
+      if (!res.ok) {
+        throw new AppError(502, "SHOPIFY_FAILED", `Shopify orders fetch failed: ${res.status}`);
+      }
+      const data = (await res.json()) as { orders: ShopifyOrder[] };
+      all.push(...data.orders);
       url = parseNextLink(res.headers.get("Link"));
     }
 
