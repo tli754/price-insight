@@ -167,3 +167,109 @@ export const priceInsights = mysqlTable(
 
 export type PriceInsightRow = typeof priceInsights.$inferSelect;
 export type NewPriceInsightRow = typeof priceInsights.$inferInsert;
+
+export const customers = mysqlTable(
+  "customers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    shopifyCustomerId: bigint("shopify_customer_id", shopifyId).notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
+    firstName: varchar("first_name", { length: 255 }).notNull(),
+    lastName: varchar("last_name", { length: 255 }).notNull(),
+    phone: varchar("phone", { length: 64 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
+  },
+  (table) => ({
+    shopifyCustomerIdUnique: uniqueIndex("customers_shopify_customer_id_unique").on(table.shopifyCustomerId)
+  })
+);
+
+export type CustomerRow = typeof customers.$inferSelect;
+export type NewCustomerRow = typeof customers.$inferInsert;
+
+export const customerAddresses = mysqlTable(
+  "customer_addresses",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    customerId: int("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    shopifyAddressId: bigint("shopify_address_id", shopifyId),
+    address1: varchar("address1", { length: 255 }),
+    address2: varchar("address2", { length: 255 }),
+    city: varchar("city", { length: 128 }),
+    province: varchar("province", { length: 128 }),
+    country: varchar("country", { length: 128 }),
+    zip: varchar("zip", { length: 32 }),
+    createdAt: timestamp("created_at").notNull().defaultNow()
+  },
+  (table) => ({
+    shopifyAddressIdUnique: uniqueIndex("customer_addresses_shopify_address_id_unique").on(table.shopifyAddressId),
+    customerIdx: index("customer_addresses_customer_id_idx").on(table.customerId)
+  })
+);
+
+export type CustomerAddressRow = typeof customerAddresses.$inferSelect;
+export type NewCustomerAddressRow = typeof customerAddresses.$inferInsert;
+
+export const orders = mysqlTable(
+  "orders",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    shopifyOrderId: bigint("shopify_order_id", shopifyId).notNull(),
+    customerId: int("customer_id").references(() => customers.id, { onDelete: "set null", onUpdate: "cascade" }),
+    orderNumber: varchar("order_number", { length: 64 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    financialStatus: varchar("financial_status", { length: 64 }),
+    fulfillmentStatus: varchar("fulfillment_status", { length: 64 }),
+    currency: varchar("currency", { length: 16 }),
+    subtotalPrice: decimal("subtotal_price", moneyColumn),
+    totalPrice: decimal("total_price", moneyColumn),
+    totalTax: decimal("total_tax", moneyColumn),
+    totalShipping: decimal("total_shipping", moneyColumn),
+    totalDiscounts: decimal("total_discounts", moneyColumn),
+    cancelledAt: timestamp("cancelled_at"),
+    shopifyCreatedAt: timestamp("shopify_created_at"),
+    shopifyUpdatedAt: timestamp("shopify_updated_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
+  },
+  (table) => ({
+    shopifyOrderIdUnique: uniqueIndex("orders_shopify_order_id_unique").on(table.shopifyOrderId),
+    customerIdx: index("orders_customer_id_idx").on(table.customerId),
+    shopifyUpdatedAtIdx: index("orders_shopify_updated_at_idx").on(table.shopifyUpdatedAt)
+  })
+);
+
+export type OrderRow = typeof orders.$inferSelect;
+export type NewOrderRow = typeof orders.$inferInsert;
+
+export const orderItems = mysqlTable(
+  "order_items",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    orderId: int("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    productId: int("product_id").references(() => products.id, { onDelete: "set null", onUpdate: "cascade" }),
+    shopifyLineItemId: bigint("shopify_line_item_id", shopifyId).notNull(),
+    shopifyProductId: bigint("shopify_product_id", shopifyId),
+    shopifyVariantId: bigint("shopify_variant_id", shopifyId),
+    title: varchar("title", { length: 500 }).notNull(),
+    variantTitle: varchar("variant_title", { length: 255 }),
+    sku: varchar("sku", { length: 255 }),
+    quantity: int("quantity").notNull(),
+    unitPrice: decimal("unit_price", moneyColumn),
+    totalDiscount: decimal("total_discount", moneyColumn),
+    createdAt: timestamp("created_at").notNull().defaultNow()
+  },
+  (table) => ({
+    shopifyLineItemIdUnique: uniqueIndex("order_items_shopify_line_item_id_unique").on(table.shopifyLineItemId),
+    orderIdx: index("order_items_order_id_idx").on(table.orderId),
+    productIdx: index("order_items_product_id_idx").on(table.productId)
+  })
+);
+
+export type OrderItemRow = typeof orderItems.$inferSelect;
+export type NewOrderItemRow = typeof orderItems.$inferInsert;
