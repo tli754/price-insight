@@ -2,12 +2,12 @@ import type { CompetitorProductRow, ProductRow } from "../db/schema.js";
 import { AppError } from "../lib/app-error.js";
 import { analyzePrice } from "../lib/price-analysis.js";
 import { CompetitorRepository } from "./competitor-repository.js";
-import type { CompetitorResult } from "./serp-api-service.js";
-import { SerpApiService } from "./serp-api-service.js";
+import type { CompetitorResult } from "./dataforseo-service.js";
+import { DataForSeoService } from "./dataforseo-service.js";
 
 export class CompetitorAnalysisService {
   constructor(
-    private readonly serpApi: SerpApiService,
+    private readonly dataForSeo: DataForSeoService,
     private readonly competitorRepository: CompetitorRepository,
     private readonly ownStoreName?: string
   ) {}
@@ -19,7 +19,7 @@ export class CompetitorAnalysisService {
       throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
     }
 
-    const results = await this.serpApi.searchShoppingPrices(query);
+    const results = await this.dataForSeo.searchShoppingPrices(query);
 
     if (results.length === 0) {
       throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");

@@ -38,7 +38,9 @@ export const fakeEnv = {
   SERPAPI_GL: "nz",
   SERPAPI_HL: "en",
   SERPAPI_GOOGLE_DOMAIN: "google.co.nz",
-  SERPAPI_NUM_RESULTS: 40
+  SERPAPI_NUM_RESULTS: 40,
+  DATAFORSEO_LOGIN: "fake",
+  DATAFORSEO_PASSWORD: "fake"
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────

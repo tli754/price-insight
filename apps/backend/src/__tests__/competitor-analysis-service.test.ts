@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { CompetitorAnalysisService } from "../services/competitor-analysis-service.js";
 import type { ProductRow } from "../db/schema.js";
-import type { CompetitorResult } from "../services/serp-api-service.js";
+import type { CompetitorResult } from "../services/dataforseo-service.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ function makeCompetitorResult(overrides: Partial<CompetitorResult> = {}): Compet
 
 // ── Mock factories ────────────────────────────────────────────────────────────
 
-function makeSerpApi() {
+function makeDataForSeoService() {
   return { searchShoppingPrices: vi.fn().mockResolvedValue([]) };
 }
 
@@ -65,43 +65,43 @@ function makeCompetitorRepo() {
 // ── searchAndSuggest — query building ────────────────────────────────────────
 
 describe("CompetitorAnalysisService.searchAndSuggest() — query and errors", () => {
-  let serpApi: ReturnType<typeof makeSerpApi>;
+  let dataForSeo: ReturnType<typeof makeDataForSeoService>;
   let repo: ReturnType<typeof makeCompetitorRepo>;
   let service: CompetitorAnalysisService;
 
   beforeEach(() => {
-    serpApi = makeSerpApi();
+    dataForSeo = makeDataForSeoService();
     repo = makeCompetitorRepo();
-    service = new CompetitorAnalysisService(serpApi as any, repo as any);
+    service = new CompetitorAnalysisService(dataForSeo as any, repo as any);
   });
 
   it("builds the search query from brand + title", async () => {
-    serpApi.searchShoppingPrices.mockResolvedValue([makeCompetitorResult()]);
+    dataForSeo.searchShoppingPrices.mockResolvedValue([makeCompetitorResult()]);
 
     await service.searchAndSuggest(makeProduct({ brand: "Nike", title: "Air Max 90" }));
 
-    expect(serpApi.searchShoppingPrices).toHaveBeenCalledWith("Nike Air Max 90");
+    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Nike Air Max 90");
   });
 
-  it("passes the full title including spec suffixes to SerpAPI", async () => {
-    serpApi.searchShoppingPrices.mockResolvedValue([makeCompetitorResult()]);
+  it("passes the full title including spec suffixes to DataForSEO", async () => {
+    dataForSeo.searchShoppingPrices.mockResolvedValue([makeCompetitorResult()]);
 
     await service.searchAndSuggest(makeProduct({
       brand: null,
       title: "Rechargeable Round Coffee Digital Scale with Timer – 3kg / 0.1g"
     }));
 
-    expect(serpApi.searchShoppingPrices).toHaveBeenCalledWith(
+    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith(
       "Rechargeable Round Coffee Digital Scale with Timer – 3kg / 0.1g"
     );
   });
 
-  it("passes the full title including measurements to SerpAPI", async () => {
-    serpApi.searchShoppingPrices.mockResolvedValue([makeCompetitorResult()]);
+  it("passes the full title including measurements to DataForSEO", async () => {
+    dataForSeo.searchShoppingPrices.mockResolvedValue([makeCompetitorResult()]);
 
     await service.searchAndSuggest(makeProduct({ brand: null, title: "Coffee Canister 1.2L Airtight" }));
 
-    expect(serpApi.searchShoppingPrices).toHaveBeenCalledWith("Coffee Canister 1.2L Airtight");
+    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Coffee Canister 1.2L Airtight");
   });
 
   it("throws MISSING_PRODUCT_NAME when product has no brand or title", async () => {
@@ -109,11 +109,11 @@ describe("CompetitorAnalysisService.searchAndSuggest() — query and errors", ()
       service.searchAndSuggest(makeProduct({ brand: null, title: null as any }))
     ).rejects.toMatchObject({ code: "MISSING_PRODUCT_NAME" });
 
-    expect(serpApi.searchShoppingPrices).not.toHaveBeenCalled();
+    expect(dataForSeo.searchShoppingPrices).not.toHaveBeenCalled();
   });
 
-  it("throws NO_COMPETITOR_RESULTS when SerpAPI returns an empty array", async () => {
-    serpApi.searchShoppingPrices.mockResolvedValue([]);
+  it("throws NO_COMPETITOR_RESULTS when DataForSEO returns an empty array", async () => {
+    dataForSeo.searchShoppingPrices.mockResolvedValue([]);
 
     await expect(service.searchAndSuggest(makeProduct())).rejects.toMatchObject({
       code: "NO_COMPETITOR_RESULTS"
@@ -124,14 +124,14 @@ describe("CompetitorAnalysisService.searchAndSuggest() — query and errors", ()
 // ── saveCompetitors ───────────────────────────────────────────────────────────
 
 describe("CompetitorAnalysisService.saveCompetitors()", () => {
-  let serpApi: ReturnType<typeof makeSerpApi>;
+  let dataForSeo: ReturnType<typeof makeDataForSeoService>;
   let repo: ReturnType<typeof makeCompetitorRepo>;
   let service: CompetitorAnalysisService;
 
   beforeEach(() => {
-    serpApi = makeSerpApi();
+    dataForSeo = makeDataForSeoService();
     repo = makeCompetitorRepo();
-    service = new CompetitorAnalysisService(serpApi as any, repo as any);
+    service = new CompetitorAnalysisService(dataForSeo as any, repo as any);
   });
 
   it("saves competitors and triggers price analysis", async () => {
