@@ -5,11 +5,9 @@ export type CompetitorResult = {
   externalId: string | null;
   rawPrice: string | null;
   extractedPrice: number;
-  rawOldPrice: string | null;
   extractedOldPrice: number | null;
   currency: string | null;
   source: string;
-  sourceIcon?: string | null;
   link: string;
   country?: string | null;
   thumbnail: string | null;
@@ -19,8 +17,6 @@ export type CompetitorResult = {
   reviewCount?: number | null;
   shippingRaw?: string | null;
   shippingExtracted?: number | null;
-  totalRaw?: string | null;
-  totalExtracted?: number | null;
 };
 
 type SerpApiLocale = {
@@ -157,11 +153,9 @@ export class SerpApiService {
           externalId: r.product_id ?? null,
           rawPrice: r.price ?? null,
           extractedPrice: r.extracted_price,
-          rawOldPrice: r.old_price ?? null,
           extractedOldPrice: r.extracted_old_price ?? null,
           currency: null,
           source: r.source ?? "",
-          sourceIcon: null,
           link: r.product_link ?? "",
           country: deriveCountry(r.product_link ?? ""),
           thumbnail: r.thumbnail ?? null,
@@ -170,9 +164,7 @@ export class SerpApiService {
           rating: null,
           reviewCount: null,
           shippingRaw: null,
-          shippingExtracted: null,
-          totalRaw: null,
-          totalExtracted: null
+          shippingExtracted: null
         }
       ];
     }
@@ -182,11 +174,9 @@ export class SerpApiService {
         externalId: r.product_id ?? null,
         rawPrice: s.price ?? null,
         extractedPrice: s.extracted_price as number,
-        rawOldPrice: s.original_price ?? null,
         extractedOldPrice: s.extracted_original_price ?? null,
         currency: null,
         source: s.name ?? "",
-        sourceIcon: s.logo ?? null,
         link: s.link ?? "",
         country: deriveCountry(s.link ?? ""),
         thumbnail: r.thumbnail ?? null,
@@ -195,9 +185,7 @@ export class SerpApiService {
         rating: s.rating ?? null,
         reviewCount: s.reviews ?? null,
         shippingRaw: s.shipping ?? null,
-        shippingExtracted: s.shipping_extracted ?? null,
-        totalRaw: s.total ?? null,
-        totalExtracted: s.extracted_total ?? null
+        shippingExtracted: s.shipping_extracted ?? null
       }));
   }
 

@@ -24,17 +24,23 @@ export type CompetitorProductInput = {
   googlePosition?: number | null;
   rawPrice: string | null;
   extractedPrice: number;
-  sourceIcon?: string | null;
   country?: string | null;
   rating?: number | null;
   reviewCount?: number | null;
   shippingRaw?: string | null;
   shippingExtracted?: number | null;
-  totalRaw?: string | null;
-  totalExtracted?: number | null;
-  rawOldPrice?: string | null;
   extractedOldPrice?: number | null;
 };
+
+function normalizeCompetitorName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\bnew zealand\b/gi, "nz")
+    .replace(/\baustralia\b/gi, "au")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export class CompetitorRepository {
   constructor(private readonly db: Database) {}
@@ -88,11 +94,9 @@ export class CompetitorRepository {
   }
 
   async findOrCreateCompetitor(name: string): Promise<CompetitorRow> {
-    const [existing] = await this.db
-      .select()
-      .from(competitor)
-      .where(eq(competitor.name, name))
-      .limit(1);
+    const normalized = normalizeCompetitorName(name);
+    const all = await this.db.select().from(competitor).orderBy(asc(competitor.name));
+    const existing = all.find((c) => normalizeCompetitorName(c.name) === normalized);
 
     if (existing) return existing;
 
@@ -139,35 +143,59 @@ export class CompetitorRepository {
     productId: number,
     items: CompetitorProductInput[]
   ): Promise<CompetitorProductRow[]> {
-    await this.db.transaction(async (tx) => {
-      await tx.delete(competitorProducts).where(eq(competitorProducts.productId, productId));
+    for (const item of items) {
+      await this.db.transaction(async (tx) => {
+        // Find existing record by productId + externalId + competitorId
+        const [existing] = item.externalId
+          ? await tx
+              .select()
+              .from(competitorProducts)
+              .where(
+                and(
+                  eq(competitorProducts.productId, productId),
+                  eq(competitorProducts.competitorId, item.competitorId),
+                  eq(competitorProducts.externalId, item.externalId)
+                )
+              )
+              .limit(1)
+          : [];
 
-      for (const item of items) {
-        const result = await tx
-          .insert(competitorProducts)
-          .values({
-            productId,
-            competitorId: item.competitorId,
-            title: item.title,
-            externalId: item.externalId,
-            productLink: item.productLink,
-            source: item.source,
-            currency: item.currency,
-            thumbnail: item.thumbnail,
-            tag: item.tag,
-            googlePosition: item.googlePosition ?? null
-          })
-          .$returningId();
+        let competitorProductId: number;
 
-        const competitorProductId = Number(result[0]?.id);
+        if (existing) {
+          competitorProductId = existing.id;
+        } else {
+          const result = await tx
+            .insert(competitorProducts)
+            .values({
+              productId,
+              competitorId: item.competitorId,
+              title: item.title,
+              externalId: item.externalId,
+              productLink: item.productLink,
+              source: item.source,
+              currency: item.currency,
+              thumbnail: item.thumbnail,
+              tag: item.tag,
+              googlePosition: item.googlePosition ?? null,
+              country: item.country ?? null,
+              rating: item.rating ?? null,
+              reviewCount: item.reviewCount ?? null,
+              shippingRaw: item.shippingRaw ?? null,
+              shippingExtracted: item.shippingExtracted ?? null,
+              extractedOldPrice: item.extractedOldPrice ?? null
+            })
+            .$returningId();
+          competitorProductId = Number(result[0]?.id);
+        }
 
         await tx.insert(priceHistory).values({
           competitorProductId,
           price: item.rawPrice,
           extractedPrice: item.extractedPrice
         });
-      }
-    });
+      });
+    }
 
     return this.getProductsByProductId(productId);
   }
@@ -202,15 +230,11 @@ export class CompetitorRepository {
             tag: item.tag,
             googlePosition: item.googlePosition ?? null,
             status: "suggested",
-            sourceIcon: item.sourceIcon ?? null,
             country: item.country ?? null,
             rating: item.rating ?? null,
             reviewCount: item.reviewCount ?? null,
             shippingRaw: item.shippingRaw ?? null,
             shippingExtracted: item.shippingExtracted ?? null,
-            totalRaw: item.totalRaw ?? null,
-            totalExtracted: item.totalExtracted ?? null,
-            rawOldPrice: item.rawOldPrice ?? null,
             extractedOldPrice: item.extractedOldPrice ?? null
           })
           .$returningId();
@@ -242,7 +266,6 @@ export class CompetitorRepository {
         id: competitorProducts.id,
         title: competitorProducts.title,
         source: competitorProducts.source,
-        sourceIcon: competitorProducts.sourceIcon,
         thumbnail: competitorProducts.thumbnail,
         productLink: competitorProducts.productLink,
         currency: competitorProducts.currency,
@@ -254,9 +277,6 @@ export class CompetitorRepository {
         reviewCount: competitorProducts.reviewCount,
         shippingRaw: competitorProducts.shippingRaw,
         shippingExtracted: competitorProducts.shippingExtracted,
-        totalRaw: competitorProducts.totalRaw,
-        totalExtracted: competitorProducts.totalExtracted,
-        rawOldPrice: competitorProducts.rawOldPrice,
         extractedOldPrice: competitorProducts.extractedOldPrice,
         createdAt: competitorProducts.createdAt,
         rawPrice: priceHistory.price,

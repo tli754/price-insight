@@ -69,8 +69,8 @@ describe("CompetitorRepository.getCompetitorById()", () => {
 describe("CompetitorRepository.findOrCreateCompetitor()", () => {
   it("returns the existing competitor without inserting", async () => {
     const db = makeMockDb();
-    // First select: existing found
-    db._select.limit.mockResolvedValueOnce([fakeCompetitorRow]);
+    // select().from().orderBy() → all competitors
+    db._select.orderBy.mockResolvedValueOnce([fakeCompetitorRow]);
     const repo = new CompetitorRepository(db as any);
 
     const result = await repo.findOrCreateCompetitor("Rival Store");
@@ -80,12 +80,33 @@ describe("CompetitorRepository.findOrCreateCompetitor()", () => {
     expect(result.name).toBe("Rival Store");
   });
 
+  it("matches competitor with normalized name (New Zealand → NZ)", async () => {
+    const db = makeMockDb();
+    db._select.orderBy.mockResolvedValueOnce([{ ...fakeCompetitorRow, name: "Harvey Norman NZ" }]);
+    const repo = new CompetitorRepository(db as any);
+
+    const result = await repo.findOrCreateCompetitor("Harvey Norman New Zealand");
+
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(result.name).toBe("Harvey Norman NZ");
+  });
+
+  it("matches competitor with normalized name (Australia → AU)", async () => {
+    const db = makeMockDb();
+    db._select.orderBy.mockResolvedValueOnce([{ ...fakeCompetitorRow, name: "Coffea Coffee AU" }]);
+    const repo = new CompetitorRepository(db as any);
+
+    const result = await repo.findOrCreateCompetitor("Coffea Coffee Australia");
+
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(result.name).toBe("Coffea Coffee AU");
+  });
+
   it("inserts a new competitor and returns it when not found", async () => {
     const db = makeMockDb();
-    // First select: not found
-    db._select.limit.mockResolvedValueOnce([]);
-    // $returningId returns new id 7
-    // Second select: fetch the newly created row
+    // select().from().orderBy() → empty (no match)
+    db._select.orderBy.mockResolvedValueOnce([]);
+    // select after insert to fetch created row
     db._select.limit.mockResolvedValueOnce([{ ...fakeCompetitorRow, id: 7, name: "New Store" }]);
     const repo = new CompetitorRepository(db as any);
 

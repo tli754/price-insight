@@ -5,11 +5,9 @@ export type CompetitorResult = {
   externalId: string | null;
   rawPrice: string | null;
   extractedPrice: number;
-  rawOldPrice: string | null;
   extractedOldPrice: number | null;
   currency: string | null;
   source: string;
-  sourceIcon?: string | null;
   link: string;
   country?: string | null;
   thumbnail: string | null;
@@ -19,15 +17,13 @@ export type CompetitorResult = {
   reviewCount?: number | null;
   shippingRaw?: string | null;
   shippingExtracted?: number | null;
-  totalRaw?: string | null;
-  totalExtracted?: number | null;
 };
 
 const BASE_URL = "https://api.dataforseo.com";
 const LOCATION_CODE = 2554; // New Zealand
 const LANGUAGE_CODE = "en";
 const PRODUCT_INFO_LIMIT = 20;
-const POLL_RETRIES = 8;
+const POLL_RETRIES = 10;
 const POLL_DELAY_MS = 3000;
 
 type DfsTaskPostResponse = {
@@ -38,8 +34,21 @@ type DfsTaskPostResponse = {
   }>;
 };
 
+type DfsTasksReadyItem = {
+  id: string;
+  endpoint_advanced: string;
+};
+
+type DfsTasksReadyResponse = {
+  tasks: Array<{
+    status_code: number;
+    result: DfsTasksReadyItem[] | null;
+  }>;
+};
+
 type DfsShoppingItem = {
   type: string;
+  rank_absolute: number | null;
   product_id: string | null;
   seller: string | null;
   title: string | null;
@@ -53,7 +62,6 @@ type DfsShoppingItem = {
 
 type DfsShoppingGetResponse = {
   tasks: Array<{
-    id: string;
     status_code: number;
     result: Array<{
       items: DfsShoppingItem[] | null;
@@ -62,11 +70,9 @@ type DfsShoppingGetResponse = {
 };
 
 type DfsSeller = {
-  type: string;
   title: string | null;
   url: string | null;
   seller_rating: { value: number | null; votes_count: number | null } | null;
-  seller_review_count: number | null;
   price: {
     current: number | null;
     regular: number | null;
@@ -81,11 +87,9 @@ type DfsSeller = {
 
 type DfsProductInfoGetResponse = {
   tasks: Array<{
-    id: string;
     status_code: number;
     result: Array<{
       items: Array<{
-        type: string;
         product_id: string | null;
         title: string | null;
         images: string[] | null;
@@ -106,6 +110,7 @@ type ShoppingCandidate = {
   rating: number | null;
   reviewCount: number | null;
   tag: string | null;
+  googlePosition: number | null;
 };
 
 function deriveCountry(link: string): string | null {
@@ -181,57 +186,73 @@ export class DataForSeoService {
   }
 
   async getShoppingCandidates(taskId: string): Promise<ShoppingCandidate[]> {
+    // Poll tasks_ready until our task ID appears
+    let endpoint: string | null = null;
+
     for (let attempt = 0; attempt < POLL_RETRIES; attempt++) {
       if (attempt > 0) await sleep(POLL_DELAY_MS);
 
-      const data = await this.get<DfsShoppingGetResponse>(
-        `/v3/merchant/google/products/task_get/advanced/${taskId}`
-      );
+      const ready = await this.get<DfsTasksReadyResponse>("/v3/merchant/google/products/tasks_ready");
+      const items = ready.tasks?.[0]?.result ?? [];
+      const match = items.find((r) => r.id === taskId);
 
-      const task = data.tasks?.[0];
-      if (!task) continue;
-
-      if (task.status_code === 20100 || task.status_code === 40602) continue; // still in queue
-
-      if (task.status_code !== 20000) {
-        return []; // unexpected status — give up
+      if (match) {
+        endpoint = match.endpoint_advanced;
+        break;
       }
-
-      const items = task.result?.[0]?.items ?? [];
-      const seen = new Set<string>();
-      const candidates: ShoppingCandidate[] = [];
-
-      for (const item of items) {
-        if (item.type !== "google_shopping_serp") continue;
-        if (!item.product_id) continue;
-        if (!item.seller) continue;
-        if (item.price == null) continue;
-        if (item.currency !== "NZD") continue;
-
-        const key = `${item.product_id}:${item.seller}:${item.title ?? ""}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        candidates.push({
-          productId: item.product_id,
-          seller: item.seller,
-          title: item.title ?? "",
-          price: item.price,
-          currency: item.currency,
-          oldPrice: item.old_price ?? null,
-          thumbnail: item.product_images?.[0] ?? null,
-          rating: item.product_rating?.value ?? null,
-          reviewCount: item.product_rating?.votes_count ?? null,
-          tag: item.tags?.[0] ?? null
-        });
-
-        if (candidates.length >= PRODUCT_INFO_LIMIT) break;
-      }
-
-      return candidates;
     }
 
-    return [];
+    if (!endpoint) {
+      console.warn(`DataForSEO: Shopping task ${taskId} never appeared in tasks_ready`);
+      return [];
+    }
+
+    const data = await this.get<DfsShoppingGetResponse>(endpoint);
+    const task = data.tasks?.[0];
+
+    if (!task || task.status_code !== 20000) {
+      console.warn(`DataForSEO: Shopping task_get returned status ${task?.status_code}`);
+      return [];
+    }
+
+    const items = task.result?.[0]?.items;
+    if (!items) {
+      console.warn(`DataForSEO: Shopping task_get returned null items`);
+      return [];
+    }
+
+    const seen = new Set<string>();
+    const candidates: ShoppingCandidate[] = [];
+
+    for (const item of items) {
+      if (item.type !== "google_shopping_serp") continue;
+      if (!item.product_id) continue;
+      if (!item.seller) continue;
+      if (item.price == null) continue;
+      if (item.currency !== "NZD") continue;
+
+      const key = `${item.product_id}:${item.seller}:${item.title ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      candidates.push({
+        productId: item.product_id,
+        seller: item.seller,
+        title: item.title ?? "",
+        price: item.price,
+        currency: item.currency,
+        oldPrice: item.old_price ?? null,
+        thumbnail: item.product_images?.[0] ?? null,
+        rating: item.product_rating?.value ?? null,
+        reviewCount: item.product_rating?.votes_count ?? null,
+        tag: item.tags?.[0] ?? null,
+        googlePosition: item.rank_absolute ?? null
+      });
+
+      if (candidates.length >= PRODUCT_INFO_LIMIT) break;
+    }
+
+    return candidates;
   }
 
   async createProductInfoTask(productId: string): Promise<string> {
@@ -247,66 +268,54 @@ export class DataForSeoService {
     return taskId;
   }
 
-  async getProductInfoResults(taskId: string, candidate: ShoppingCandidate): Promise<CompetitorResult[]> {
-    for (let attempt = 0; attempt < POLL_RETRIES; attempt++) {
-      if (attempt > 0) await sleep(POLL_DELAY_MS);
+  private async fetchProductInfoResults(endpoint: string, candidate: ShoppingCandidate): Promise<CompetitorResult[]> {
+    const data = await this.get<DfsProductInfoGetResponse>(endpoint);
+    const task = data.tasks?.[0];
 
-      const data = await this.get<DfsProductInfoGetResponse>(
-        `/v3/merchant/google/product_info/task_get/advanced/${taskId}`
-      );
-
-      const task = data.tasks?.[0];
-      if (!task) continue;
-
-      if (task.status_code === 20100 || task.status_code === 40602) continue;
-
-      if (task.status_code !== 20000) {
-        return [];
-      }
-
-      const item = task.result?.[0]?.items?.[0];
-      if (!item) return [];
-
-      const title = item.title ?? candidate.title;
-      const externalId = item.product_id ?? candidate.productId;
-      const thumbnail = item.images?.[0] ?? candidate.thumbnail;
-
-      const results: CompetitorResult[] = [];
-
-      for (const seller of item.sellers ?? []) {
-        if (!seller.title) continue;
-        if (!seller.url) continue;
-        if (seller.price?.current == null) continue;
-        if (seller.price?.currency !== "NZD") continue;
-
-        results.push({
-          title,
-          externalId,
-          rawPrice: seller.price.displayed_price ?? null,
-          extractedPrice: seller.price.current,
-          rawOldPrice: null,
-          extractedOldPrice: seller.price.regular ?? null,
-          currency: seller.price.currency,
-          source: seller.title,
-          sourceIcon: null,
-          link: seller.url,
-          country: deriveCountry(seller.url),
-          thumbnail,
-          tag: null,
-          googlePosition: null,
-          rating: seller.seller_rating?.value ?? null,
-          reviewCount: seller.seller_rating?.votes_count ?? null,
-          shippingRaw: seller.delivery_info?.delivery_message ?? null,
-          shippingExtracted: seller.delivery_info?.delivery_price?.current ?? null,
-          totalRaw: null,
-          totalExtracted: null
-        });
-      }
-
-      return results;
+    if (!task || task.status_code !== 20000) {
+      console.warn(`DataForSEO: product_info task_get returned status ${task?.status_code}`);
+      return [];
     }
 
-    return [];
+    const item = task.result?.[0]?.items?.[0];
+    if (!item) {
+      console.warn(`DataForSEO: product_info task_get returned null items`);
+      return [];
+    }
+
+    const title = item.title ?? candidate.title;
+    const externalId = item.product_id ?? candidate.productId;
+    const thumbnail = item.images?.[0] ?? candidate.thumbnail;
+
+    const results: CompetitorResult[] = [];
+
+    for (const seller of item.sellers ?? []) {
+      if (!seller.title) continue;
+      if (!seller.url) continue;
+      if (seller.price?.current == null) continue;
+      if (seller.price?.currency !== "NZD") continue;
+
+      results.push({
+        title,
+        externalId,
+        rawPrice: seller.price.displayed_price ?? null,
+        extractedPrice: seller.price.current,
+        extractedOldPrice: seller.price.regular ?? null,
+        currency: seller.price.currency,
+        source: seller.title,
+        link: seller.url,
+        country: deriveCountry(seller.url),
+        thumbnail,
+        tag: candidate.tag,
+        googlePosition: candidate.googlePosition,
+        rating: seller.seller_rating?.value ?? null,
+        reviewCount: seller.seller_rating?.votes_count ?? null,
+        shippingRaw: seller.delivery_info?.delivery_message ?? null,
+        shippingExtracted: seller.delivery_info?.delivery_price?.current ?? null
+      });
+    }
+
+    return results;
   }
 
   async searchShoppingPrices(keyword: string): Promise<CompetitorResult[]> {
@@ -315,19 +324,59 @@ export class DataForSeoService {
 
     if (candidates.length === 0) return [];
 
-    const allResults: CompetitorResult[] = [];
+    // POST all Product Info tasks upfront
+    const pendingIds = new Set<string>();
+    const idToCandidate = new Map<string, ShoppingCandidate>();
 
     await Promise.all(
       candidates.map(async (candidate) => {
         try {
-          const infoTaskId = await this.createProductInfoTask(candidate.productId);
-          const results = await this.getProductInfoResults(infoTaskId, candidate);
-          allResults.push(...results);
-        } catch {
-          // one candidate failing should not abort the whole search
+          const taskId = await this.createProductInfoTask(candidate.productId);
+          pendingIds.add(taskId);
+          idToCandidate.set(taskId, candidate);
+        } catch (err) {
+          console.warn(`DataForSEO: failed to post Product Info task for ${candidate.productId}:`, err);
         }
       })
     );
+
+    if (pendingIds.size === 0) return [];
+
+    // Poll tasks_ready and fetch results as they become available
+    const allResults: CompetitorResult[] = [];
+    const idToEndpoint = new Map<string, string>();
+
+    for (let attempt = 0; attempt < POLL_RETRIES && pendingIds.size > 0; attempt++) {
+      if (attempt > 0) await sleep(POLL_DELAY_MS);
+
+      const ready = await this.get<DfsTasksReadyResponse>("/v3/merchant/google/product_info/tasks_ready");
+      const readyItems = ready.tasks?.[0]?.result ?? [];
+
+      for (const item of readyItems) {
+        if (!pendingIds.has(item.id)) continue;
+        idToEndpoint.set(item.id, item.endpoint_advanced);
+        pendingIds.delete(item.id);
+      }
+
+      // Fetch all newly ready tasks
+      await Promise.all(
+        [...idToEndpoint.keys()].map(async (taskId) => {
+          const endpoint = idToEndpoint.get(taskId)!;
+          const candidate = idToCandidate.get(taskId)!;
+          idToEndpoint.delete(taskId);
+          try {
+            const results = await this.fetchProductInfoResults(endpoint, candidate);
+            allResults.push(...results);
+          } catch (err) {
+            console.warn(`DataForSEO: failed to fetch Product Info results for task ${taskId}:`, err);
+          }
+        })
+      );
+    }
+
+    if (pendingIds.size > 0) {
+      console.warn(`DataForSEO: ${pendingIds.size} Product Info task(s) never became ready — skipped`);
+    }
 
     return allResults;
   }

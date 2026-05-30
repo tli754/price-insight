@@ -51,15 +51,11 @@ export class CompetitorAnalysisService {
       googlePosition: r.googlePosition ?? null,
       rawPrice: r.rawPrice,
       extractedPrice: r.extractedPrice,
-      sourceIcon: r.sourceIcon ?? null,
       country: r.country ?? null,
       rating: r.rating ?? null,
       reviewCount: r.reviewCount ?? null,
       shippingRaw: r.shippingRaw ?? null,
       shippingExtracted: r.shippingExtracted ?? null,
-      totalRaw: r.totalRaw ?? null,
-      totalExtracted: r.totalExtracted ?? null,
-      rawOldPrice: r.rawOldPrice ?? null,
       extractedOldPrice: r.extractedOldPrice ?? null
     }));
 
@@ -86,8 +82,15 @@ export class CompetitorAnalysisService {
       currency: r.currency,
       thumbnail: r.thumbnail,
       tag: r.tag,
+      googlePosition: r.googlePosition ?? null,
       rawPrice: r.rawPrice,
-      extractedPrice: r.extractedPrice
+      extractedPrice: r.extractedPrice,
+      country: r.country ?? null,
+      rating: r.rating ?? null,
+      reviewCount: r.reviewCount ?? null,
+      shippingRaw: r.shippingRaw ?? null,
+      shippingExtracted: r.shippingExtracted ?? null,
+      extractedOldPrice: r.extractedOldPrice ?? null
     }));
 
     const saved = await this.competitorRepository.replaceCompetitorProducts(product.id, rows);

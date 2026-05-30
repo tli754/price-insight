@@ -35,7 +35,6 @@ function makeCompetitorResult(overrides: Partial<CompetitorResult> = {}): Compet
     externalId: "ext-001",
     rawPrice: "$89.00",
     extractedPrice: 89.0,
-    rawOldPrice: null,
     extractedOldPrice: null,
     currency: "NZD",
     source: "Rival Store",

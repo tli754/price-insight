@@ -151,14 +151,12 @@ describe("SerpApiService", () => {
       const [result] = await service.searchShoppingPrices("Widget");
 
       expect(result.source).toBe("Merchant NZ");
-      expect(result.sourceIcon).toBe("https://merchant.co.nz/favicon.ico");
       expect(result.link).toBe("https://merchant.co.nz/widget");
       expect(result.extractedPrice).toBe(95.0);
       expect(result.rating).toBe(4.5);
       expect(result.reviewCount).toBe(21);
       expect(result.shippingExtracted).toBe(5.0);
-      expect(result.totalExtracted).toBe(100.0);
-      expect(result.rawOldPrice).toBe("$120.00");
+      expect(result.extractedOldPrice).toBe(120.0);
     });
 
     it("inherits thumbnail and externalId from the shopping result", async () => {

@@ -1,13 +1,13 @@
 /**
  * Investigation/connection test script for DataForSEO Google Shopping flow.
  *
- * Runs the full two-step pipeline — Shopping task post/get, then Product Info
- * task post/get for each candidate — with verbose output at each step.
+ * Uses tasks_ready endpoints to detect when tasks are done instead of
+ * polling each task individually.
  *
  * Usage:
  *   cd apps/backend
- *   tsx src/scripts/investigate-dataforseo.ts "moka pot"
- *   tsx src/scripts/investigate-dataforseo.ts          # uses default keyword
+ *   npx tsx src/scripts/investigate-dataforseo.ts "moka pot"
+ *   npx tsx src/scripts/investigate-dataforseo.ts     # uses default keyword
  *
  * Requires DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD in apps/backend/.env
  */
@@ -27,7 +27,7 @@ const BASE_URL = "https://api.dataforseo.com";
 const AUTH = "Basic " + Buffer.from(`${LOGIN}:${PASSWORD}`).toString("base64");
 const LOCATION_CODE = 2554;
 const LANGUAGE_CODE = "en";
-const POLL_RETRIES = 8;
+const POLL_RETRIES = 10;
 const POLL_DELAY_MS = 3000;
 const PRODUCT_INFO_LIMIT = 20;
 
@@ -58,28 +58,66 @@ async function apiGet(path: string) {
   return res.json() as Promise<any>;
 }
 
-async function pollUntilReady(getPath: string, label: string): Promise<any> {
+// ── tasks_ready polling helpers ───────────────────────────────────────────────
+
+async function waitForShoppingReady(taskId: string): Promise<string | null> {
+  console.log(`  Polling products/tasks_ready for task: ${taskId}`);
   for (let i = 0; i < POLL_RETRIES; i++) {
     if (i > 0) {
       console.log(`    [attempt ${i + 1}] waiting ${POLL_DELAY_MS}ms…`);
       await sleep(POLL_DELAY_MS);
     }
-    const data = await apiGet(getPath);
-    const task = data.tasks?.[0];
-    if (!task) continue;
-    if (task.status_code === 20100 || task.status_code === 40602) {
-      console.log(`    ${label}: task in queue (${task.status_code}), retrying…`);
-      continue;
+    const data = await apiGet("/v3/merchant/google/products/tasks_ready");
+    const readyItems: any[] = data.tasks?.[0]?.result ?? [];
+    const match = readyItems.find((r: any) => r.id === taskId);
+    if (match) {
+      console.log(`    ready — endpoint: ${match.endpoint_advanced}`);
+      return match.endpoint_advanced;
     }
-    if (task.status_code !== 20000) {
-      console.log(`    ${label}: unexpected status ${task.status_code} — ${task.status_message}`);
-      return null;
-    }
-    console.log(`    ${label}: ready (20000)`);
-    return task;
+    console.log(`    not ready yet (${readyItems.length} other tasks in queue)`);
   }
-  console.log(`    ${label}: timed out after ${POLL_RETRIES} attempts`);
+  console.log(`    timed out after ${POLL_RETRIES} attempts`);
   return null;
+}
+
+async function waitForProductInfoReady(
+  pendingIds: Set<string>,
+  idToCandidate: Map<string, any>
+): Promise<Map<string, string>> {
+  // Returns map of taskId → endpoint_advanced for all that became ready
+  const readyEndpoints = new Map<string, string>();
+
+  console.log(`  Polling product_info/tasks_ready for ${pendingIds.size} tasks…`);
+
+  for (let i = 0; i < POLL_RETRIES; i++) {
+    if (i > 0) {
+      console.log(`    [attempt ${i + 1}] waiting ${POLL_DELAY_MS}ms… (${pendingIds.size} still pending)`);
+      await sleep(POLL_DELAY_MS);
+    }
+
+    const data = await apiGet("/v3/merchant/google/product_info/tasks_ready");
+    const readyItems: any[] = data.tasks?.[0]?.result ?? [];
+
+    for (const item of readyItems) {
+      if (pendingIds.has(item.id)) {
+        const candidate = idToCandidate.get(item.id);
+        console.log(`    ✓ ready: ${item.id} — ${candidate?.title?.slice(0, 40)}`);
+        readyEndpoints.set(item.id, item.endpoint_advanced);
+        pendingIds.delete(item.id);
+      }
+    }
+
+    if (pendingIds.size === 0) break;
+  }
+
+  if (pendingIds.size > 0) {
+    console.log(`    WARNING: ${pendingIds.size} task(s) never became ready — skipping`);
+    for (const id of pendingIds) {
+      console.log(`      - ${id} (${idToCandidate.get(id)?.title?.slice(0, 40)})`);
+    }
+  }
+
+  return readyEndpoints;
 }
 
 // ── Step 1: Shopping task ─────────────────────────────────────────────────────
@@ -99,17 +137,21 @@ if (!shoppingTaskId) {
   process.exit(1);
 }
 
-const shoppingTask = await pollUntilReady(
-  `/v3/merchant/google/products/task_get/advanced/${shoppingTaskId}`,
-  "Shopping GET"
-);
+const shoppingEndpoint = await waitForShoppingReady(shoppingTaskId);
+if (!shoppingEndpoint) process.exit(1);
 
-if (!shoppingTask) process.exit(1);
+const shoppingData = await apiGet(shoppingEndpoint);
+const shoppingTask = shoppingData.tasks?.[0];
+
+if (!shoppingTask || shoppingTask.status_code !== 20000) {
+  console.error("  ERROR: unexpected status on task_get");
+  process.exit(1);
+}
 
 const allItems: any[] = shoppingTask.result?.[0]?.items ?? [];
 const serpItems = allItems.filter((i: any) => i.type === "google_shopping_serp");
 
-console.log(`\n  items total : ${allItems.length}`);
+console.log(`\n  items total          : ${allItems.length}`);
 console.log(`  google_shopping_serp : ${serpItems.length}`);
 
 // Filter and dedup
@@ -117,7 +159,7 @@ const seen = new Set<string>();
 const candidates: any[] = [];
 
 for (const item of serpItems) {
-  if (!item.product_id) { console.log(`    skip: no product_id  — "${item.title}"`); continue; }
+  if (!item.product_id) { console.log(`    skip: no product_id — "${item.title}"`); continue; }
   if (!item.seller) { console.log(`    skip: no seller — "${item.title}"`); continue; }
   if (item.price == null) { console.log(`    skip: no price — "${item.title}"`); continue; }
   if (item.currency !== "NZD") { console.log(`    skip: currency=${item.currency} — "${item.title}"`); continue; }
@@ -137,49 +179,69 @@ for (const item of serpItems) {
 
 console.log(`\n  Candidates for Product Info: ${candidates.length}`);
 
-// ── Step 2: Product Info tasks ────────────────────────────────────────────────
+// ── Step 2: POST all Product Info tasks ───────────────────────────────────────
 
-hr("STEP 2: Product Info tasks");
+hr("STEP 2: POST all Product Info tasks");
+
+const idToCandidate = new Map<string, any>();
+const pendingIds = new Set<string>();
+
+for (const candidate of candidates) {
+  try {
+    const postData = await apiPost("/v3/merchant/google/product_info/task_post", [
+      { language_code: LANGUAGE_CODE, location_code: LOCATION_CODE, product_id: candidate.product_id }
+    ]);
+    const taskId = postData.tasks?.[0]?.id;
+    if (!taskId) { console.log(`  ERROR: no task ID for ${candidate.product_id}`); continue; }
+    idToCandidate.set(taskId, candidate);
+    pendingIds.add(taskId);
+    console.log(`  posted: ${taskId} — ${candidate.title?.slice(0, 45)}`);
+  } catch (e: any) {
+    console.warn(`  WARN: failed to post task for ${candidate.product_id}: ${e.message}`);
+  }
+}
+
+console.log(`\n  ${pendingIds.size} tasks posted`);
+
+// ── Step 3: Poll tasks_ready + fetch as they become ready ─────────────────────
+
+hr("STEP 3: Poll tasks_ready and fetch results");
+
+const readyEndpoints = await waitForProductInfoReady(pendingIds, idToCandidate);
+
+console.log(`\n  ${readyEndpoints.size} tasks ready — fetching results…`);
 
 let totalSellers = 0;
 let filteredSellers = 0;
 
-for (const [idx, candidate] of candidates.entries()) {
-  console.log(`\n  [${idx + 1}/${candidates.length}] ${candidate.title?.slice(0, 50)} (product_id: ${candidate.product_id})`);
+for (const [taskId, endpoint] of readyEndpoints) {
+  const candidate = idToCandidate.get(taskId)!;
+  console.log(`\n  ${candidate.title?.slice(0, 50)} (task: ${taskId})`);
 
-  const infoPostData = await apiPost("/v3/merchant/google/product_info/task_post", [
-    { language_code: LANGUAGE_CODE, location_code: LOCATION_CODE, product_id: candidate.product_id }
-  ]);
+  try {
+    const data = await apiGet(endpoint);
+    const item = data.tasks?.[0]?.result?.[0]?.items?.[0];
+    if (!item) { console.log("    no item in result"); continue; }
 
-  const infoTaskId = infoPostData.tasks?.[0]?.id;
-  if (!infoTaskId) { console.log("    ERROR: no task ID"); continue; }
+    const sellers: any[] = item.sellers ?? [];
+    totalSellers += sellers.length;
+    console.log(`    sellers total: ${sellers.length}`);
 
-  const infoTask = await pollUntilReady(
-    `/v3/merchant/google/product_info/task_get/advanced/${infoTaskId}`,
-    "Product Info GET"
-  );
-
-  if (!infoTask) continue;
-
-  const item = infoTask.result?.[0]?.items?.[0];
-  if (!item) { console.log("    no item in result"); continue; }
-
-  const sellers: any[] = item.sellers ?? [];
-  totalSellers += sellers.length;
-  console.log(`    sellers total: ${sellers.length}`);
-
-  for (const seller of sellers) {
-    const valid = seller.title && seller.url && seller.price?.current != null && seller.price?.currency === "NZD";
-    if (valid) {
-      filteredSellers++;
-      console.log(
-        `      ✓ ${(seller.title ?? "").padEnd(28)} NZD ${String(seller.price.current).padStart(8)} | ${seller.url?.slice(0, 50)}`
-      );
-    } else {
-      console.log(
-        `      ✗ ${(seller.title ?? "—").padEnd(28)} currency=${seller.price?.currency ?? "?"} url=${seller.url ? "ok" : "missing"}`
-      );
+    for (const seller of sellers) {
+      const valid = seller.title && seller.url && seller.price?.current != null && seller.price?.currency === "NZD";
+      if (valid) {
+        filteredSellers++;
+        console.log(
+          `      ✓ ${(seller.title ?? "").padEnd(28)} NZD ${String(seller.price.current).padStart(8)} | ${seller.url?.slice(0, 50)}`
+        );
+      } else {
+        console.log(
+          `      ✗ ${(seller.title ?? "—").padEnd(28)} currency=${seller.price?.currency ?? "?"} url=${seller.url ? "ok" : "missing"}`
+        );
+      }
     }
+  } catch (e: any) {
+    console.warn(`    WARN: failed to fetch results: ${e.message}`);
   }
 }
 
@@ -189,6 +251,8 @@ hr("SUMMARY");
 console.log(`  Keyword              : ${KEYWORD}`);
 console.log(`  Shopping serp items  : ${serpItems.length}`);
 console.log(`  Candidates (≤${PRODUCT_INFO_LIMIT})     : ${candidates.length}`);
+console.log(`  Tasks posted         : ${idToCandidate.size}`);
+console.log(`  Tasks ready          : ${readyEndpoints.size}`);
 console.log(`  Total sellers found  : ${totalSellers}`);
 console.log(`  NZD sellers (kept)   : ${filteredSellers}`);
 hr();

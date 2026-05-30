@@ -29,6 +29,20 @@
       "when": 1780045919603,
       "tag": "0003_new_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1780180125457,
+      "tag": "0004_striped_multiple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1780180143703,
+      "tag": "0005_talented_calypso",
+      "breakpoints": true
     }
   ]
 }
