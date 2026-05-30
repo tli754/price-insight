@@ -13,7 +13,7 @@ import {
 import type { PriceAnalysisResult } from "../lib/price-analysis.js";
 
 export type CompetitorProductInput = {
-  competitorId: number;
+  competitorId: number | null;
   title: string;
   externalId: string | null;
   productLink: string;
@@ -146,7 +146,7 @@ export class CompetitorRepository {
     for (const item of items) {
       await this.db.transaction(async (tx) => {
         // Find existing record by productId + externalId + competitorId
-        const [existing] = item.externalId
+        const [existing] = item.externalId && item.competitorId != null
           ? await tx
               .select()
               .from(competitorProducts)
@@ -220,7 +220,7 @@ export class CompetitorRepository {
           .insert(competitorProducts)
           .values({
             productId,
-            competitorId: item.competitorId,
+            competitorId: item.competitorId ?? null,
             title: item.title,
             externalId: item.externalId,
             productLink: item.productLink,
@@ -250,13 +250,20 @@ export class CompetitorRepository {
     });
   }
 
-  async updateCompetitorProductStatus(
-    id: number,
-    status: "suggested" | "confirmed"
-  ): Promise<void> {
+  async confirmCompetitorProduct(id: number): Promise<void> {
+    const [row] = await this.db
+      .select()
+      .from(competitorProducts)
+      .where(eq(competitorProducts.id, id))
+      .limit(1);
+
+    if (!row) return;
+
+    const comp = await this.findOrCreateCompetitor(row.source);
+
     await this.db
       .update(competitorProducts)
-      .set({ status })
+      .set({ status: "confirmed", competitorId: comp.id })
       .where(eq(competitorProducts.id, id));
   }
 

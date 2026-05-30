@@ -43,6 +43,13 @@
       "when": 1780180143703,
       "tag": "0005_talented_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1780185463928,
+      "tag": "0006_dazzling_machine_man",
+      "breakpoints": true
     }
   ]
 }

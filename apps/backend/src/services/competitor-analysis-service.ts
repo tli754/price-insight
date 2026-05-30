@@ -32,15 +32,8 @@ export class CompetitorAnalysisService {
 
     await this.competitorRepository.deleteSuggestedByProduct(product.id);
 
-    const uniqueSources = [...new Set(filtered.map((r) => normalizeSource(r.source)))];
-    const competitorMap = new Map<string, number>();
-    for (const source of uniqueSources) {
-      const comp = await this.competitorRepository.findOrCreateCompetitor(source);
-      competitorMap.set(source, comp.id);
-    }
-
     const rows = filtered.map((r) => ({
-      competitorId: competitorMap.get(normalizeSource(r.source)) ?? 0,
+      competitorId: null,
       title: r.title,
       externalId: r.externalId,
       productLink: r.link,

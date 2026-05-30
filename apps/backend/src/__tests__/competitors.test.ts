@@ -396,7 +396,7 @@ describe("PATCH /api/products/:id/competitors/:competitorId", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ ok: true });
-    expect(competitorRepository.updateCompetitorProductStatus).toHaveBeenCalledWith(5, "confirmed");
+    expect(competitorRepository.confirmCompetitorProduct).toHaveBeenCalledWith(5);
   });
 
   it("returns 400 when status is not 'confirmed'", async () => {

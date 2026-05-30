@@ -83,7 +83,7 @@ const competitorRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(400, "INVALID_STATUS", "Only 'confirmed' status is accepted.");
     }
 
-    await fastify.competitorRepository.updateCompetitorProductStatus(competitorId, "confirmed");
+    await fastify.competitorRepository.confirmCompetitorProduct(competitorId);
     return { ok: true };
   });
 

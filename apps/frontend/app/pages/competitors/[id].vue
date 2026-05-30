@@ -77,7 +77,7 @@ const formatDateTime = (iso: string | null): string => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-7xl px-6 py-6">
+  <div class="mx-auto max-w-[2000px] px-6 py-6">
     <div class="mb-4 flex items-center gap-3">
       <UButton variant="ghost" color="neutral" icon="i-lucide-arrow-left" @click="navigateTo('/competitors')" />
       <h1 class="text-lg font-semibold text-gray-900">{{ competitorName }}</h1>

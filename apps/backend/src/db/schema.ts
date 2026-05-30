@@ -100,7 +100,6 @@ export const competitorProducts = mysqlTable(
       .notNull()
       .references(() => products.id, { onDelete: "cascade", onUpdate: "cascade" }),
     competitorId: int("competitor_id")
-      .notNull()
       .references(() => competitor.id, { onDelete: "restrict", onUpdate: "cascade" }),
     title: text("title").notNull(),
     externalId: varchar("external_id", { length: 255 }),

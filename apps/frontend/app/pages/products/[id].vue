@@ -114,7 +114,7 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-[2000px] px-6 py-10">
     <template v-if="pending">
       <USkeleton class="mb-6 h-8 w-64" />
       <USkeleton class="mb-6 h-64 w-full rounded-xl" />
@@ -232,8 +232,8 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                   <span class="font-medium text-highlighted">
                     {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
                   </span>
-                  <span v-if="c.rawOldPrice" class="ml-1 text-xs text-toned line-through">
-                    {{ c.rawOldPrice }}
+                  <span v-if="c.extractedOldPrice" class="ml-1 text-xs text-toned line-through">
+                    {{ c.currency }} {{ Number(c.extractedOldPrice).toFixed(2) }}
                   </span>
                 </td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
@@ -369,10 +369,11 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
       </div>
 
       <!-- Description -->
-      <UCard v-if="product.description" class="mt-6">
+      <UCard class="mt-6">
         <template #header>Description</template>
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="prose prose-sm max-w-none text-sm text-highlighted" v-html="product.description" />
+        <div v-if="product.description" class="prose prose-sm max-w-none text-sm text-highlighted" v-html="product.description" />
+        <p v-else class="text-sm text-toned">No description available.</p>
       </UCard>
     </template>
   </div>

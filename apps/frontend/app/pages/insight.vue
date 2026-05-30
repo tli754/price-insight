@@ -65,7 +65,7 @@ const columns = [
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-6 py-6 space-y-6">
+  <div class="mx-auto max-w-[2000px] px-6 py-6 space-y-6">
     <h1 class="text-lg font-semibold text-gray-900">Insight</h1>
 
     <div class="grid grid-cols-4 gap-4">

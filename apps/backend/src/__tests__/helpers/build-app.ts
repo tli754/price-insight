@@ -67,6 +67,7 @@ export function makeCompetitorRepository() {
     deleteSuggestedByProduct: vi.fn().mockResolvedValue(undefined),
     insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined),
     updateCompetitorProductStatus: vi.fn().mockResolvedValue(undefined),
+    confirmCompetitorProduct: vi.fn().mockResolvedValue(undefined),
     recordPriceInsight: vi.fn().mockResolvedValue(undefined)
   };
 }
