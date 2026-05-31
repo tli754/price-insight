@@ -3,11 +3,10 @@ kind: Ingress
 metadata:
   name: price-insight
   namespace: price-insight
-
 spec:
   ingressClassName: nginx
   rules:
-    - host: qweyha520.bar
+    - host: www.qweyha520.bar
       http:
         paths:
           - path: /api/_auth
@@ -31,6 +30,28 @@ spec:
                 name: backend
                 port:
                   number: 4000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+---
+# Permanent redirect: qweyha520.bar → www.qweyha520.bar
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: price-insight-www-redirect
+  namespace: price-insight
+  annotations:
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://www.qweyha520.bar$request_uri"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: qweyha520.bar
+      http:
+        paths:
           - path: /
             pathType: Prefix
             backend:
