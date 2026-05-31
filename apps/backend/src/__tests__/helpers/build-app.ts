@@ -65,6 +65,7 @@ export function makeCompetitorRepository() {
     replaceCompetitorProducts: vi.fn().mockResolvedValue([]),
     deleteCompetitorProduct: vi.fn().mockResolvedValue(undefined),
     deleteSuggestedByProduct: vi.fn().mockResolvedValue(undefined),
+    getDeletedExternalIds: vi.fn().mockResolvedValue(new Set()),
     insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined),
     updateCompetitorProductStatus: vi.fn().mockResolvedValue(undefined),
     confirmCompetitorProduct: vi.fn().mockResolvedValue(undefined),

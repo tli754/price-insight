@@ -185,7 +185,7 @@ export class DataForSeoService {
     return taskId;
   }
 
-  async getShoppingCandidates(taskId: string): Promise<ShoppingCandidate[]> {
+  async getShoppingCandidates(taskId: string, ownStoreName?: string): Promise<ShoppingCandidate[]> {
     // Poll tasks_ready until our task ID appears
     let endpoint: string | null = null;
 
@@ -224,12 +224,15 @@ export class DataForSeoService {
     const seen = new Set<string>();
     const candidates: ShoppingCandidate[] = [];
 
+    const normalizedOwnStore = ownStoreName?.trim().toLowerCase();
+
     for (const item of items) {
       if (item.type !== "google_shopping_serp") continue;
       if (!item.product_id) continue;
       if (!item.seller) continue;
       if (item.price == null) continue;
       if (item.currency !== "NZD") continue;
+      if (normalizedOwnStore && item.seller.trim().toLowerCase() === normalizedOwnStore) continue;
 
       const key = `${item.product_id}:${item.seller}:${item.title ?? ""}`;
       if (seen.has(key)) continue;
@@ -318,9 +321,12 @@ export class DataForSeoService {
     return results;
   }
 
-  async searchShoppingPrices(keyword: string): Promise<CompetitorResult[]> {
+  async searchShoppingPrices(keyword: string, excludeExternalIds?: Set<string>, ownStoreName?: string): Promise<CompetitorResult[]> {
     const shoppingTaskId = await this.createShoppingTask(keyword);
-    const candidates = await this.getShoppingCandidates(shoppingTaskId);
+    const rawCandidates = await this.getShoppingCandidates(shoppingTaskId, ownStoreName);
+    const candidates = excludeExternalIds?.size
+      ? rawCandidates.filter((c) => !excludeExternalIds.has(c.productId))
+      : rawCandidates;
 
     if (candidates.length === 0) return [];
 

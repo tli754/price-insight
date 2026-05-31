@@ -18,7 +18,14 @@ const { data: competitorsData, pending: competitorsPending, refresh: refreshComp
   )
 
 const product = computed(() => data.value?.item ?? null)
-const allCompetitors = computed(() => competitorsData.value?.items ?? [])
+const allCompetitors = computed(() => {
+  const items = competitorsData.value?.items ?? []
+  return [...items].sort((a, b) => {
+    if (a.status === 'confirmed' && b.status !== 'confirmed') return -1
+    if (a.status !== 'confirmed' && b.status === 'confirmed') return 1
+    return 0
+  })
+})
 const suggestedCompetitors = computed(() => allCompetitors.value.filter(c => c.status === 'suggested'))
 const confirmedCompetitors = computed(() => allCompetitors.value.filter(c => c.status === 'confirmed'))
 
@@ -177,13 +184,17 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
           <table class="w-full table-fixed text-sm">
             <thead>
               <tr class="border-b border-default/50 bg-default/20">
-                <th class="w-[60px] px-3 py-2" />
-                <th class="w-[220px] px-3 py-2 text-left font-medium text-toned">Product</th>
-                <th class="w-[160px] px-3 py-2 text-left font-medium text-toned">Store</th>
-                <th class="w-[100px] px-3 py-2 text-left font-medium text-toned">Status</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Price</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Diff</th>
-                <th class="w-20 px-3 py-2" />
+                <th class="w-[60px] p-0" />
+                <th class="px-3 py-2 text-left font-medium text-toned">Product</th>
+                <th class="w-[150px] px-3 py-2 text-left font-medium text-toned">Store</th>
+                <th class="w-[95px] px-3 py-2 text-left font-medium text-toned">Status</th>
+                <th class="w-[65px] px-3 py-2 text-left font-medium text-toned">Currency</th>
+                <th class="w-[55px] px-3 py-2 text-left font-medium text-toned">Country</th>
+                <th class="w-[130px] px-3 py-2 text-left font-medium text-toned">Shipping</th>
+                <th class="w-[210px] px-3 py-2 text-left font-medium text-toned">Reviews</th>
+                <th class="w-[110px] px-3 py-2 text-right font-medium text-toned">Price</th>
+                <th class="w-[75px] px-3 py-2 text-right font-medium text-toned">Diff</th>
+                <th class="w-[72px] px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -192,12 +203,12 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                 :key="c.id"
                 class="border-b border-default/30 last:border-0"
               >
-                <td class="px-3 py-2">
+                <td class="p-0">
                   <img
                     v-if="c.thumbnail"
                     :src="c.thumbnail"
                     :alt="c.title"
-                    class="h-[60px] w-[60px] rounded object-contain bg-white"
+                    class="h-[60px] w-[60px] rounded object-cover"
                   />
                   <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
                 </td>
@@ -227,6 +238,16 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                   >
                     {{ c.status }}
                   </UBadge>
+                </td>
+                <td class="px-3 py-2 text-toned">{{ c.currency || '—' }}</td>
+                <td class="px-3 py-2 text-toned">{{ c.country || '—' }}</td>
+                <td class="truncate px-3 py-2 text-toned" :title="c.shippingRaw ?? undefined">{{ c.shippingRaw || '—' }}</td>
+                <td class="px-3 py-2 text-xs text-toned">
+                  <span v-if="c.rating != null && c.reviewCount != null">
+                    {{ c.rating }} out of 5 stars from {{ c.reviewCount }} reviews
+                  </span>
+                  <span v-else-if="c.rating != null">{{ c.rating }} / 5</span>
+                  <span v-else>—</span>
                 </td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
                   <span class="font-medium text-highlighted">

@@ -57,7 +57,8 @@ function makeCompetitorRepo() {
     replaceCompetitorProducts: vi.fn().mockResolvedValue([]),
     recordPriceInsight: vi.fn().mockResolvedValue(undefined),
     deleteSuggestedByProduct: vi.fn().mockResolvedValue(undefined),
-    insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined)
+    insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined),
+    getDeletedExternalIds: vi.fn().mockResolvedValue(new Set())
   };
 }
 
@@ -79,7 +80,7 @@ describe("CompetitorAnalysisService.searchAndSuggest() — query and errors", ()
 
     await service.searchAndSuggest(makeProduct({ brand: "Nike", title: "Air Max 90" }));
 
-    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Nike Air Max 90");
+    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Nike Air Max 90", expect.any(Set), undefined);
   });
 
   it("passes the full title including spec suffixes to DataForSEO", async () => {
@@ -91,7 +92,9 @@ describe("CompetitorAnalysisService.searchAndSuggest() — query and errors", ()
     }));
 
     expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith(
-      "Rechargeable Round Coffee Digital Scale with Timer – 3kg / 0.1g"
+      "Rechargeable Round Coffee Digital Scale with Timer – 3kg / 0.1g",
+      expect.any(Set),
+      undefined
     );
   });
 
@@ -100,7 +103,7 @@ describe("CompetitorAnalysisService.searchAndSuggest() — query and errors", ()
 
     await service.searchAndSuggest(makeProduct({ brand: null, title: "Coffee Canister 1.2L Airtight" }));
 
-    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Coffee Canister 1.2L Airtight");
+    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Coffee Canister 1.2L Airtight", expect.any(Set), undefined);
   });
 
   it("throws MISSING_PRODUCT_NAME when product has no brand or title", async () => {

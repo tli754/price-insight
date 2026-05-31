@@ -36,7 +36,6 @@ export interface CompetitorItem {
   id: number
   title: string
   source: string
-  sourceIcon: string | null
   thumbnail: string | null
   productLink: string
   currency: string | null
@@ -48,9 +47,6 @@ export interface CompetitorItem {
   reviewCount: number | null
   shippingRaw: string | null
   shippingExtracted: number | null
-  totalRaw: string | null
-  totalExtracted: number | null
-  rawOldPrice: string | null
   extractedOldPrice: number | null
   createdAt: string
   rawPrice: string | null

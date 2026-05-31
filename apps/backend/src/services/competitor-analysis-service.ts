@@ -19,20 +19,16 @@ export class CompetitorAnalysisService {
       throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
     }
 
-    const results = await this.dataForSeo.searchShoppingPrices(query);
+    const deletedExternalIds = await this.competitorRepository.getDeletedExternalIds(product.id);
+    const results = await this.dataForSeo.searchShoppingPrices(query, deletedExternalIds, this.ownStoreName);
 
     if (results.length === 0) {
       throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
     }
 
-    const ownStore = this.ownStoreName?.trim().toLowerCase();
-    const filtered = ownStore
-      ? results.filter(r => normalizeSource(r.source).toLowerCase() !== ownStore)
-      : results;
-
     await this.competitorRepository.deleteSuggestedByProduct(product.id);
 
-    const rows = filtered.map((r) => ({
+    const rows = results.map((r) => ({
       competitorId: null,
       title: r.title,
       externalId: r.externalId,
@@ -54,7 +50,7 @@ export class CompetitorAnalysisService {
 
     await this.competitorRepository.insertSuggestedCompetitors(product.id, rows);
 
-    return filtered;
+    return results;
   }
 
   async saveCompetitors(product: ProductRow, selected: CompetitorResult[]): Promise<CompetitorProductRow[]> {

@@ -1,4 +1,4 @@
-import { asc, and, count, desc, eq, max } from "drizzle-orm";
+import { asc, and, count, desc, eq, max, ne } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -89,7 +89,7 @@ export class CompetitorRepository {
       .from(competitorProducts)
       .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
       .leftJoin(products, eq(products.id, competitorProducts.productId))
-      .where(eq(competitorProducts.competitorId, competitorId))
+      .where(and(eq(competitorProducts.competitorId, competitorId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 
@@ -114,7 +114,7 @@ export class CompetitorRepository {
     return this.db
       .select()
       .from(competitorProducts)
-      .where(eq(competitorProducts.productId, productId))
+      .where(and(eq(competitorProducts.productId, productId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 
@@ -135,7 +135,7 @@ export class CompetitorRepository {
       })
       .from(competitorProducts)
       .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
-      .where(eq(competitorProducts.productId, productId))
+      .where(and(eq(competitorProducts.productId, productId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 
@@ -200,8 +200,19 @@ export class CompetitorRepository {
     return this.getProductsByProductId(productId);
   }
 
+  async getDeletedExternalIds(productId: number): Promise<Set<string>> {
+    const rows = await this.db
+      .select({ externalId: competitorProducts.externalId })
+      .from(competitorProducts)
+      .where(and(eq(competitorProducts.productId, productId), eq(competitorProducts.status, "deleted")));
+    return new Set(rows.map((r) => r.externalId).filter((id): id is string => id != null));
+  }
+
   async deleteCompetitorProduct(id: number): Promise<void> {
-    await this.db.delete(competitorProducts).where(eq(competitorProducts.id, id));
+    await this.db
+      .update(competitorProducts)
+      .set({ status: "deleted" })
+      .where(eq(competitorProducts.id, id));
   }
 
   async deleteSuggestedByProduct(productId: number): Promise<void> {
@@ -292,7 +303,7 @@ export class CompetitorRepository {
       })
       .from(competitorProducts)
       .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
-      .where(eq(competitorProducts.productId, productId))
+      .where(and(eq(competitorProducts.productId, productId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 
