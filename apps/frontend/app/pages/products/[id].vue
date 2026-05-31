@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CompetitorsByProductResponse } from '~/shared/types/competitor'
+import type { CompetitorItem, CompetitorsByProductResponse } from '~/shared/types/competitor'
 import type { ProductRow } from '~/shared/types/product'
 
 const route = useRoute()
@@ -18,16 +18,19 @@ const { data: competitorsData, pending: competitorsPending, refresh: refreshComp
   )
 
 const product = computed(() => data.value?.item ?? null)
-const allCompetitors = computed(() => {
-  const items = competitorsData.value?.items ?? []
-  return [...items].sort((a, b) => {
+
+// Stable display list — sorted once on load/search, then mutated in-place for confirm/delete
+const displayCompetitors = ref<CompetitorItem[]>([])
+watch(competitorsData, (val) => {
+  displayCompetitors.value = [...(val?.items ?? [])].sort((a, b) => {
     if (a.status === 'confirmed' && b.status !== 'confirmed') return -1
     if (a.status !== 'confirmed' && b.status === 'confirmed') return 1
     return 0
   })
-})
-const suggestedCompetitors = computed(() => allCompetitors.value.filter(c => c.status === 'suggested'))
-const confirmedCompetitors = computed(() => allCompetitors.value.filter(c => c.status === 'confirmed'))
+}, { immediate: true })
+
+const suggestedCompetitors = computed(() => displayCompetitors.value.filter(c => c.status === 'suggested'))
+const confirmedCompetitors = computed(() => displayCompetitors.value.filter(c => c.status === 'confirmed'))
 
 // Image gallery
 const selectedImageIndex = ref(0)
@@ -67,7 +70,8 @@ async function confirmCompetitor(id: number) {
       method: 'PATCH',
       body: { status: 'confirmed' }
     })
-    await refreshCompetitors()
+    const item = displayCompetitors.value.find(c => c.id === id)
+    if (item) item.status = 'confirmed'
   } finally {
     actioningId.value = null
   }
@@ -77,7 +81,7 @@ async function deleteCompetitor(id: number) {
   actioningId.value = id
   try {
     await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors/${id}`, { method: 'DELETE' })
-    await refreshCompetitors()
+    displayCompetitors.value = displayCompetitors.value.filter(c => c.id !== id)
   } finally {
     actioningId.value = null
   }
@@ -107,6 +111,12 @@ function formatPrice(extracted: number | null, raw: string | null, currency: str
   return [currency, extracted].filter(Boolean).join(' ')
 }
 
+function formatCapturedAt(val: string | null): string {
+  if (!val) return '—'
+  const d = new Date(val)
+  return d.toLocaleString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
 function priceDiff(competitorPrice: number | null): { label: string; color: string } | null {
   const ourPrice = product.value?.price
   if (ourPrice == null || competitorPrice == null) return null
@@ -128,9 +138,9 @@ const colWidths = reactive({
   currency: 65,
   country: 55,
   shipping: 130,
-  reviews: 210,
   price: 110,
   diff: 75,
+  updated: 130,
   actions: 72,
 })
 
@@ -209,7 +219,7 @@ onUnmounted(() => {
       <!-- Competitors — full width, at top -->
       <UCard class="mb-6">
         <template #header>
-          <span>Competitors</span>
+          <span>Competitor Products</span>
         </template>
 
         <!-- Loading -->
@@ -217,7 +227,7 @@ onUnmounted(() => {
           <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
         </div>
 
-        <div v-else-if="!allCompetitors.length" class="py-6 text-center text-sm text-toned">
+        <div v-else-if="!displayCompetitors.length" class="py-6 text-center text-sm text-toned">
           No competitors found — click Find Competitors to search.
         </div>
 
@@ -232,9 +242,9 @@ onUnmounted(() => {
               <col :style="`width: ${colWidths.currency}px`" />
               <col :style="`width: ${colWidths.country}px`" />
               <col :style="`width: ${colWidths.shipping}px`" />
-              <col :style="`width: ${colWidths.reviews}px`" />
               <col :style="`width: ${colWidths.price}px`" />
               <col :style="`width: ${colWidths.diff}px`" />
+              <col :style="`width: ${colWidths.updated}px`" />
               <col :style="`width: ${colWidths.actions}px`" />
             </colgroup>
             <thead>
@@ -264,10 +274,6 @@ onUnmounted(() => {
                   Shipping
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'shipping')" />
                 </th>
-                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
-                  Reviews
-                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'reviews')" />
-                </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
                   Price
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'price')" />
@@ -276,12 +282,16 @@ onUnmounted(() => {
                   Diff
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'diff')" />
                 </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Last Updated
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'updated')" />
+                </th>
                 <th class="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="c in allCompetitors"
+                v-for="c in displayCompetitors"
                 :key="c.id"
                 class="border-b border-default/30 last:border-0"
               >
@@ -324,13 +334,6 @@ onUnmounted(() => {
                 <td class="px-3 py-2 text-toned">{{ c.currency || '—' }}</td>
                 <td class="px-3 py-2 text-toned">{{ c.country || '—' }}</td>
                 <td class="break-words px-3 py-2 text-toned">{{ c.shippingRaw || '—' }}</td>
-                <td class="px-3 py-2 text-xs text-toned">
-                  <span v-if="c.rating != null && c.reviewCount != null">
-                    {{ c.rating }} out of 5 stars from {{ c.reviewCount }} reviews
-                  </span>
-                  <span v-else-if="c.rating != null">{{ c.rating }} / 5</span>
-                  <span v-else>—</span>
-                </td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
                   <span class="font-medium text-highlighted">
                     {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
@@ -345,8 +348,9 @@ onUnmounted(() => {
                   </span>
                   <span v-else class="text-toned">—</span>
                 </td>
+                <td class="whitespace-nowrap px-3 py-2 text-xs text-toned">{{ formatCapturedAt(c.capturedAt) }}</td>
                 <td class="px-2 py-2 text-right">
-                  <div class="flex items-center justify-end gap-1">
+                  <div class="flex items-center justify-end gap-3">
                     <UButton
                       v-if="c.status === 'suggested'"
                       size="xs"

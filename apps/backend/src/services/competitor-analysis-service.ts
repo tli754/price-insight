@@ -21,14 +21,23 @@ export class CompetitorAnalysisService {
 
     const deletedExternalIds = await this.competitorRepository.getDeletedExternalIds(product.id);
     console.info(`[searchAndSuggest] product=${product.id} keyword="${query}" deletedIds=${deletedExternalIds.size}`);
-    const results = await this.dataForSeo.searchShoppingPrices(query, deletedExternalIds, this.ownStoreName);
-    console.info(`[searchAndSuggest] product=${product.id} results=${results.length}`);
+    const raw = await this.dataForSeo.searchShoppingPrices(query, deletedExternalIds, this.ownStoreName);
+
+    const results = raw.filter((r) => {
+      if (r.country !== "NZ" && r.country !== "AU") return false;
+      if (product.price != null) {
+        const lo = Number(product.price) / 2;
+        const hi = Number(product.price) * 2;
+        if (r.extractedPrice < lo || r.extractedPrice > hi) return false;
+      }
+      return true;
+    });
+
+    console.info(`[searchAndSuggest] product=${product.id} raw=${raw.length} filtered=${results.length}`);
 
     if (results.length === 0) {
       throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
     }
-
-    await this.competitorRepository.deleteSuggestedByProduct(product.id);
 
     const rows = results.map((r) => ({
       competitorId: null,
@@ -50,7 +59,14 @@ export class CompetitorAnalysisService {
       extractedOldPrice: r.extractedOldPrice ?? null
     }));
 
-    await this.competitorRepository.insertSuggestedCompetitors(product.id, rows);
+    const existingKeys = await this.competitorRepository.getExistingCompetitorKeys(product.id);
+    const newRows = rows.filter((r) => !existingKeys.has(`${r.externalId}:${r.source}`));
+
+    await this.competitorRepository.recordPricesForConfirmed(product.id, rows);
+    await this.competitorRepository.deleteSuggestedByProduct(product.id);
+    await this.competitorRepository.insertSuggestedCompetitors(product.id, newRows);
+
+    console.info(`[searchAndSuggest] product=${product.id} new_suggested=${newRows.length} skipped=${rows.length - newRows.length}`);
 
     return results;
   }

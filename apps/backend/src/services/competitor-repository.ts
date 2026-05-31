@@ -1,4 +1,4 @@
-import { asc, and, count, desc, eq, max, ne } from "drizzle-orm";
+import { asc, and, count, desc, eq, gte, max, ne } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -215,6 +215,61 @@ export class CompetitorRepository {
       .where(eq(competitorProducts.id, id));
   }
 
+  async getExistingCompetitorKeys(productId: number): Promise<Set<string>> {
+    const rows = await this.db
+      .select({ externalId: competitorProducts.externalId, source: competitorProducts.source })
+      .from(competitorProducts)
+      .where(and(
+        eq(competitorProducts.productId, productId),
+        ne(competitorProducts.status, "suggested")
+      ));
+    return new Set(rows.map((r) => `${r.externalId}:${r.source}`));
+  }
+
+  async recordPricesForConfirmed(productId: number, items: CompetitorProductInput[]): Promise<void> {
+    const confirmed = await this.db
+      .select({ id: competitorProducts.id, externalId: competitorProducts.externalId, source: competitorProducts.source })
+      .from(competitorProducts)
+      .where(and(eq(competitorProducts.productId, productId), eq(competitorProducts.status, "confirmed")));
+
+    if (confirmed.length === 0) return;
+
+    // key: externalId:source — both are already normalised when stored
+    const lookup = new Map(confirmed.map((c) => [`${c.externalId}:${c.source}`, c.id]));
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    for (const item of items) {
+      if (!item.externalId) continue;
+      const key = `${item.externalId}:${item.source}`;
+      const competitorProductId = lookup.get(key);
+      if (!competitorProductId) continue;
+
+      const [todayRecord] = await this.db
+        .select({ id: priceHistory.id })
+        .from(priceHistory)
+        .where(and(
+          eq(priceHistory.competitorProductId, competitorProductId),
+          gte(priceHistory.capturedAt, startOfToday)
+        ))
+        .limit(1);
+
+      if (todayRecord) {
+        await this.db
+          .update(priceHistory)
+          .set({ price: item.rawPrice, extractedPrice: item.extractedPrice, capturedAt: new Date() })
+          .where(eq(priceHistory.id, todayRecord.id));
+      } else {
+        await this.db.insert(priceHistory).values({
+          competitorProductId,
+          price: item.rawPrice,
+          extractedPrice: item.extractedPrice
+        });
+      }
+    }
+  }
+
   async deleteSuggestedByProduct(productId: number): Promise<void> {
     await this.db
       .delete(competitorProducts)
@@ -279,6 +334,16 @@ export class CompetitorRepository {
   }
 
   async getCompetitorsByProductId(productId: number) {
+    // Subquery: latest capturedAt per competitor product
+    const latestPrice = this.db
+      .select({
+        competitorProductId: priceHistory.competitorProductId,
+        maxCapturedAt: max(priceHistory.capturedAt).as("max_captured_at")
+      })
+      .from(priceHistory)
+      .groupBy(priceHistory.competitorProductId)
+      .as("latest_price");
+
     return this.db
       .select({
         id: competitorProducts.id,
@@ -302,7 +367,11 @@ export class CompetitorRepository {
         capturedAt: priceHistory.capturedAt
       })
       .from(competitorProducts)
-      .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
+      .leftJoin(latestPrice, eq(latestPrice.competitorProductId, competitorProducts.id))
+      .leftJoin(priceHistory, and(
+        eq(priceHistory.competitorProductId, competitorProducts.id),
+        eq(priceHistory.capturedAt, latestPrice.maxCapturedAt)
+      ))
       .where(and(eq(competitorProducts.productId, productId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
