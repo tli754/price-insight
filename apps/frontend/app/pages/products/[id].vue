@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { FetchCompetitorsResponse, SavedCompetitor } from '~/shared/types/competitor'
+import type { CompetitorItem, CompetitorsByProductResponse } from '~/shared/types/competitor'
 import type { ProductRow } from '~/shared/types/product'
 
 const route = useRoute()
@@ -12,20 +12,25 @@ const { data, pending } = await useFetch<{ item: ProductRow }>(
 )
 
 const { data: competitorsData, pending: competitorsPending, refresh: refreshCompetitors } =
-  await useFetch<FetchCompetitorsResponse>(
+  await useFetch<CompetitorsByProductResponse>(
     `${apiUrl}/api/products/${route.params.id}/competitors`,
     { lazy: true }
   )
 
-const { data: savedData, refresh: refreshSaved } =
-  await useFetch<{ items: SavedCompetitor[] }>(
-    `${apiUrl}/api/products/${route.params.id}/saved-competitors`,
-    { lazy: true }
-  )
-
 const product = computed(() => data.value?.item ?? null)
-const competitors = computed(() => competitorsData.value?.competitors ?? [])
-const savedCompetitors = computed(() => savedData.value?.items ?? [])
+
+// Stable display list — sorted once on load/search, then mutated in-place for confirm/delete
+const displayCompetitors = ref<CompetitorItem[]>([])
+watch(competitorsData, (val) => {
+  displayCompetitors.value = [...(val?.items ?? [])].sort((a, b) => {
+    if (a.status === 'confirmed' && b.status !== 'confirmed') return -1
+    if (a.status !== 'confirmed' && b.status === 'confirmed') return 1
+    return 0
+  })
+}, { immediate: true })
+
+const suggestedCompetitors = computed(() => displayCompetitors.value.filter(c => c.status === 'suggested'))
+const confirmedCompetitors = computed(() => displayCompetitors.value.filter(c => c.status === 'confirmed'))
 
 // Image gallery
 const selectedImageIndex = ref(0)
@@ -36,87 +41,60 @@ const activeImage = computed(() =>
 const activeImageAlt = computed(() =>
   images.value[selectedImageIndex.value]?.alt ?? product.value?.title ?? ''
 )
-
 watch(product, () => { selectedImageIndex.value = 0 })
 
-// Competitors selection
-const selected = ref<Set<number>>(new Set())
-const saving = ref(false)
-const saveError = ref<string | null>(null)
-const saveSuccess = ref(false)
+// Search
+const searching = ref(false)
+const searchError = ref<string | null>(null)
 
-const deletingId = ref<number | null>(null)
-
-watch(competitors, () => {
-  selected.value = new Set()
-  saveError.value = null
-  saveSuccess.value = false
-})
-
-function toggleRow(i: number) {
-  const next = new Set(selected.value)
-  if (next.has(i)) next.delete(i)
-  else next.add(i)
-  selected.value = next
-}
-
-function toggleAll() {
-  if (selected.value.size === competitors.value.length) {
-    selected.value = new Set()
-  } else {
-    selected.value = new Set(competitors.value.map((_c, i) => i))
+async function searchCompetitors() {
+  searching.value = true
+  searchError.value = null
+  try {
+    await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors/search`, { method: 'POST' })
+    await refreshCompetitors()
+  } catch (e: unknown) {
+    searchError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Search failed'
+  } finally {
+    searching.value = false
   }
 }
 
-function clearCompetitors() {
-  competitorsData.value = null
-  selected.value = new Set()
-  saveSuccess.value = false
-  saveError.value = null
+// Per-row actions
+const actioningId = ref<number | null>(null)
+
+async function confirmCompetitor(id: number) {
+  actioningId.value = id
+  try {
+    await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors/${id}`, {
+      method: 'PATCH',
+      body: { status: 'confirmed' }
+    })
+    const item = displayCompetitors.value.find(c => c.id === id)
+    if (item) item.status = 'confirmed'
+  } finally {
+    actioningId.value = null
+  }
 }
 
 async function deleteCompetitor(id: number) {
-  deletingId.value = id
+  actioningId.value = id
   try {
-    await $fetch(`${apiUrl}/api/products/${route.params.id}/saved-competitors/${id}`, {
-      method: 'DELETE'
-    })
-    await refreshSaved()
-  } catch {
-    // silently ignore — row stays in the list if delete fails
+    await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors/${id}`, { method: 'DELETE' })
+    displayCompetitors.value = displayCompetitors.value.filter(c => c.id !== id)
   } finally {
-    deletingId.value = null
+    actioningId.value = null
   }
 }
 
-async function saveSelected() {
-  const items = [...selected.value].map(i => competitors.value[i])
-  saving.value = true
-  saveError.value = null
-  saveSuccess.value = false
-  try {
-    await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors`, {
-      method: 'POST',
-      body: { competitors: items }
-    })
-    saveSuccess.value = true
-    selected.value = new Set()
-    await refreshSaved()
-  } catch (e: unknown) {
-    saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Failed to save competitors'
-  } finally {
-    saving.value = false
-  }
-}
-
-// Chart data derived from saved competitors with a known price
+// Chart data from confirmed competitors
 const chartPrices = computed(() =>
-  savedCompetitors.value
+  confirmedCompetitors.value
     .map(c => c.extractedPrice)
     .filter((p): p is number => p != null)
 )
 const chartLabels = computed(() =>
-  savedCompetitors.value
+  confirmedCompetitors.value
     .filter(c => c.extractedPrice != null)
     .map(c => c.title)
 )
@@ -127,9 +105,16 @@ function statusColor(status: string) {
   return 'neutral' as const
 }
 
-function formatPrice(extracted: number, raw: string | null, currency: string | null) {
+function formatPrice(extracted: number | null, raw: string | null, currency: string | null) {
   if (raw) return raw
+  if (extracted == null) return '—'
   return [currency, extracted].filter(Boolean).join(' ')
+}
+
+function formatCapturedAt(val: string | null): string {
+  if (!val) return '—'
+  const d = new Date(val)
+  return d.toLocaleString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function priceDiff(competitorPrice: number | null): { label: string; color: string } | null {
@@ -143,10 +128,52 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
     color: diff > 0 ? 'text-red-500' : 'text-blue-500'
   }
 }
+
+// Column resizing
+const colWidths = reactive({
+  thumbnail: 60,
+  product: 500,
+  store: 150,
+  status: 95,
+  currency: 65,
+  country: 55,
+  shipping: 130,
+  price: 110,
+  diff: 75,
+  updated: 130,
+  actions: 72,
+})
+
+type ColKey = keyof typeof colWidths
+let resizing: { key: ColKey; startX: number; startW: number } | null = null
+
+function startResize(e: MouseEvent, key: ColKey) {
+  resizing = { key, startX: e.clientX, startW: colWidths[key] }
+  e.preventDefault()
+}
+
+function onResizeMove(e: MouseEvent) {
+  if (!resizing) return
+  colWidths[resizing.key] = Math.max(40, resizing.startW + e.clientX - resizing.startX)
+}
+
+function stopResize() {
+  resizing = null
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+})
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-[2000px] px-6 py-10">
     <template v-if="pending">
       <USkeleton class="mb-6 h-8 w-64" />
       <USkeleton class="mb-6 h-64 w-full rounded-xl" />
@@ -175,60 +202,116 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
             {{ product.title || 'Unnamed product' }}
           </h1>
         </div>
-        <UButton
-          variant="soft"
-          color="primary"
-          icon="i-lucide-refresh-cw"
-          :loading="competitorsPending"
-          @click="refreshCompetitors"
-        >
-          New Competitors
-        </UButton>
+        <div class="flex flex-col items-end gap-1">
+          <UButton
+            variant="soft"
+            color="primary"
+            icon="i-lucide-search"
+            :loading="searching || competitorsPending"
+            @click="searchCompetitors"
+          >
+            Find Competitors
+          </UButton>
+          <p v-if="searchError" class="text-xs text-error-600">{{ searchError }}</p>
+        </div>
       </div>
 
       <!-- Competitors — full width, at top -->
       <UCard class="mb-6">
         <template #header>
-          <span>Competitors</span>
+          <span>Competitor Products</span>
         </template>
 
-        <!-- Saved competitors (top) -->
-        <div v-if="savedCompetitors.length" class="overflow-hidden rounded-lg border border-default/50">
-          <table class="w-full table-fixed text-sm">
+        <!-- Loading -->
+        <div v-if="competitorsPending" class="space-y-2">
+          <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
+        </div>
+
+        <div v-else-if="!displayCompetitors.length" class="py-6 text-center text-sm text-toned">
+          No competitors found — click Find Competitors to search.
+        </div>
+
+        <!-- Unified competitors table -->
+        <div v-else class="overflow-x-auto rounded-lg border border-default/50">
+          <table class="table-fixed text-sm">
+            <colgroup>
+              <col :style="`width: ${colWidths.thumbnail}px`" />
+              <col :style="`width: ${colWidths.product}px`" />
+              <col :style="`width: ${colWidths.store}px`" />
+              <col :style="`width: ${colWidths.status}px`" />
+              <col :style="`width: ${colWidths.currency}px`" />
+              <col :style="`width: ${colWidths.country}px`" />
+              <col :style="`width: ${colWidths.shipping}px`" />
+              <col :style="`width: ${colWidths.price}px`" />
+              <col :style="`width: ${colWidths.diff}px`" />
+              <col :style="`width: ${colWidths.updated}px`" />
+              <col :style="`width: ${colWidths.actions}px`" />
+            </colgroup>
             <thead>
               <tr class="border-b border-default/50 bg-default/20">
-                <th class="w-[60px] px-3 py-2" />
-                <th class="w-[250px] px-3 py-2 text-left font-medium text-toned">Product</th>
-                <th class="w-[200px] px-3 py-2 text-left font-medium text-toned">Store</th>
-                <th class="w-[100px] px-3 py-2 text-left font-medium text-toned">Created</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Price</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Diff</th>
-                <th class="w-10 px-3 py-2" />
+                <th class="p-0" />
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Product
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'product')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Store
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'store')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Status
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'status')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Currency
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'currency')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Country
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'country')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Shipping
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'shipping')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  Price
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'price')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  Diff
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'diff')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Last Updated
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'updated')" />
+                </th>
+                <th class="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="c in savedCompetitors"
+                v-for="c in displayCompetitors"
                 :key="c.id"
                 class="border-b border-default/30 last:border-0"
               >
-                <td class="px-3 py-2">
+                <td class="p-0">
                   <img
                     v-if="c.thumbnail"
                     :src="c.thumbnail"
                     :alt="c.title"
-                    class="h-[60px] w-[60px] rounded object-contain bg-white"
+                    class="h-[60px] w-[60px] rounded object-cover"
                   />
                   <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
                 </td>
-                <td class="overflow-hidden px-3 py-2">
-                  <div class="flex min-w-0 items-center gap-2">
+                <td class="px-3 py-2">
+                  <div class="flex min-w-0 flex-wrap items-start gap-2">
                     <a
                       :href="c.productLink"
                       :title="c.title"
                       target="_blank"
                       rel="noopener"
-                      class="min-w-0 truncate text-primary-600 hover:underline"
+                      class="break-words text-primary-600 hover:underline"
                       @click.stop
                     >
                       {{ c.title }}
@@ -238,11 +321,25 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                     </UBadge>
                   </div>
                 </td>
-                <td class="truncate px-3 py-2 text-toned" :title="c.source">{{ c.source }}</td>
-                <td class="px-3 py-2 text-toned">{{ new Date(c.createdAt).toLocaleDateString() }}</td>
+                <td class="break-words px-3 py-2 text-toned">{{ c.source }}</td>
+                <td class="px-3 py-2">
+                  <UBadge
+                    :color="c.status === 'confirmed' ? 'success' : 'warning'"
+                    variant="soft"
+                    size="sm"
+                  >
+                    {{ c.status }}
+                  </UBadge>
+                </td>
+                <td class="px-3 py-2 text-toned">{{ c.currency || '—' }}</td>
+                <td class="px-3 py-2 text-toned">{{ c.country || '—' }}</td>
+                <td class="break-words px-3 py-2 text-toned">{{ c.shippingRaw || '—' }}</td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
                   <span class="font-medium text-highlighted">
-                    {{ formatPrice(c.extractedPrice ?? 0, c.rawPrice, c.currency) }}
+                    {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
+                  </span>
+                  <span v-if="c.extractedOldPrice" class="ml-1 text-xs text-toned line-through">
+                    {{ c.currency }} {{ Number(c.extractedOldPrice).toFixed(2) }}
                   </span>
                 </td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
@@ -251,22 +348,34 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                   </span>
                   <span v-else class="text-toned">—</span>
                 </td>
+                <td class="whitespace-nowrap px-3 py-2 text-xs text-toned">{{ formatCapturedAt(c.capturedAt) }}</td>
                 <td class="px-2 py-2 text-right">
-                  <UButton
-                    size="xs"
-                    variant="ghost"
-                    color="error"
-                    icon="i-lucide-trash-2"
-                    :loading="deletingId === c.id"
-                    @click="deleteCompetitor(c.id)"
-                  />
+                  <div class="flex items-center justify-end gap-3">
+                    <UButton
+                      v-if="c.status === 'suggested'"
+                      size="xs"
+                      variant="soft"
+                      color="primary"
+                      icon="i-lucide-check"
+                      :loading="actioningId === c.id"
+                      @click="confirmCompetitor(c.id)"
+                    />
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      color="error"
+                      icon="i-lucide-trash-2"
+                      :loading="actioningId === c.id"
+                      @click="deleteCompetitor(c.id)"
+                    />
+                  </div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <!-- Price charts -->
+        <!-- Price charts (confirmed only) -->
         <div v-if="chartPrices.length >= 2" class="mt-4 grid grid-cols-2 gap-4">
           <div>
             <p class="mb-1 text-xs font-medium text-toned">Scatter Plot</p>
@@ -280,123 +389,6 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
               <PriceBoxChart :prices="chartPrices" :our-price="product.price" />
             </div>
           </div>
-        </div>
-
-        <!-- Divider between saved and new/cached -->
-        <div v-if="savedCompetitors.length && competitors.length" class="my-4 flex items-center gap-3">
-          <div class="h-px flex-1 bg-default/40" />
-          <span class="text-xl font-medium text-toned uppercase tracking-wide">New / Cached</span>
-          <div class="h-px flex-1 bg-default/40" />
-        </div>
-
-        <!-- New / cached actions -->
-        <div v-if="competitors.length" class="mb-2 flex items-center justify-end gap-2">
-          <p v-if="saveSuccess" class="text-xs text-success-600">Saved!</p>
-          <p v-if="saveError" class="text-xs text-error-600">{{ saveError }}</p>
-          <UButton size="xs" variant="soft" color="error" icon="i-lucide-trash-2" @click="clearCompetitors">
-            Delete
-          </UButton>
-          <UButton
-            size="xs"
-            variant="soft"
-            color="primary"
-            :disabled="selected.size === 0"
-            :loading="saving"
-            @click="saveSelected"
-          >
-            Save {{ selected.size > 0 ? `(${selected.size})` : '' }}
-          </UButton>
-        </div>
-
-        <!-- New / cached competitors (bottom) -->
-        <div v-if="competitorsPending" class="space-y-2">
-          <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
-        </div>
-
-        <div v-else-if="!competitors.length && !savedCompetitors.length" class="py-6 text-center text-sm text-toned">
-          No competitors found — click New Competitors to search.
-        </div>
-
-        <div v-else-if="competitors.length" class="overflow-hidden rounded-lg border border-default/50">
-          <table class="w-full table-fixed text-sm">
-            <thead>
-              <tr class="border-b border-default/50 bg-default/20">
-                <th class="w-8 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    :checked="selected.size === competitors.length"
-                    :indeterminate="selected.size > 0 && selected.size < competitors.length"
-                    class="cursor-pointer"
-                    @change="toggleAll"
-                  />
-                </th>
-                <th class="w-[60px] px-3 py-2" />
-                <th class="w-[250px] px-3 py-2 text-left font-medium text-toned">Product</th>
-                <th class="w-[200px] px-3 py-2 text-left font-medium text-toned">Store</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Price</th>
-                <th class="px-3 py-2 text-right font-medium text-toned">Diff</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="(c, i) in competitors"
-                :key="i"
-                class="cursor-pointer border-b border-default/30 last:border-0 hover:bg-default/10"
-                :class="{ 'bg-primary-50/40': selected.has(i) }"
-                @click="toggleRow(i)"
-              >
-                <td class="px-3 py-2" @click.stop>
-                  <input
-                    type="checkbox"
-                    :checked="selected.has(i)"
-                    class="cursor-pointer"
-                    @change="toggleRow(i)"
-                  />
-                </td>
-                <td class="px-3 py-2" @click.stop>
-                  <img
-                    v-if="c.thumbnail"
-                    :src="c.thumbnail"
-                    :alt="c.title"
-                    class="h-[60px] w-[60px] rounded object-contain bg-white"
-                  />
-                  <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
-                </td>
-                <td class="overflow-hidden px-3 py-2">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <a
-                      :href="c.link"
-                      :title="c.title"
-                      target="_blank"
-                      rel="noopener"
-                      class="min-w-0 truncate text-primary-600 hover:underline"
-                      @click.stop
-                    >
-                      {{ c.title }}
-                    </a>
-                    <UBadge v-if="c.tag" size="xs" color="neutral" variant="soft" class="shrink-0">
-                      {{ c.tag }}
-                    </UBadge>
-                  </div>
-                </td>
-                <td class="truncate px-3 py-2 text-toned" :title="c.source">{{ c.source }}</td>
-                <td class="whitespace-nowrap px-3 py-2 text-right">
-                  <span class="font-medium text-highlighted">
-                    {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
-                  </span>
-                  <span v-if="c.rawOldPrice" class="ml-1 text-xs text-toned line-through">
-                    {{ c.rawOldPrice }}
-                  </span>
-                </td>
-                <td class="whitespace-nowrap px-3 py-2 text-right">
-                  <span v-if="priceDiff(c.extractedPrice)" :class="priceDiff(c.extractedPrice)!.color" class="font-medium">
-                    {{ priceDiff(c.extractedPrice)!.label }}
-                  </span>
-                  <span v-else class="text-toned">—</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </UCard>
 
@@ -484,10 +476,11 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
       </div>
 
       <!-- Description -->
-      <UCard v-if="product.description" class="mt-6">
+      <UCard class="mt-6">
         <template #header>Description</template>
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="prose prose-sm max-w-none text-sm text-highlighted" v-html="product.description" />
+        <div v-if="product.description" class="prose prose-sm max-w-none text-sm text-highlighted" v-html="product.description" />
+        <p v-else class="text-sm text-toned">No description available.</p>
       </UCard>
     </template>
   </div>

@@ -27,7 +27,7 @@ const columns = [
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-6 py-6">
+  <div class="mx-auto max-w-[2000px] px-6 py-6">
     <div class="mb-4 flex items-center justify-between">
       <h1 class="text-lg font-semibold text-gray-900">Competitors</h1>
       <UButton label="Add Competitor" icon="i-lucide-plus" size="sm" />

@@ -1,49 +1,27 @@
 /**
  * Tests for buildApp() wiring in src/app.ts.
  *
- * vi.mock() intercepts createDatabase and createRedis before buildApp() runs,
- * so no real MySQL or Redis connection is ever opened.
+ * vi.mock() intercepts createDatabase before buildApp() runs,
+ * so no real MySQL connection is ever opened.
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
-// Must be declared before importing the module under test.
-// Vitest hoists vi.mock() calls to the top of the file automatically.
 vi.mock("../db/index.js", () => ({ createDatabase: vi.fn() }));
-vi.mock("../services/cache.js", () => ({
-  createRedis: vi.fn(),
-  getJson: vi.fn().mockResolvedValue(null),
-  setJson: vi.fn().mockResolvedValue(undefined)
-}));
 
 import { buildApp } from "../app.js";
 import { createDatabase } from "../db/index.js";
-import { createRedis } from "../services/cache.js";
 import { fakeEnv } from "./helpers/build-app.js";
 import { makeMockDb } from "./helpers/mock-db.js";
 
 const mockPool = { end: vi.fn().mockResolvedValue(undefined) };
 
-function makeMockRedis() {
-  return {
-    connect: vi.fn().mockResolvedValue(undefined),
-    quit: vi.fn().mockResolvedValue(undefined),
-    get: vi.fn().mockResolvedValue(null),
-    set: vi.fn().mockResolvedValue("OK"),
-    del: vi.fn().mockResolvedValue(1),
-    ping: vi.fn().mockResolvedValue("PONG")
-  };
-}
-
 describe("buildApp()", () => {
   let mockDb: ReturnType<typeof makeMockDb>;
-  let mockRedis: ReturnType<typeof makeMockRedis>;
 
   beforeEach(() => {
     mockDb = makeMockDb();
-    mockRedis = makeMockRedis();
     vi.mocked(createDatabase).mockReturnValue({ db: mockDb as any, pool: mockPool as any });
-    vi.mocked(createRedis).mockReturnValue(mockRedis as any);
   });
 
   afterEach(async () => {
@@ -54,8 +32,6 @@ describe("buildApp()", () => {
     const app = await buildApp(fakeEnv);
     await app.close();
 
-    expect(mockRedis.connect).toHaveBeenCalledOnce();
-    expect(mockRedis.quit).toHaveBeenCalledOnce();
     expect(mockPool.end).toHaveBeenCalledOnce();
   });
 
@@ -80,7 +56,6 @@ describe("buildApp()", () => {
 
   it("error handler formats AppError with the correct HTTP status and code", async () => {
     const app = await buildApp(fakeEnv);
-    // parseProductId("abc") throws AppError(400, "INVALID_PRODUCT_ID", ...)
     const response = await app.inject({ method: "GET", url: "/api/products/abc" });
     await app.close();
 

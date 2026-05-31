@@ -1,6 +1,6 @@
 /**
  * Test helper: builds a Fastify app instance with all external dependencies
- * (database, Redis, external APIs) replaced by vi.fn() stubs.
+ * (database, external APIs) replaced by vi.fn() stubs.
  *
  * No real connections are opened. Call `app.close()` in afterEach/afterAll.
  */
@@ -25,10 +25,6 @@ export const fakeEnv = {
   MYSQL_USER: "test",
   MYSQL_PASSWORD: "",
   MYSQL_DATABASE: "test",
-  REDIS_HOST: "localhost",
-  REDIS_PORT: 6379,
-  REDIS_DB: 0,
-  REDIS_TTL_SECONDS: 86400,
   JINA_API_KEY: "fake",
   SERPAPI_API_KEY: "fake",
   OPENAI_API_KEY: "fake",
@@ -37,7 +33,14 @@ export const fakeEnv = {
   SHOPIFY_PRODUCTS_URL: undefined,
   SHOPIFY_ORDERS_URL: undefined,
   SHOPIFY_CLIENT_ID: undefined,
-  SHOPIFY_CLIENT_SECRET: undefined
+  SHOPIFY_CLIENT_SECRET: undefined,
+  SERPAPI_LOCATION: "New Zealand",
+  SERPAPI_GL: "nz",
+  SERPAPI_HL: "en",
+  SERPAPI_GOOGLE_DOMAIN: "google.co.nz",
+  SERPAPI_NUM_RESULTS: 40,
+  DATAFORSEO_LOGIN: "fake",
+  DATAFORSEO_PASSWORD: "fake"
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -56,18 +59,24 @@ export function makeCompetitorRepository() {
     getAllCompetitors: vi.fn().mockResolvedValue([]),
     getCompetitorById: vi.fn().mockResolvedValue(null),
     getProductsByCompetitorId: vi.fn().mockResolvedValue([]),
+    getCompetitorsByProductId: vi.fn().mockResolvedValue([]),
     getSavedCompetitorsWithPrice: vi.fn().mockResolvedValue([]),
     findOrCreateCompetitor: vi.fn().mockResolvedValue({ id: 1, name: "Acme", state: "active" }),
     replaceCompetitorProducts: vi.fn().mockResolvedValue([]),
     deleteCompetitorProduct: vi.fn().mockResolvedValue(undefined),
+    deleteSuggestedByProduct: vi.fn().mockResolvedValue(undefined),
+    getDeletedExternalIds: vi.fn().mockResolvedValue(new Set()),
+    insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined),
+    updateCompetitorProductStatus: vi.fn().mockResolvedValue(undefined),
+    confirmCompetitorProduct: vi.fn().mockResolvedValue(undefined),
     recordPriceInsight: vi.fn().mockResolvedValue(undefined)
   };
 }
 
 export function makeCompetitorAnalysisService() {
   return {
-    fetchCompetitors: vi.fn().mockResolvedValue({ cached: false, query: "", competitors: [] }),
-    saveCompetitors: vi.fn().mockResolvedValue([])
+    saveCompetitors: vi.fn().mockResolvedValue([]),
+    searchAndSuggest: vi.fn().mockResolvedValue([])
   };
 }
 
@@ -107,7 +116,7 @@ export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
 
   const app = Fastify({ logger: false });
 
-  await app.register(cors, { origin: fakeEnv.APP_URL, credentials: true });
+  await app.register(cors, { origin: fakeEnv.APP_URL, credentials: true, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] });
 
   app.decorate("env", fakeEnv);
   app.decorate("productRepository", mocks.productRepository as any);

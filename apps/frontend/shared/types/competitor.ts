@@ -32,6 +32,32 @@ export interface FetchCompetitorsResponse {
   competitors: CompetitorResult[]
 }
 
+export interface CompetitorItem {
+  id: number
+  title: string
+  source: string
+  thumbnail: string | null
+  productLink: string
+  currency: string | null
+  tag: string | null
+  country: string | null
+  googlePosition: number | null
+  status: string
+  rating: number | null
+  reviewCount: number | null
+  shippingRaw: string | null
+  shippingExtracted: number | null
+  extractedOldPrice: number | null
+  createdAt: string
+  rawPrice: string | null
+  extractedPrice: number | null
+  capturedAt: string | null
+}
+
+export interface CompetitorsByProductResponse {
+  items: CompetitorItem[]
+}
+
 export type CompetitorProductTableRow = {
   id: string
   thumbnail: string | null

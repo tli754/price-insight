@@ -9,20 +9,23 @@ const envSchema = z.object({
   MYSQL_USER: z.string().min(1),
   MYSQL_PASSWORD: z.string().default(""),
   MYSQL_DATABASE: z.string().min(1),
-  REDIS_HOST: z.string().min(1),
-  REDIS_PORT: z.coerce.number().int().positive().default(6379),
-  REDIS_PASSWORD: z.string().optional(),
-  REDIS_DB: z.coerce.number().int().nonnegative().default(0),
-  REDIS_TTL_SECONDS: z.coerce.number().int().positive().default(86400),
   JINA_API_KEY: z.string().min(1),
   SERPAPI_API_KEY: z.string().min(1),
+  DATAFORSEO_LOGIN: z.string().min(1),
+  DATAFORSEO_PASSWORD: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
   SHOPIFY_TOKEN_URL: z.string().url().optional(),
   SHOPIFY_PRODUCTS_URL: z.string().url().optional(),
   SHOPIFY_ORDERS_URL: z.string().url().optional(),
   SHOPIFY_CLIENT_ID: z.string().min(1).optional(),
-  SHOPIFY_CLIENT_SECRET: z.string().min(1).optional()
+  SHOPIFY_CLIENT_SECRET: z.string().min(1).optional(),
+  SERPAPI_LOCATION: z.string().default("New Zealand"),
+  SERPAPI_GL: z.string().default("nz"),
+  SERPAPI_HL: z.string().default("en"),
+  SERPAPI_GOOGLE_DOMAIN: z.string().default("google.co.nz"),
+  SERPAPI_NUM_RESULTS: z.coerce.number().int().min(1).max(100).default(40),
+  OWN_STORE_NAME: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

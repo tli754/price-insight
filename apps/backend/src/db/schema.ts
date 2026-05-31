@@ -100,16 +100,22 @@ export const competitorProducts = mysqlTable(
       .notNull()
       .references(() => products.id, { onDelete: "cascade", onUpdate: "cascade" }),
     competitorId: int("competitor_id")
-      .notNull()
       .references(() => competitor.id, { onDelete: "restrict", onUpdate: "cascade" }),
     title: text("title").notNull(),
-    externalId: text("external_id"),
+    externalId: varchar("external_id", { length: 255 }),
     productLink: text("product_link").notNull(),
     source: varchar("source", { length: 255 }).notNull(),
     currency: varchar("currency", { length: 16 }),
     thumbnail: text("thumbnail"),
     tag: text("tag"),
     googlePosition: int("google_position"),
+    status: varchar("status", { length: 32 }).notNull().default("suggested"),
+    country: varchar("country", { length: 8 }),
+    rating: decimal("rating", { precision: 3, scale: 1, mode: "number" }),
+    reviewCount: int("review_count"),
+    shippingRaw: varchar("shipping_raw", { length: 64 }),
+    shippingExtracted: decimal("shipping_extracted", moneyColumn),
+    extractedOldPrice: decimal("extracted_old_price", moneyColumn),
     createdAt: timestamp("created_at").notNull().defaultNow()
   },
   (table) => ({
@@ -118,7 +124,7 @@ export const competitorProducts = mysqlTable(
     listingUnique: uniqueIndex("competitor_products_listing_unique").on(
       table.productId,
       table.competitorId,
-      table.productLink
+      table.externalId
     )
   })
 );
