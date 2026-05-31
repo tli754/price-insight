@@ -51,7 +51,7 @@ type DfsShoppingItem = {
   tags: string[] | null;
 };
 
-type DfsShoppingGetResponse = {
+export type DfsShoppingGetResponse = {
   tasks: Array<{
     status_code: number;
     result: Array<{
@@ -198,18 +198,9 @@ export class DataForSeoService {
     return taskId;
   }
 
-  async getShoppingCandidates(taskId: string, ownStoreName?: string): Promise<ShoppingCandidate[]> {
-    const data = await this.pollTaskGet<DfsShoppingGetResponse>(
-      `/v3/merchant/google/products/task_get/advanced/${taskId}`
-    );
-
-    if (!data) return [];
-
+  parseShoppingCandidates(data: DfsShoppingGetResponse, ownStoreName?: string, limit = PRODUCT_INFO_LIMIT): ShoppingCandidate[] {
     const items = data.tasks?.[0]?.result?.[0]?.items;
-    if (!items) {
-      console.warn(`DataForSEO: Shopping task_get returned null items`);
-      return [];
-    }
+    if (!items) return [];
 
     const seen = new Set<string>();
     const candidates: ShoppingCandidate[] = [];
@@ -241,9 +232,20 @@ export class DataForSeoService {
         googlePosition: item.rank_absolute ?? null
       });
 
-      if (candidates.length >= PRODUCT_INFO_LIMIT) break;
+      if (candidates.length >= limit) break;
     }
 
+    return candidates;
+  }
+
+  async getShoppingCandidates(taskId: string, ownStoreName?: string): Promise<ShoppingCandidate[]> {
+    const data = await this.pollTaskGet<DfsShoppingGetResponse>(
+      `/v3/merchant/google/products/task_get/advanced/${taskId}`
+    );
+
+    if (!data) return [];
+
+    const candidates = this.parseShoppingCandidates(data, ownStoreName);
     console.info(`DataForSEO: ${candidates.length} shopping candidates found for task ${taskId}`);
     return candidates;
   }
