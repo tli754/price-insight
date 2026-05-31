@@ -13,14 +13,16 @@ export class CompetitorAnalysisService {
   ) {}
 
   async searchAndSuggest(product: ProductRow): Promise<CompetitorResult[]> {
-    const query = [product.brand, product.title].filter(Boolean).join(" ");
+    const query = product.title || "";
 
     if (!query) {
       throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
     }
 
     const deletedExternalIds = await this.competitorRepository.getDeletedExternalIds(product.id);
+    console.info(`[searchAndSuggest] product=${product.id} keyword="${query}" deletedIds=${deletedExternalIds.size}`);
     const results = await this.dataForSeo.searchShoppingPrices(query, deletedExternalIds, this.ownStoreName);
+    console.info(`[searchAndSuggest] product=${product.id} results=${results.length}`);
 
     if (results.length === 0) {
       throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");

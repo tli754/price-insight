@@ -22,27 +22,18 @@ export type CompetitorResult = {
 const BASE_URL = "https://api.dataforseo.com";
 const LOCATION_CODE = 2554; // New Zealand
 const LANGUAGE_CODE = "en";
-const PRODUCT_INFO_LIMIT = 20;
+const PRODUCT_INFO_LIMIT = 40;
 const POLL_RETRIES = 10;
 const POLL_DELAY_MS = 3000;
+
+// 40601/40602 = task in queue; anything else is a permanent result
+const PENDING_STATUS_CODES = new Set([40601, 40602]);
 
 type DfsTaskPostResponse = {
   tasks: Array<{
     id: string;
     status_code: number;
     status_message: string;
-  }>;
-};
-
-type DfsTasksReadyItem = {
-  id: string;
-  endpoint_advanced: string;
-};
-
-type DfsTasksReadyResponse = {
-  tasks: Array<{
-    status_code: number;
-    result: DfsTasksReadyItem[] | null;
   }>;
 };
 
@@ -73,6 +64,7 @@ type DfsSeller = {
   title: string | null;
   url: string | null;
   seller_rating: { value: number | null; votes_count: number | null } | null;
+  seller_review_count: number | null;
   price: {
     current: number | null;
     regular: number | null;
@@ -85,7 +77,7 @@ type DfsSeller = {
   } | null;
 };
 
-type DfsProductInfoGetResponse = {
+export type DfsProductInfoGetResponse = {
   tasks: Array<{
     status_code: number;
     result: Array<{
@@ -99,7 +91,7 @@ type DfsProductInfoGetResponse = {
   }>;
 };
 
-type ShoppingCandidate = {
+export type ShoppingCandidate = {
   productId: string;
   seller: string;
   title: string;
@@ -172,6 +164,27 @@ export class DataForSeoService {
     return response.json() as Promise<T>;
   }
 
+  // Polls a task_get endpoint directly until status 20000 or a permanent non-pending result.
+  // Returns null on timeout or unexpected status code.
+  private async pollTaskGet<T>(endpoint: string): Promise<T | null> {
+    for (let attempt = 0; attempt < POLL_RETRIES; attempt++) {
+      if (attempt > 0) await sleep(POLL_DELAY_MS);
+
+      const data = await this.get<{ tasks: Array<{ status_code: number }> }>(endpoint);
+      const statusCode = data.tasks?.[0]?.status_code;
+
+      if (statusCode === 20000) return data as unknown as T;
+
+      if (!PENDING_STATUS_CODES.has(statusCode)) {
+        console.warn(`DataForSEO: task_get ${endpoint} returned unexpected status ${statusCode}`);
+        return null;
+      }
+    }
+
+    console.warn(`DataForSEO: task_get ${endpoint} timed out after ${POLL_RETRIES} attempts`);
+    return null;
+  }
+
   async createShoppingTask(keyword: string): Promise<string> {
     const data = await this.post<DfsTaskPostResponse>(
       "/v3/merchant/google/products/task_post",
@@ -186,36 +199,13 @@ export class DataForSeoService {
   }
 
   async getShoppingCandidates(taskId: string, ownStoreName?: string): Promise<ShoppingCandidate[]> {
-    // Poll tasks_ready until our task ID appears
-    let endpoint: string | null = null;
+    const data = await this.pollTaskGet<DfsShoppingGetResponse>(
+      `/v3/merchant/google/products/task_get/advanced/${taskId}`
+    );
 
-    for (let attempt = 0; attempt < POLL_RETRIES; attempt++) {
-      if (attempt > 0) await sleep(POLL_DELAY_MS);
+    if (!data) return [];
 
-      const ready = await this.get<DfsTasksReadyResponse>("/v3/merchant/google/products/tasks_ready");
-      const items = ready.tasks?.[0]?.result ?? [];
-      const match = items.find((r) => r.id === taskId);
-
-      if (match) {
-        endpoint = match.endpoint_advanced;
-        break;
-      }
-    }
-
-    if (!endpoint) {
-      console.warn(`DataForSEO: Shopping task ${taskId} never appeared in tasks_ready`);
-      return [];
-    }
-
-    const data = await this.get<DfsShoppingGetResponse>(endpoint);
-    const task = data.tasks?.[0];
-
-    if (!task || task.status_code !== 20000) {
-      console.warn(`DataForSEO: Shopping task_get returned status ${task?.status_code}`);
-      return [];
-    }
-
-    const items = task.result?.[0]?.items;
+    const items = data.tasks?.[0]?.result?.[0]?.items;
     if (!items) {
       console.warn(`DataForSEO: Shopping task_get returned null items`);
       return [];
@@ -223,7 +213,6 @@ export class DataForSeoService {
 
     const seen = new Set<string>();
     const candidates: ShoppingCandidate[] = [];
-
     const normalizedOwnStore = ownStoreName?.trim().toLowerCase();
 
     for (const item of items) {
@@ -255,6 +244,7 @@ export class DataForSeoService {
       if (candidates.length >= PRODUCT_INFO_LIMIT) break;
     }
 
+    console.info(`DataForSEO: ${candidates.length} shopping candidates found for task ${taskId}`);
     return candidates;
   }
 
@@ -271,16 +261,9 @@ export class DataForSeoService {
     return taskId;
   }
 
-  private async fetchProductInfoResults(endpoint: string, candidate: ShoppingCandidate): Promise<CompetitorResult[]> {
-    const data = await this.get<DfsProductInfoGetResponse>(endpoint);
-    const task = data.tasks?.[0];
-
-    if (!task || task.status_code !== 20000) {
-      console.warn(`DataForSEO: product_info task_get returned status ${task?.status_code}`);
-      return [];
-    }
-
-    const item = task.result?.[0]?.items?.[0];
+  // Parses sellers out of an already-fetched product_info task_get response.
+  fetchProductInfoResults(data: DfsProductInfoGetResponse, candidate: ShoppingCandidate): CompetitorResult[] {
+    const item = data.tasks?.[0]?.result?.[0]?.items?.[0];
     if (!item) {
       console.warn(`DataForSEO: product_info task_get returned null items`);
       return [];
@@ -312,8 +295,8 @@ export class DataForSeoService {
         tag: candidate.tag,
         googlePosition: candidate.googlePosition,
         rating: seller.seller_rating?.value ?? null,
-        reviewCount: seller.seller_rating?.votes_count ?? null,
-        shippingRaw: seller.delivery_info?.delivery_message ?? null,
+        reviewCount: seller.seller_review_count ?? seller.seller_rating?.votes_count ?? null,
+        shippingRaw: (seller.delivery_info?.delivery_message ?? null)?.slice(0, 64) ?? null,
         shippingExtracted: seller.delivery_info?.delivery_price?.current ?? null
       });
     }
@@ -330,59 +313,21 @@ export class DataForSeoService {
 
     if (candidates.length === 0) return [];
 
-    // POST all Product Info tasks upfront
-    const pendingIds = new Set<string>();
-    const idToCandidate = new Map<string, ShoppingCandidate>();
-
-    await Promise.all(
+    const allResults = (await Promise.all(
       candidates.map(async (candidate) => {
         try {
           const taskId = await this.createProductInfoTask(candidate.productId);
-          pendingIds.add(taskId);
-          idToCandidate.set(taskId, candidate);
+          const data = await this.pollTaskGet<DfsProductInfoGetResponse>(
+            `/v3/merchant/google/product_info/task_get/advanced/${taskId}`
+          );
+          if (!data) return [] as CompetitorResult[];
+          return this.fetchProductInfoResults(data, candidate);
         } catch (err) {
-          console.warn(`DataForSEO: failed to post Product Info task for ${candidate.productId}:`, err);
+          console.warn(`DataForSEO: failed to process product ${candidate.productId}:`, err);
+          return [] as CompetitorResult[];
         }
       })
-    );
-
-    if (pendingIds.size === 0) return [];
-
-    // Poll tasks_ready and fetch results as they become available
-    const allResults: CompetitorResult[] = [];
-    const idToEndpoint = new Map<string, string>();
-
-    for (let attempt = 0; attempt < POLL_RETRIES && pendingIds.size > 0; attempt++) {
-      if (attempt > 0) await sleep(POLL_DELAY_MS);
-
-      const ready = await this.get<DfsTasksReadyResponse>("/v3/merchant/google/product_info/tasks_ready");
-      const readyItems = ready.tasks?.[0]?.result ?? [];
-
-      for (const item of readyItems) {
-        if (!pendingIds.has(item.id)) continue;
-        idToEndpoint.set(item.id, item.endpoint_advanced);
-        pendingIds.delete(item.id);
-      }
-
-      // Fetch all newly ready tasks
-      await Promise.all(
-        [...idToEndpoint.keys()].map(async (taskId) => {
-          const endpoint = idToEndpoint.get(taskId)!;
-          const candidate = idToCandidate.get(taskId)!;
-          idToEndpoint.delete(taskId);
-          try {
-            const results = await this.fetchProductInfoResults(endpoint, candidate);
-            allResults.push(...results);
-          } catch (err) {
-            console.warn(`DataForSEO: failed to fetch Product Info results for task ${taskId}:`, err);
-          }
-        })
-      );
-    }
-
-    if (pendingIds.size > 0) {
-      console.warn(`DataForSEO: ${pendingIds.size} Product Info task(s) never became ready — skipped`);
-    }
+    )).flat();
 
     return allResults;
   }

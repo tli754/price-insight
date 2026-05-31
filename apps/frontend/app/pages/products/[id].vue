@@ -118,6 +118,48 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
     color: diff > 0 ? 'text-red-500' : 'text-blue-500'
   }
 }
+
+// Column resizing
+const colWidths = reactive({
+  thumbnail: 60,
+  product: 500,
+  store: 150,
+  status: 95,
+  currency: 65,
+  country: 55,
+  shipping: 130,
+  reviews: 210,
+  price: 110,
+  diff: 75,
+  actions: 72,
+})
+
+type ColKey = keyof typeof colWidths
+let resizing: { key: ColKey; startX: number; startW: number } | null = null
+
+function startResize(e: MouseEvent, key: ColKey) {
+  resizing = { key, startX: e.clientX, startW: colWidths[key] }
+  e.preventDefault()
+}
+
+function onResizeMove(e: MouseEvent) {
+  if (!resizing) return
+  colWidths[resizing.key] = Math.max(40, resizing.startW + e.clientX - resizing.startX)
+}
+
+function stopResize() {
+  resizing = null
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+})
 </script>
 
 <template>
@@ -180,21 +222,61 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
         </div>
 
         <!-- Unified competitors table -->
-        <div v-else class="overflow-hidden rounded-lg border border-default/50">
-          <table class="w-full table-fixed text-sm">
+        <div v-else class="overflow-x-auto rounded-lg border border-default/50">
+          <table class="table-fixed text-sm">
+            <colgroup>
+              <col :style="`width: ${colWidths.thumbnail}px`" />
+              <col :style="`width: ${colWidths.product}px`" />
+              <col :style="`width: ${colWidths.store}px`" />
+              <col :style="`width: ${colWidths.status}px`" />
+              <col :style="`width: ${colWidths.currency}px`" />
+              <col :style="`width: ${colWidths.country}px`" />
+              <col :style="`width: ${colWidths.shipping}px`" />
+              <col :style="`width: ${colWidths.reviews}px`" />
+              <col :style="`width: ${colWidths.price}px`" />
+              <col :style="`width: ${colWidths.diff}px`" />
+              <col :style="`width: ${colWidths.actions}px`" />
+            </colgroup>
             <thead>
               <tr class="border-b border-default/50 bg-default/20">
-                <th class="w-[60px] p-0" />
-                <th class="px-3 py-2 text-left font-medium text-toned">Product</th>
-                <th class="w-[150px] px-3 py-2 text-left font-medium text-toned">Store</th>
-                <th class="w-[95px] px-3 py-2 text-left font-medium text-toned">Status</th>
-                <th class="w-[65px] px-3 py-2 text-left font-medium text-toned">Currency</th>
-                <th class="w-[55px] px-3 py-2 text-left font-medium text-toned">Country</th>
-                <th class="w-[130px] px-3 py-2 text-left font-medium text-toned">Shipping</th>
-                <th class="w-[210px] px-3 py-2 text-left font-medium text-toned">Reviews</th>
-                <th class="w-[110px] px-3 py-2 text-right font-medium text-toned">Price</th>
-                <th class="w-[75px] px-3 py-2 text-right font-medium text-toned">Diff</th>
-                <th class="w-[72px] px-3 py-2" />
+                <th class="p-0" />
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Product
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'product')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Store
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'store')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Status
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'status')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Currency
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'currency')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Country
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'country')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Shipping
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'shipping')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  Reviews
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'reviews')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  Price
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'price')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  Diff
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'diff')" />
+                </th>
+                <th class="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -212,14 +294,14 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                   />
                   <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
                 </td>
-                <td class="overflow-hidden px-3 py-2">
-                  <div class="flex min-w-0 items-center gap-2">
+                <td class="px-3 py-2">
+                  <div class="flex min-w-0 flex-wrap items-start gap-2">
                     <a
                       :href="c.productLink"
                       :title="c.title"
                       target="_blank"
                       rel="noopener"
-                      class="min-w-0 truncate text-primary-600 hover:underline"
+                      class="break-words text-primary-600 hover:underline"
                       @click.stop
                     >
                       {{ c.title }}
@@ -229,7 +311,7 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                     </UBadge>
                   </div>
                 </td>
-                <td class="truncate px-3 py-2 text-toned" :title="c.source">{{ c.source }}</td>
+                <td class="break-words px-3 py-2 text-toned">{{ c.source }}</td>
                 <td class="px-3 py-2">
                   <UBadge
                     :color="c.status === 'confirmed' ? 'success' : 'warning'"
@@ -241,7 +323,7 @@ function priceDiff(competitorPrice: number | null): { label: string; color: stri
                 </td>
                 <td class="px-3 py-2 text-toned">{{ c.currency || '—' }}</td>
                 <td class="px-3 py-2 text-toned">{{ c.country || '—' }}</td>
-                <td class="truncate px-3 py-2 text-toned" :title="c.shippingRaw ?? undefined">{{ c.shippingRaw || '—' }}</td>
+                <td class="break-words px-3 py-2 text-toned">{{ c.shippingRaw || '—' }}</td>
                 <td class="px-3 py-2 text-xs text-toned">
                   <span v-if="c.rating != null && c.reviewCount != null">
                     {{ c.rating }} out of 5 stars from {{ c.reviewCount }} reviews
