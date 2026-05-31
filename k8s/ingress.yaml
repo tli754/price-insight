@@ -45,7 +45,7 @@ metadata:
   name: price-insight-www-redirect
   namespace: price-insight
   annotations:
-    nginx.ingress.kubernetes.io/permanent-redirect: "https://www.qweyha520.bar$request_uri"
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://www.qweyha520.bar"
 spec:
   ingressClassName: nginx
   rules:
