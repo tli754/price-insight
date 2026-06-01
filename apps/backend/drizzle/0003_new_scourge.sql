@@ -1,4 +1,4 @@
-ALTER TABLE `competitor_products` MODIFY COLUMN `status` varchar(32) DEFAULT 'suggested' NOT NULL;--> statement-breakpoint
+ALTER TABLE `competitor_products` ADD `status` varchar(32) DEFAULT 'suggested' NOT NULL;--> statement-breakpoint
 ALTER TABLE `competitor_products` ADD `source_icon` text;--> statement-breakpoint
 ALTER TABLE `competitor_products` ADD `country` varchar(8);--> statement-breakpoint
 ALTER TABLE `competitor_products` ADD `rating` decimal(3,1);--> statement-breakpoint
