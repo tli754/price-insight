@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+### Git
+
+ALWAYS ask the user for confirmation before running `git push` or any command that pushes to a remote.
+
 ### Diagrams
 
 ALWAYS use mermaid when creating architecture diagrams in markdown do NOT create ASCII diagrams.
