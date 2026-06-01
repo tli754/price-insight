@@ -1,1 +1,0 @@
-ALTER TABLE `competitor_products` MODIFY COLUMN `external_id` varchar(255);
