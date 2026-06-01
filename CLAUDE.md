@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ALWAYS ask the user for confirmation before running `git push` or any command that pushes to a remote.
 
+### Database migrations
+
+NEVER run `db:push` against any shared environment (staging, production).
+`db:push` applies schema without recording in `__drizzle_migrations`, permanently
+desynchronising schema state from migration history. Only use `db:push` locally.
+All schema changes to shared environments MUST go through `db:generate` → commit migration → deploy.
+
 ### Diagrams
 
 ALWAYS use mermaid when creating architecture diagrams in markdown do NOT create ASCII diagrams.
