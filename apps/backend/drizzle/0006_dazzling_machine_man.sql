@@ -1,1 +1,0 @@
-ALTER TABLE `competitor_products` MODIFY COLUMN `competitor_id` int;
