@@ -9,6 +9,13 @@ spec:
     - host: www.qweyha520.bar
       http:
         paths:
+          - path: /api/_nuxt_icon
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
           - path: /api/_auth
             pathType: Prefix
             backend:
