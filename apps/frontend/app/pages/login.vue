@@ -3,8 +3,6 @@ definePageMeta({ layout: false })
 
 const { loggedIn, fetch } = useUserSession()
 const route = useRoute()
-const config = useRuntimeConfig()
-const devAuthBypass = config.public.devAuthBypass
 
 const pending = ref(false)
 const password = ref("")
@@ -16,15 +14,6 @@ await fetch()
 
 if (loggedIn.value) {
   await navigateTo("/products")
-}
-
-async function loginWithGoogle() {
-  pending.value = true
-  try {
-    await navigateTo("/auth/google", { external: true })
-  } finally {
-    pending.value = false
-  }
 }
 
 async function loginWithPassword() {
@@ -68,7 +57,7 @@ async function loginWithPassword() {
           :description="errorMessage"
         />
 
-        <div v-if="devAuthBypass" class="mt-8 flex max-w-sm flex-col gap-3">
+        <div class="mt-8 flex max-w-sm flex-col gap-3">
           <UInput
             v-model="password"
             type="password"
@@ -83,17 +72,6 @@ async function loginWithPassword() {
             @click="loginWithPassword"
           >
             Sign in
-          </UButton>
-        </div>
-
-        <div v-else class="mt-8">
-          <UButton
-            size="xl"
-            color="primary"
-            :loading="pending"
-            @click="loginWithGoogle"
-          >
-            Continue with Google
           </UButton>
         </div>
       </section>

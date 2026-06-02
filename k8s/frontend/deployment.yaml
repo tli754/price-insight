@@ -25,8 +25,6 @@ spec:
           env:
             - name: NODE_ENV
               value: production
-            - name: NUXT_OAUTH_GOOGLE_REDIRECT_URL
-              value: "https://www.qweyha520.bar/auth/google"
           readinessProbe:
             httpGet:
               path: /api/health
