@@ -1,4 +1,4 @@
-import { asc, and, count, desc, eq, max } from "drizzle-orm";
+import { asc, and, count, desc, eq, gte, max, ne } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -13,7 +13,7 @@ import {
 import type { PriceAnalysisResult } from "../lib/price-analysis.js";
 
 export type CompetitorProductInput = {
-  competitorId: number;
+  competitorId: number | null;
   title: string;
   externalId: string | null;
   productLink: string;
@@ -24,17 +24,23 @@ export type CompetitorProductInput = {
   googlePosition?: number | null;
   rawPrice: string | null;
   extractedPrice: number;
-  sourceIcon?: string | null;
   country?: string | null;
   rating?: number | null;
   reviewCount?: number | null;
   shippingRaw?: string | null;
   shippingExtracted?: number | null;
-  totalRaw?: string | null;
-  totalExtracted?: number | null;
-  rawOldPrice?: string | null;
   extractedOldPrice?: number | null;
 };
+
+function normalizeCompetitorName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\bnew zealand\b/gi, "nz")
+    .replace(/\baustralia\b/gi, "au")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export class CompetitorRepository {
   constructor(private readonly db: Database) {}
@@ -83,16 +89,14 @@ export class CompetitorRepository {
       .from(competitorProducts)
       .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
       .leftJoin(products, eq(products.id, competitorProducts.productId))
-      .where(eq(competitorProducts.competitorId, competitorId))
+      .where(and(eq(competitorProducts.competitorId, competitorId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 
   async findOrCreateCompetitor(name: string): Promise<CompetitorRow> {
-    const [existing] = await this.db
-      .select()
-      .from(competitor)
-      .where(eq(competitor.name, name))
-      .limit(1);
+    const normalized = normalizeCompetitorName(name);
+    const all = await this.db.select().from(competitor).orderBy(asc(competitor.name));
+    const existing = all.find((c) => normalizeCompetitorName(c.name) === normalized);
 
     if (existing) return existing;
 
@@ -110,7 +114,7 @@ export class CompetitorRepository {
     return this.db
       .select()
       .from(competitorProducts)
-      .where(eq(competitorProducts.productId, productId))
+      .where(and(eq(competitorProducts.productId, productId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 
@@ -131,7 +135,7 @@ export class CompetitorRepository {
       })
       .from(competitorProducts)
       .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
-      .where(eq(competitorProducts.productId, productId))
+      .where(and(eq(competitorProducts.productId, productId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 
@@ -139,41 +143,131 @@ export class CompetitorRepository {
     productId: number,
     items: CompetitorProductInput[]
   ): Promise<CompetitorProductRow[]> {
-    await this.db.transaction(async (tx) => {
-      await tx.delete(competitorProducts).where(eq(competitorProducts.productId, productId));
+    for (const item of items) {
+      await this.db.transaction(async (tx) => {
+        // Find existing record by productId + externalId + competitorId
+        const [existing] = item.externalId && item.competitorId != null
+          ? await tx
+              .select()
+              .from(competitorProducts)
+              .where(
+                and(
+                  eq(competitorProducts.productId, productId),
+                  eq(competitorProducts.competitorId, item.competitorId),
+                  eq(competitorProducts.externalId, item.externalId)
+                )
+              )
+              .limit(1)
+          : [];
 
-      for (const item of items) {
-        const result = await tx
-          .insert(competitorProducts)
-          .values({
-            productId,
-            competitorId: item.competitorId,
-            title: item.title,
-            externalId: item.externalId,
-            productLink: item.productLink,
-            source: item.source,
-            currency: item.currency,
-            thumbnail: item.thumbnail,
-            tag: item.tag,
-            googlePosition: item.googlePosition ?? null
-          })
-          .$returningId();
+        let competitorProductId: number;
 
-        const competitorProductId = Number(result[0]?.id);
+        if (existing) {
+          competitorProductId = existing.id;
+        } else {
+          const result = await tx
+            .insert(competitorProducts)
+            .values({
+              productId,
+              competitorId: item.competitorId,
+              title: item.title,
+              externalId: item.externalId,
+              productLink: item.productLink,
+              source: item.source,
+              currency: item.currency,
+              thumbnail: item.thumbnail,
+              tag: item.tag,
+              googlePosition: item.googlePosition ?? null,
+              country: item.country ?? null,
+              rating: item.rating ?? null,
+              reviewCount: item.reviewCount ?? null,
+              shippingRaw: item.shippingRaw ?? null,
+              shippingExtracted: item.shippingExtracted ?? null,
+              extractedOldPrice: item.extractedOldPrice ?? null
+            })
+            .$returningId();
+          competitorProductId = Number(result[0]?.id);
+        }
 
         await tx.insert(priceHistory).values({
           competitorProductId,
           price: item.rawPrice,
           extractedPrice: item.extractedPrice
         });
-      }
-    });
+      });
+    }
 
     return this.getProductsByProductId(productId);
   }
 
+  async getDeletedExternalIds(productId: number): Promise<Set<string>> {
+    const rows = await this.db
+      .select({ externalId: competitorProducts.externalId })
+      .from(competitorProducts)
+      .where(and(eq(competitorProducts.productId, productId), eq(competitorProducts.status, "deleted")));
+    return new Set(rows.map((r) => r.externalId).filter((id): id is string => id != null));
+  }
+
   async deleteCompetitorProduct(id: number): Promise<void> {
-    await this.db.delete(competitorProducts).where(eq(competitorProducts.id, id));
+    await this.db
+      .update(competitorProducts)
+      .set({ status: "deleted" })
+      .where(eq(competitorProducts.id, id));
+  }
+
+  async getExistingCompetitorKeys(productId: number): Promise<Set<string>> {
+    const rows = await this.db
+      .select({ externalId: competitorProducts.externalId, source: competitorProducts.source })
+      .from(competitorProducts)
+      .where(and(
+        eq(competitorProducts.productId, productId),
+        ne(competitorProducts.status, "suggested")
+      ));
+    return new Set(rows.map((r) => `${r.externalId}:${r.source}`));
+  }
+
+  async recordPricesForConfirmed(productId: number, items: CompetitorProductInput[]): Promise<void> {
+    const confirmed = await this.db
+      .select({ id: competitorProducts.id, externalId: competitorProducts.externalId, source: competitorProducts.source })
+      .from(competitorProducts)
+      .where(and(eq(competitorProducts.productId, productId), eq(competitorProducts.status, "confirmed")));
+
+    if (confirmed.length === 0) return;
+
+    // key: externalId:source — both are already normalised when stored
+    const lookup = new Map(confirmed.map((c) => [`${c.externalId}:${c.source}`, c.id]));
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    for (const item of items) {
+      if (!item.externalId) continue;
+      const key = `${item.externalId}:${item.source}`;
+      const competitorProductId = lookup.get(key);
+      if (!competitorProductId) continue;
+
+      const [todayRecord] = await this.db
+        .select({ id: priceHistory.id })
+        .from(priceHistory)
+        .where(and(
+          eq(priceHistory.competitorProductId, competitorProductId),
+          gte(priceHistory.capturedAt, startOfToday)
+        ))
+        .limit(1);
+
+      if (todayRecord) {
+        await this.db
+          .update(priceHistory)
+          .set({ price: item.rawPrice, extractedPrice: item.extractedPrice, capturedAt: new Date() })
+          .where(eq(priceHistory.id, todayRecord.id));
+      } else {
+        await this.db.insert(priceHistory).values({
+          competitorProductId,
+          price: item.rawPrice,
+          extractedPrice: item.extractedPrice
+        });
+      }
+    }
   }
 
   async deleteSuggestedByProduct(productId: number): Promise<void> {
@@ -192,7 +286,7 @@ export class CompetitorRepository {
           .insert(competitorProducts)
           .values({
             productId,
-            competitorId: item.competitorId,
+            competitorId: item.competitorId ?? null,
             title: item.title,
             externalId: item.externalId,
             productLink: item.productLink,
@@ -202,15 +296,11 @@ export class CompetitorRepository {
             tag: item.tag,
             googlePosition: item.googlePosition ?? null,
             status: "suggested",
-            sourceIcon: item.sourceIcon ?? null,
             country: item.country ?? null,
             rating: item.rating ?? null,
             reviewCount: item.reviewCount ?? null,
             shippingRaw: item.shippingRaw ?? null,
             shippingExtracted: item.shippingExtracted ?? null,
-            totalRaw: item.totalRaw ?? null,
-            totalExtracted: item.totalExtracted ?? null,
-            rawOldPrice: item.rawOldPrice ?? null,
             extractedOldPrice: item.extractedOldPrice ?? null
           })
           .$returningId();
@@ -226,23 +316,39 @@ export class CompetitorRepository {
     });
   }
 
-  async updateCompetitorProductStatus(
-    id: number,
-    status: "suggested" | "confirmed"
-  ): Promise<void> {
+  async confirmCompetitorProduct(id: number): Promise<void> {
+    const [row] = await this.db
+      .select()
+      .from(competitorProducts)
+      .where(eq(competitorProducts.id, id))
+      .limit(1);
+
+    if (!row) return;
+
+    const comp = await this.findOrCreateCompetitor(row.source);
+
     await this.db
       .update(competitorProducts)
-      .set({ status })
+      .set({ status: "confirmed", competitorId: comp.id })
       .where(eq(competitorProducts.id, id));
   }
 
   async getCompetitorsByProductId(productId: number) {
+    // Subquery: latest capturedAt per competitor product
+    const latestPrice = this.db
+      .select({
+        competitorProductId: priceHistory.competitorProductId,
+        maxCapturedAt: max(priceHistory.capturedAt).as("max_captured_at")
+      })
+      .from(priceHistory)
+      .groupBy(priceHistory.competitorProductId)
+      .as("latest_price");
+
     return this.db
       .select({
         id: competitorProducts.id,
         title: competitorProducts.title,
         source: competitorProducts.source,
-        sourceIcon: competitorProducts.sourceIcon,
         thumbnail: competitorProducts.thumbnail,
         productLink: competitorProducts.productLink,
         currency: competitorProducts.currency,
@@ -254,9 +360,6 @@ export class CompetitorRepository {
         reviewCount: competitorProducts.reviewCount,
         shippingRaw: competitorProducts.shippingRaw,
         shippingExtracted: competitorProducts.shippingExtracted,
-        totalRaw: competitorProducts.totalRaw,
-        totalExtracted: competitorProducts.totalExtracted,
-        rawOldPrice: competitorProducts.rawOldPrice,
         extractedOldPrice: competitorProducts.extractedOldPrice,
         createdAt: competitorProducts.createdAt,
         rawPrice: priceHistory.price,
@@ -264,8 +367,12 @@ export class CompetitorRepository {
         capturedAt: priceHistory.capturedAt
       })
       .from(competitorProducts)
-      .leftJoin(priceHistory, eq(priceHistory.competitorProductId, competitorProducts.id))
-      .where(eq(competitorProducts.productId, productId))
+      .leftJoin(latestPrice, eq(latestPrice.competitorProductId, competitorProducts.id))
+      .leftJoin(priceHistory, and(
+        eq(priceHistory.competitorProductId, competitorProducts.id),
+        eq(priceHistory.capturedAt, latestPrice.maxCapturedAt)
+      ))
+      .where(and(eq(competitorProducts.productId, productId), ne(competitorProducts.status, "deleted")))
       .orderBy(desc(competitorProducts.createdAt));
   }
 

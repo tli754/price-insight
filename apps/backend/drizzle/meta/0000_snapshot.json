@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "53702265-7f48-47c5-8602-c03e887f6dd7",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "11ea2ab4-5380-4ad7-9c06-d240b94df334",
+  "prevId": "53702265-7f48-47c5-8602-c03e887f6dd7",
   "tables": {
     "competitor": {
       "name": "competitor",
@@ -90,14 +90,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "state": {
-          "name": "state",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'active'"
-        },
         "title": {
           "name": "title",
           "type": "text",
@@ -107,16 +99,9 @@
         },
         "external_id": {
           "name": "external_id",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false
-        },
-        "product_link_hash": {
-          "name": "product_link_hash",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true,
           "autoincrement": false
         },
         "product_link": {
@@ -131,34 +116,6 @@
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "price": {
-          "name": "price",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "extracted_price": {
-          "name": "extracted_price",
-          "type": "decimal(12,4)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "old_price": {
-          "name": "old_price",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "extracted_old_price": {
-          "name": "extracted_old_price",
-          "type": "decimal(12,4)",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "currency": {
@@ -182,13 +139,12 @@
           "notNull": false,
           "autoincrement": false
         },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "timestamp",
+        "google_position": {
+          "name": "google_position",
+          "type": "int",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
@@ -196,15 +152,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(now())"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
           "default": "(now())"
         }
       },
@@ -223,20 +170,12 @@
           ],
           "isUnique": false
         },
-        "competitor_products_product_state_idx": {
-          "name": "competitor_products_product_state_idx",
-          "columns": [
-            "product_id",
-            "state"
-          ],
-          "isUnique": false
-        },
-        "competitor_products_product_listing_unique": {
-          "name": "competitor_products_product_listing_unique",
+        "competitor_products_listing_unique": {
+          "name": "competitor_products_listing_unique",
           "columns": [
             "product_id",
             "competitor_id",
-            "product_link_hash"
+            "product_link"
           ],
           "isUnique": true
         }
@@ -299,27 +238,20 @@
         },
         "price": {
           "name": "price",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "extracted_price": {
+          "name": "extracted_price",
           "type": "decimal(12,4)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "old_price": {
-          "name": "old_price",
-          "type": "decimal(12,4)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "currency": {
-          "name": "currency",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "observed_at": {
-          "name": "observed_at",
+        "captured_at": {
+          "name": "captured_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -332,13 +264,6 @@
           "name": "price_history_competitor_product_id_idx",
           "columns": [
             "competitor_product_id"
-          ],
-          "isUnique": false
-        },
-        "price_history_observed_at_idx": {
-          "name": "price_history_observed_at_idx",
-          "columns": [
-            "observed_at"
           ],
           "isUnique": false
         }
@@ -386,92 +311,36 @@
           "notNull": true,
           "autoincrement": false
         },
-        "reference_count": {
-          "name": "reference_count",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "minimum_price": {
-          "name": "minimum_price",
+        "min_price": {
+          "name": "min_price",
           "type": "decimal(12,4)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "maximum_price": {
-          "name": "maximum_price",
+        "max_price": {
+          "name": "max_price",
           "type": "decimal(12,4)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "average_price": {
-          "name": "average_price",
-          "type": "decimal(12,4)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "median_price": {
-          "name": "median_price",
-          "type": "decimal(12,4)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "position_label": {
-          "name": "position_label",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "percentile": {
-          "name": "percentile",
-          "type": "decimal(7,4)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "difference_to_average": {
-          "name": "difference_to_average",
-          "type": "decimal(12,4)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "difference_to_average_percent": {
-          "name": "difference_to_average_percent",
-          "type": "decimal(8,4)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "recommendation": {
-          "name": "recommendation",
+        "summary": {
+          "name": "summary",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "confidence": {
-          "name": "confidence",
-          "type": "varchar(16)",
+        "market_position": {
+          "name": "market_position",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "analysis_payload": {
-          "name": "analysis_payload",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
+        "captured_at": {
+          "name": "captured_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -484,14 +353,6 @@
           "name": "price_insights_product_id_idx",
           "columns": [
             "product_id"
-          ],
-          "isUnique": false
-        },
-        "price_insights_product_created_at_idx": {
-          "name": "price_insights_product_created_at_idx",
-          "columns": [
-            "product_id",
-            "created_at"
           ],
           "isUnique": false
         }
@@ -522,6 +383,102 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
+    "product_images": {
+      "name": "product_images",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "bigint unsigned",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "alt": {
+          "name": "alt",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "width": {
+          "name": "width",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "height": {
+          "name": "height",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "src": {
+          "name": "src",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "product_images_product_external_unique": {
+          "name": "product_images_product_external_unique",
+          "columns": [
+            "product_id",
+            "external_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "product_images_product_id_products_id_fk": {
+          "name": "product_images_product_id_products_id_fk",
+          "tableFrom": "product_images",
+          "tableTo": "products",
+          "columnsFrom": [
+            "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "product_images_id": {
+          "name": "product_images_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
     "products": {
       "name": "products",
       "columns": {
@@ -534,9 +491,9 @@
         },
         "external_id": {
           "name": "external_id",
-          "type": "varchar(225)",
+          "type": "bigint unsigned",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "status": {
@@ -545,42 +502,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'pending'"
-        },
-        "source_url_hash": {
-          "name": "source_url_hash",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "source_url": {
-          "name": "source_url",
-          "type": "varchar(2048)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "product_name": {
-          "name": "product_name",
-          "type": "varchar(500)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "brand": {
-          "name": "brand",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "model_or_variant": {
-          "name": "model_or_variant",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "default": "'draft'"
         },
         "thumbnail": {
           "name": "thumbnail",
@@ -596,13 +518,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "sales_price": {
-          "name": "sales_price",
-          "type": "decimal(12,4)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "currency": {
           "name": "currency",
           "type": "varchar(16)",
@@ -610,58 +525,65 @@
           "notNull": false,
           "autoincrement": false
         },
-        "availability": {
-          "name": "availability",
-          "type": "varchar(128)",
+        "handle": {
+          "name": "handle",
+          "type": "varchar(500)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "seller_or_store": {
-          "name": "seller_or_store",
+        "title": {
+          "name": "title",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "brand": {
+          "name": "brand",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "product_category": {
-          "name": "product_category",
-          "type": "varchar(255)",
+        "inventory_quantity": {
+          "name": "inventory_quantity",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "key_specs": {
-          "name": "key_specs",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "confidence": {
-          "name": "confidence",
+        "weight_unit": {
+          "name": "weight_unit",
           "type": "varchar(16)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "raw_reader_content": {
-          "name": "raw_reader_content",
+        "weight": {
+          "name": "weight",
+          "type": "decimal(10,3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sku": {
+          "name": "sku",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tags": {
+          "name": "tags",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "extraction_payload": {
-          "name": "extraction_payload",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "last_extracted_at": {
-          "name": "last_extracted_at",
-          "type": "timestamp",
+        "description": {
+          "name": "description",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -685,12 +607,12 @@
         }
       },
       "indexes": {
-        "products_source_url_hash_unique": {
-          "name": "products_source_url_hash_unique",
+        "products_external_id_idx": {
+          "name": "products_external_id_idx",
           "columns": [
-            "source_url_hash"
+            "external_id"
           ],
-          "isUnique": true
+          "isUnique": false
         }
       },
       "foreignKeys": {},

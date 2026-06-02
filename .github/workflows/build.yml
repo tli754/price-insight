@@ -7,6 +7,15 @@ on:
         description: 'Branch or commit to build (default: master)'
         required: false
         default: 'master'
+      target:
+        description: 'Which image to build'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - backend
+          - frontend
 
 env:
   GAR_REGION: australia-southeast1
@@ -18,6 +27,7 @@ env:
 jobs:
   build-backend:
     name: Build Backend
+    if: inputs.target == 'both' || inputs.target == 'backend'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -38,7 +48,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: backend/Dockerfile
+          file: apps/backend/Dockerfile
           push: true
           tags: |
             ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
@@ -48,6 +58,7 @@ jobs:
 
   build-frontend:
     name: Build Frontend
+    if: inputs.target == 'both' || inputs.target == 'frontend'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,7 +79,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: frontend/Dockerfile
+          file: apps/frontend/Dockerfile
           push: true
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}

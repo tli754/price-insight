@@ -1,81 +1,46 @@
 import type { CompetitorProductRow, ProductRow } from "../db/schema.js";
 import { AppError } from "../lib/app-error.js";
 import { analyzePrice } from "../lib/price-analysis.js";
-import { getJson, setJson, type RedisClient } from "./cache.js";
 import { CompetitorRepository } from "./competitor-repository.js";
-import type { CompetitorResult } from "./serp-api-service.js";
-import { SerpApiService } from "./serp-api-service.js";
-
-const CACHE_TTL_SECONDS = 604800; // 7 days
-
-export type FetchCompetitorsResponse = {
-  cached: boolean;
-  query: string;
-  competitors: CompetitorResult[];
-};
+import type { CompetitorResult } from "./dataforseo-service.js";
+import { DataForSeoService } from "./dataforseo-service.js";
 
 export class CompetitorAnalysisService {
   constructor(
-    private readonly serpApi: SerpApiService,
-    private readonly redis: RedisClient,
+    private readonly dataForSeo: DataForSeoService,
     private readonly competitorRepository: CompetitorRepository,
     private readonly ownStoreName?: string
   ) {}
 
-  async fetchCompetitors(product: ProductRow): Promise<FetchCompetitorsResponse> {
-    const cacheKey = `competitors:product:${product.id}`;
-    const cached = await getJson<CompetitorResult[]>(this.redis, cacheKey);
-
-    if (cached) {
-      return { cached: true, query: "", competitors: cached };
-    }
-
-    const query = [product.brand, product.title].filter(Boolean).join(" ");
-
-    if (!query) {
-      throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
-    }
-
-    const results = await this.serpApi.searchShoppingPrices(query);
-
-    if (results.length === 0) {
-      throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
-    }
-
-    await setJson(this.redis, cacheKey, results, CACHE_TTL_SECONDS);
-
-    return { cached: false, query, competitors: results };
-  }
-
   async searchAndSuggest(product: ProductRow): Promise<CompetitorResult[]> {
-    const query = [product.brand, product.title].filter(Boolean).join(" ");
+    const query = product.title || "";
 
     if (!query) {
       throw new AppError(422, "MISSING_PRODUCT_NAME", "Product has no name or brand to search with.");
     }
 
-    const results = await this.serpApi.searchShoppingPrices(query);
+    const deletedExternalIds = await this.competitorRepository.getDeletedExternalIds(product.id);
+    console.info(`[searchAndSuggest] product=${product.id} keyword="${query}" deletedIds=${deletedExternalIds.size}`);
+    const raw = await this.dataForSeo.searchShoppingPrices(query, deletedExternalIds, this.ownStoreName);
+
+    const results = raw.filter((r) => {
+      if (r.country !== "NZ" && r.country !== "AU") return false;
+      if (product.price != null) {
+        const lo = Number(product.price) / 2;
+        const hi = Number(product.price) * 2;
+        if (r.extractedPrice < lo || r.extractedPrice > hi) return false;
+      }
+      return true;
+    });
+
+    console.info(`[searchAndSuggest] product=${product.id} raw=${raw.length} filtered=${results.length}`);
 
     if (results.length === 0) {
       throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
     }
 
-    const ownStore = this.ownStoreName?.trim().toLowerCase();
-    const filtered = ownStore
-      ? results.filter(r => normalizeSource(r.source).toLowerCase() !== ownStore)
-      : results;
-
-    await this.competitorRepository.deleteSuggestedByProduct(product.id);
-
-    const uniqueSources = [...new Set(filtered.map((r) => normalizeSource(r.source)))];
-    const competitorMap = new Map<string, number>();
-    for (const source of uniqueSources) {
-      const comp = await this.competitorRepository.findOrCreateCompetitor(source);
-      competitorMap.set(source, comp.id);
-    }
-
-    const rows = filtered.map((r) => ({
-      competitorId: competitorMap.get(normalizeSource(r.source)) ?? 0,
+    const rows = results.map((r) => ({
+      competitorId: null,
       title: r.title,
       externalId: r.externalId,
       productLink: r.link,
@@ -86,21 +51,24 @@ export class CompetitorAnalysisService {
       googlePosition: r.googlePosition ?? null,
       rawPrice: r.rawPrice,
       extractedPrice: r.extractedPrice,
-      sourceIcon: r.sourceIcon ?? null,
       country: r.country ?? null,
       rating: r.rating ?? null,
       reviewCount: r.reviewCount ?? null,
       shippingRaw: r.shippingRaw ?? null,
       shippingExtracted: r.shippingExtracted ?? null,
-      totalRaw: r.totalRaw ?? null,
-      totalExtracted: r.totalExtracted ?? null,
-      rawOldPrice: r.rawOldPrice ?? null,
       extractedOldPrice: r.extractedOldPrice ?? null
     }));
 
-    await this.competitorRepository.insertSuggestedCompetitors(product.id, rows);
+    const existingKeys = await this.competitorRepository.getExistingCompetitorKeys(product.id);
+    const newRows = rows.filter((r) => !existingKeys.has(`${r.externalId}:${r.source}`));
 
-    return filtered;
+    await this.competitorRepository.recordPricesForConfirmed(product.id, rows);
+    await this.competitorRepository.deleteSuggestedByProduct(product.id);
+    await this.competitorRepository.insertSuggestedCompetitors(product.id, newRows);
+
+    console.info(`[searchAndSuggest] product=${product.id} new_suggested=${newRows.length} skipped=${rows.length - newRows.length}`);
+
+    return results;
   }
 
   async saveCompetitors(product: ProductRow, selected: CompetitorResult[]): Promise<CompetitorProductRow[]> {
@@ -121,8 +89,15 @@ export class CompetitorAnalysisService {
       currency: r.currency,
       thumbnail: r.thumbnail,
       tag: r.tag,
+      googlePosition: r.googlePosition ?? null,
       rawPrice: r.rawPrice,
-      extractedPrice: r.extractedPrice
+      extractedPrice: r.extractedPrice,
+      country: r.country ?? null,
+      rating: r.rating ?? null,
+      reviewCount: r.reviewCount ?? null,
+      shippingRaw: r.shippingRaw ?? null,
+      shippingExtracted: r.shippingExtracted ?? null,
+      extractedOldPrice: r.extractedOldPrice ?? null
     }));
 
     const saved = await this.competitorRepository.replaceCompetitorProducts(product.id, rows);
@@ -136,8 +111,6 @@ export class CompetitorAnalysisService {
       });
       await this.competitorRepository.recordPriceInsight(product.id, analysis);
     }
-
-    await this.redis.del(`competitors:product:${product.id}`);
 
     return saved;
   }

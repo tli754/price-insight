@@ -46,7 +46,7 @@ function statusColor(status: string) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-[2000px] px-6 py-10">
     <section class="mb-8">
       <h1 class="mb-1 text-2xl font-semibold tracking-tight text-highlighted">
         Products

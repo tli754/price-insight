@@ -6,28 +6,21 @@
       "idx": 0,
       "version": "5",
       "when": 1777836119649,
-      "tag": "0000_wonderful_mimic",
+      "tag": "0000_initial_schema",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "5",
-      "when": 1779535864593,
-      "tag": "0001_natural_yellow_claw",
+      "when": 1780017553591,
+      "tag": "0001_orders",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "5",
-      "when": 1780017553591,
-      "tag": "0002_stormy_sasquatch",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
       "when": 1780045919603,
-      "tag": "0003_new_scourge",
+      "tag": "0002_competitor_refinements",
       "breakpoints": true
     }
   ]

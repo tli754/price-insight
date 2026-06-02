@@ -1,6 +1,7 @@
 locals {
   backend_secrets = [
     "backend-database-url",
+    "backend-mysql-host",
     "backend-mysql-user",
     "backend-mysql-password",
     "backend-mysql-database",
@@ -8,6 +9,14 @@ locals {
     "backend-openai-model",
     "backend-jina-api-key",
     "backend-serpapi-api-key",
+    "backend-dataforseo-login",
+    "backend-dataforseo-password",
+    "backend-shopify-token-url",
+    "backend-shopify-products-url",
+    "backend-shopify-orders-url",
+    "backend-shopify-client-id",
+    "backend-shopify-client-secret",
+    "backend-own-store-name",
   ]
 
   frontend_secrets = [

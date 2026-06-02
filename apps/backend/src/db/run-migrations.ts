@@ -48,7 +48,12 @@ export async function runMigrations(migrationsFolder = "./drizzle") {
     await migrate(db, { migrationsFolder });
   } catch (err: unknown) {
     const code = (err as { code?: string; cause?: { code?: string } })?.code ?? (err as { cause?: { code?: string } })?.cause?.code;
-    if (code === "ER_TABLE_EXISTS_ERROR") {
+    if (code === "ER_TABLE_EXISTS_ERROR" || code === "ER_DUP_FIELDNAME") {
+      console.warn(
+        "WARNING: Schema drift detected — DB schema is ahead of __drizzle_migrations. " +
+        "This usually means db:push was run directly. " +
+        "Bootstrapping migration tracking and skipping already-applied migrations."
+      );
       await bootstrapMigrationTracking(pool, migrationsFolder);
       await migrate(db, { migrationsFolder });
     } else {

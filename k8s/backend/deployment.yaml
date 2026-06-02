@@ -30,7 +30,7 @@ spec:
             - name: PORT
               value: "4000"
             - name: APP_URL
-              value: "https://qweyha520.bar"
+              value: "https://www.qweyha520.bar"
           readinessProbe:
             httpGet:
               path: /api/health

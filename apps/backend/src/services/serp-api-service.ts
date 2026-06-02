@@ -5,11 +5,9 @@ export type CompetitorResult = {
   externalId: string | null;
   rawPrice: string | null;
   extractedPrice: number;
-  rawOldPrice: string | null;
   extractedOldPrice: number | null;
   currency: string | null;
   source: string;
-  sourceIcon?: string | null;
   link: string;
   country?: string | null;
   thumbnail: string | null;
@@ -19,8 +17,6 @@ export type CompetitorResult = {
   reviewCount?: number | null;
   shippingRaw?: string | null;
   shippingExtracted?: number | null;
-  totalRaw?: string | null;
-  totalExtracted?: number | null;
 };
 
 type SerpApiLocale = {
@@ -28,6 +24,7 @@ type SerpApiLocale = {
   gl: string;
   hl: string;
   google_domain: string;
+  num?: number;
 };
 
 const NZ_LOCALE: SerpApiLocale = {
@@ -97,33 +94,45 @@ export class SerpApiService {
   ) {}
 
   async searchShoppingPrices(query: string): Promise<CompetitorResult[]> {
-    const url = new URL("https://serpapi.com/search.json");
-    url.searchParams.set("engine", "google_shopping");
-    url.searchParams.set("q", query);
-    url.searchParams.set("api_key", this.apiKey);
-    url.searchParams.set("location", this.locale.location);
-    url.searchParams.set("gl", this.locale.gl);
-    url.searchParams.set("hl", this.locale.hl);
-    url.searchParams.set("google_domain", this.locale.google_domain);
+    const num = this.locale.num ?? 40;
+    const allResults: CompetitorResult[] = [];
 
-    const response = await fetch(url.toString());
+    // Paginate until we have no more results or hit the num limit.
+    // SerpAPI returns at most 100 per page; we step by num.
+    for (let start = 0; ; start += num) {
+      const url = new URL("https://serpapi.com/search.json");
+      url.searchParams.set("engine", "google_shopping");
+      url.searchParams.set("q", query);
+      url.searchParams.set("api_key", this.apiKey);
+      url.searchParams.set("location", this.locale.location);
+      url.searchParams.set("gl", this.locale.gl);
+      url.searchParams.set("hl", this.locale.hl);
+      url.searchParams.set("google_domain", this.locale.google_domain);
+      url.searchParams.set("num", String(num));
+      if (start > 0) url.searchParams.set("start", String(start));
 
-    if (!response.ok) {
-      throw new AppError(
-        502,
-        "SERPAPI_FAILED",
-        `SerpAPI request failed with ${response.status} ${response.statusText}`
-      );
+      const response = await fetch(url.toString());
+
+      if (!response.ok) {
+        throw new AppError(
+          502,
+          "SERPAPI_FAILED",
+          `SerpAPI request failed with ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = (await response.json()) as SerpApiResponse;
+      const page = data.shopping_results ?? [];
+      if (page.length === 0) break;
+
+      const expanded = await Promise.all(page.map((r) => this.expandToStores(r)));
+      allResults.push(...expanded.flat());
+
+      // Stop if this page was shorter than requested — no more pages.
+      if (page.length < num) break;
     }
 
-    const data = (await response.json()) as SerpApiResponse;
-
-    const candidates = (data.shopping_results ?? []).filter(
-      (r) => typeof r.extracted_price === "number" && r.extracted_price > 0
-    );
-
-    const results = await Promise.all(candidates.map((r) => this.expandToStores(r)));
-    return results.flat();
+    return allResults;
   }
 
   private async expandToStores(r: SerpApiShoppingResult): Promise<CompetitorResult[]> {
@@ -131,18 +140,22 @@ export class SerpApiService {
       ? await this.fetchStores(r.immersive_product_page_token)
       : null;
 
-    if (!stores || stores.length === 0) {
+    const pricedStores = stores?.filter(
+      (s) => typeof s.extracted_price === "number" && s.extracted_price > 0
+    ) ?? null;
+
+    // No token, immersive failed, empty stores, or all stores had no price — fall back to shopping result
+    if (!pricedStores || pricedStores.length === 0) {
+      if (typeof r.extracted_price !== "number" || r.extracted_price <= 0) return [];
       return [
         {
           title: r.title ?? "",
           externalId: r.product_id ?? null,
           rawPrice: r.price ?? null,
-          extractedPrice: r.extracted_price as number,
-          rawOldPrice: r.old_price ?? null,
+          extractedPrice: r.extracted_price,
           extractedOldPrice: r.extracted_old_price ?? null,
           currency: null,
           source: r.source ?? "",
-          sourceIcon: null,
           link: r.product_link ?? "",
           country: deriveCountry(r.product_link ?? ""),
           thumbnail: r.thumbnail ?? null,
@@ -151,25 +164,19 @@ export class SerpApiService {
           rating: null,
           reviewCount: null,
           shippingRaw: null,
-          shippingExtracted: null,
-          totalRaw: null,
-          totalExtracted: null
+          shippingExtracted: null
         }
       ];
     }
 
-    return stores
-      .filter((s) => typeof s.extracted_price === "number" && (s.extracted_price ?? 0) > 0)
-      .map((s) => ({
+    return pricedStores.map((s) => ({
         title: s.title ?? r.title ?? "",
         externalId: r.product_id ?? null,
         rawPrice: s.price ?? null,
         extractedPrice: s.extracted_price as number,
-        rawOldPrice: s.original_price ?? null,
         extractedOldPrice: s.extracted_original_price ?? null,
         currency: null,
         source: s.name ?? "",
-        sourceIcon: s.logo ?? null,
         link: s.link ?? "",
         country: deriveCountry(s.link ?? ""),
         thumbnail: r.thumbnail ?? null,
@@ -178,9 +185,7 @@ export class SerpApiService {
         rating: s.rating ?? null,
         reviewCount: s.reviews ?? null,
         shippingRaw: s.shipping ?? null,
-        shippingExtracted: s.shipping_extracted ?? null,
-        totalRaw: s.total ?? null,
-        totalExtracted: s.extracted_total ?? null
+        shippingExtracted: s.shipping_extracted ?? null
       }));
   }
 
