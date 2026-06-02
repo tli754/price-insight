@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: false })
+
 const { loggedIn, fetch } = useUserSession()
 const route = useRoute()
 const config = useRuntimeConfig()
@@ -13,7 +15,7 @@ const errorMessage = ref(
 await fetch()
 
 if (loggedIn.value) {
-  await navigateTo("/")
+  await navigateTo("/products")
 }
 
 async function loginWithGoogle() {
@@ -33,7 +35,7 @@ async function loginWithPassword() {
       method: "POST",
       body: { password: password.value }
     })
-    await navigateTo("/")
+    await navigateTo("/products")
   } catch {
     errorMessage.value = "Invalid password"
   } finally {
@@ -43,7 +45,7 @@ async function loginWithPassword() {
 </script>
 
 <template>
-  <div class="mx-auto flex min-h-[calc(100vh-73px)] max-w-6xl items-center px-6 py-12">
+  <div class="mx-auto flex min-h-screen max-w-[2000px] items-center px-6 py-12">
     <div class="grid w-full overflow-hidden rounded-3xl border border-default/70 bg-white/85 shadow-xl lg:grid-cols-[1.15fr_0.85fr]">
       <section class="p-8 sm:p-10">
         <UBadge color="primary" variant="soft">

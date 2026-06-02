@@ -1,11 +1,16 @@
 <script setup lang="ts">
 const { loggedIn, user, clear, ready } = useUserSession()
+
+async function signOut() {
+  await clear()
+  await navigateTo('/login')
+}
 </script>
 
 <template>
-  <div class="min-h-screen">
+  <div class="mx-auto min-h-screen max-w-[2000px]">
     <header class="border-b border-default/60 bg-white/70 backdrop-blur">
-      <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <div class="mx-auto flex max-w-[2000px] items-center justify-between px-6 py-4">
         <div>
           <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary-600">
             Price Insight
@@ -26,7 +31,7 @@ const { loggedIn, user, clear, ready } = useUserSession()
                   {{ user?.email }}
                 </p>
               </div>
-              <UButton color="neutral" variant="soft" @click="clear()">
+              <UButton color="neutral" variant="soft" @click="signOut()">
                 Sign out
               </UButton>
             </div>

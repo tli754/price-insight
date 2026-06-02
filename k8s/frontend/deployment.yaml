@@ -26,15 +26,23 @@ spec:
             - name: NODE_ENV
               value: production
             - name: NUXT_OAUTH_GOOGLE_REDIRECT_URL
-              value: "https://qweyha520.bar/auth/google"
+              value: "https://www.qweyha520.bar/auth/google"
           readinessProbe:
             httpGet:
-              path: /
+              path: /api/health
               port: 3000
-            initialDelaySeconds: 20
+            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 45
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
           resources:
             requests:
               cpu: 50m

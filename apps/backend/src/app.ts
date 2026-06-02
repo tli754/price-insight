@@ -8,12 +8,11 @@ import analysisRoutes from "./routes/analysis.js";
 import healthRoutes from "./routes/health.js";
 import ordersRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
-import { createRedis } from "./services/cache.js";
 import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
 import { CompetitorRepository } from "./services/competitor-repository.js";
+import { DataForSeoService } from "./services/dataforseo-service.js";
 import { OrderRepository } from "./services/order-repository.js";
 import { ProductRepository } from "./services/product-repository.js";
-import { SerpApiService } from "./services/serp-api-service.js";
 import { ShopifyService } from "./services/shopify-service.js";
 
 export async function buildApp(env: AppEnv) {
@@ -23,17 +22,16 @@ export async function buildApp(env: AppEnv) {
 
   await app.register(cors, {
     origin: env.APP_URL,
-    credentials: true
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
   });
 
   const { db, pool } = createDatabase(env);
-  const redis = createRedis(env);
-  await redis.connect();
 
   const productRepository = new ProductRepository(db);
   const competitorRepository = new CompetitorRepository(db);
-  const serpApi = new SerpApiService(env.SERPAPI_API_KEY);
-  const competitorAnalysisService = new CompetitorAnalysisService(serpApi, redis, competitorRepository);
+  const dataForSeo = new DataForSeoService(env.DATAFORSEO_LOGIN, env.DATAFORSEO_PASSWORD);
+  const competitorAnalysisService = new CompetitorAnalysisService(dataForSeo, competitorRepository, env.OWN_STORE_NAME);
   const shopifyService = env.SHOPIFY_TOKEN_URL && env.SHOPIFY_PRODUCTS_URL && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET
     ? new ShopifyService(env.SHOPIFY_TOKEN_URL, env.SHOPIFY_PRODUCTS_URL, env.SHOPIFY_CLIENT_ID, env.SHOPIFY_CLIENT_SECRET, env.SHOPIFY_ORDERS_URL)
     : null;
@@ -77,7 +75,6 @@ export async function buildApp(env: AppEnv) {
   });
 
   app.addHook("onClose", async () => {
-    await redis.quit();
     await pool.end();
   });
 

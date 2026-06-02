@@ -13,8 +13,14 @@ function makeCustomer(overrides: Partial<ShopifyCustomer> = {}): ShopifyCustomer
     first_name: "Jane",
     last_name: "Doe",
     phone: "+64211234567",
+    state: "enabled",
+    currency: "NZD",
+    verified_email: true,
+    tags: null,
     default_address: {
       id: 999000111,
+      name: "Jane Doe",
+      company: null,
       address1: "1 Queen St",
       address2: null,
       city: "Auckland",
@@ -35,6 +41,7 @@ function makeLineItem(overrides: Partial<ShopifyLineItem> = {}): ShopifyLineItem
     variant_title: "Large",
     sku: "BW-L-001",
     quantity: 2,
+    current_quantity: 2,
     price: "49.99",
     total_discount: "0.00",
     ...overrides
@@ -54,6 +61,11 @@ function makeShopifyOrder(overrides: Partial<ShopifyOrder> = {}): ShopifyOrder {
     total_tax: "15.00",
     total_shipping_price_set: { shop_money: { amount: "10.00" } },
     total_discounts: "0.00",
+    source_name: "web",
+    referring_site: null,
+    landing_site: null,
+    processed_at: "2024-01-15T10:00:00Z",
+    total_weight: null,
     cancelled_at: null,
     created_at: "2024-01-15T10:00:00Z",
     updated_at: "2024-01-15T10:30:00Z",
@@ -150,7 +162,7 @@ describe("OrderRepository.importOrders() — address mapping", () => {
     const repo = new OrderRepository(db as any);
 
     const order = makeShopifyOrder({
-      customer: makeCustomer({ default_address: { id: null, address1: "1 Queen St", address2: null, city: "Auckland", province: "Auckland", country: "NZ", zip: "1010" } })
+      customer: makeCustomer({ default_address: { id: null, name: null, company: null, address1: "1 Queen St", address2: null, city: "Auckland", province: "Auckland", country: "NZ", zip: "1010" } })
     });
 
     await repo.importOrders([order]);

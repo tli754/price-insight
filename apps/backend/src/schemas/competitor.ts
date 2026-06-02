@@ -7,7 +7,6 @@ export const saveCompetitorsSchema = z.object({
       externalId: z.string().nullable(),
       rawPrice: z.string().nullable(),
       extractedPrice: z.number().positive(),
-      rawOldPrice: z.string().nullable(),
       extractedOldPrice: z.number().positive().nullable(),
       currency: z.string().nullable().default(null),
       source: z.string(),

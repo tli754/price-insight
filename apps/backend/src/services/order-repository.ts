@@ -1,4 +1,4 @@
-import { eq, inArray, max } from "drizzle-orm";
+import { and, count as sqlCount, desc, eq, inArray, like, max, or } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -13,6 +13,8 @@ import {
 
 export type ShopifyAddress = {
   id: number | null;
+  name: string | null;
+  company: string | null;
   address1: string | null;
   address2: string | null;
   city: string | null;
@@ -27,6 +29,10 @@ export type ShopifyCustomer = {
   first_name: string;
   last_name: string;
   phone: string | null;
+  state: string | null;
+  currency: string | null;
+  verified_email: boolean | null;
+  tags: string | null;
   default_address: ShopifyAddress | null;
 };
 
@@ -38,6 +44,7 @@ export type ShopifyLineItem = {
   variant_title: string | null;
   sku: string | null;
   quantity: number;
+  current_quantity: number | null;
   price: string;
   total_discount: string;
 };
@@ -54,6 +61,11 @@ export type ShopifyOrder = {
   total_tax: string | null;
   total_shipping_price_set: { shop_money: { amount: string } } | null;
   total_discounts: string | null;
+  source_name: string | null;
+  referring_site: string | null;
+  landing_site: string | null;
+  processed_at: string | null;
+  total_weight: number | null;
   cancelled_at: string | null;
   created_at: string;
   updated_at: string;
@@ -88,7 +100,11 @@ export class OrderRepository {
       email: data.email,
       firstName: data.first_name,
       lastName: data.last_name,
-      phone: data.phone ?? null
+      phone: data.phone ?? null,
+      state: data.state ?? null,
+      currency: data.currency ?? null,
+      verifiedEmail: data.verified_email ?? null,
+      tags: data.tags ?? null
     };
 
     if (existing) {
@@ -112,6 +128,8 @@ export class OrderRepository {
     const payload = {
       customerId,
       shopifyAddressId: address.id,
+      addressName: address.name ?? null,
+      company: address.company ?? null,
       address1: address.address1 ?? null,
       address2: address.address2 ?? null,
       city: address.city ?? null,
@@ -143,6 +161,11 @@ export class OrderRepository {
       totalTax: data.total_tax ? parseFloat(data.total_tax) : null,
       totalShipping: shipping ? parseFloat(shipping) : null,
       totalDiscounts: data.total_discounts ? parseFloat(data.total_discounts) : null,
+      sourceName: data.source_name ?? null,
+      referringSite: data.referring_site ?? null,
+      landingSite: data.landing_site ?? null,
+      processedAt: data.processed_at ? new Date(data.processed_at) : null,
+      totalWeight: data.total_weight ?? null,
       cancelledAt: data.cancelled_at ? new Date(data.cancelled_at) : null,
       shopifyCreatedAt: data.created_at ? new Date(data.created_at) : null,
       shopifyUpdatedAt: data.updated_at ? new Date(data.updated_at) : null
@@ -181,6 +204,7 @@ export class OrderRepository {
         variantTitle: item.variant_title ?? null,
         sku: item.sku ?? null,
         quantity: item.quantity,
+        currentQuantity: item.current_quantity ?? null,
         unitPrice: item.price ? parseFloat(item.price) : null,
         totalDiscount: item.total_discount ? parseFloat(item.total_discount) : null
       };
@@ -238,4 +262,137 @@ export class OrderRepository {
 
     return count;
   }
+
+  async listOrders(opts: {
+    page: number;
+    limit: number;
+    search?: string;
+    financialStatus?: string;
+    fulfillmentStatus?: string;
+  }): Promise<{ items: OrderListRow[]; total: number }> {
+    const { page, limit, search, financialStatus, fulfillmentStatus } = opts;
+    const offset = (page - 1) * limit;
+
+    const conditions = [];
+    if (search) {
+      conditions.push(
+        or(
+          like(orders.orderNumber, `%${search}%`),
+          like(orders.email, `%${search}%`)
+        )
+      );
+    }
+    if (financialStatus) conditions.push(eq(orders.financialStatus, financialStatus));
+    if (fulfillmentStatus) conditions.push(eq(orders.fulfillmentStatus, fulfillmentStatus));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [rows, [{ total }]] = await Promise.all([
+      this.db
+        .select({
+          id: orders.id,
+          shopifyOrderId: orders.shopifyOrderId,
+          orderNumber: orders.orderNumber,
+          email: orders.email,
+          customerFirstName: customers.firstName,
+          customerLastName: customers.lastName,
+          financialStatus: orders.financialStatus,
+          fulfillmentStatus: orders.fulfillmentStatus,
+          currency: orders.currency,
+          totalPrice: orders.totalPrice,
+          totalShipping: orders.totalShipping,
+          itemCount: sqlCount(orderItems.id),
+          shopifyCreatedAt: orders.shopifyCreatedAt
+        })
+        .from(orders)
+        .leftJoin(customers, eq(orders.customerId, customers.id))
+        .leftJoin(orderItems, eq(orders.id, orderItems.orderId))
+        .where(where)
+        .groupBy(orders.id)
+        .orderBy(desc(orders.shopifyCreatedAt))
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ total: sqlCount(orders.id) })
+        .from(orders)
+        .where(where)
+    ]);
+
+    return { items: rows as OrderListRow[], total: Number(total) };
+  }
+
+  async getOrderById(id: number): Promise<OrderDetailRow | null> {
+    const [order] = await this.db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, id))
+      .limit(1);
+
+    if (!order) return null;
+
+    const [customer, address, items] = await Promise.all([
+      order.customerId
+        ? this.db
+            .select()
+            .from(customers)
+            .where(eq(customers.id, order.customerId))
+            .limit(1)
+            .then((r) => r[0] ?? null)
+        : Promise.resolve(null),
+      order.customerId
+        ? this.db
+            .select()
+            .from(customerAddresses)
+            .where(eq(customerAddresses.customerId, order.customerId))
+            .limit(1)
+            .then((r) => r[0] ?? null)
+        : Promise.resolve(null),
+      this.db
+        .select({
+          id: orderItems.id,
+          orderId: orderItems.orderId,
+          productId: orderItems.productId,
+          shopifyLineItemId: orderItems.shopifyLineItemId,
+          shopifyProductId: orderItems.shopifyProductId,
+          shopifyVariantId: orderItems.shopifyVariantId,
+          title: orderItems.title,
+          variantTitle: orderItems.variantTitle,
+          sku: orderItems.sku,
+          quantity: orderItems.quantity,
+          currentQuantity: orderItems.currentQuantity,
+          unitPrice: orderItems.unitPrice,
+          totalDiscount: orderItems.totalDiscount,
+          createdAt: orderItems.createdAt,
+          productTitle: products.title
+        })
+        .from(orderItems)
+        .leftJoin(products, eq(orderItems.productId, products.id))
+        .where(eq(orderItems.orderId, id))
+    ]);
+
+    return { order, customer, address, items };
+  }
 }
+
+export type OrderListRow = {
+  id: number;
+  shopifyOrderId: number;
+  orderNumber: string;
+  email: string | null;
+  customerFirstName: string | null;
+  customerLastName: string | null;
+  financialStatus: string | null;
+  fulfillmentStatus: string | null;
+  currency: string | null;
+  totalPrice: number | null;
+  totalShipping: number | null;
+  itemCount: number;
+  shopifyCreatedAt: Date | null;
+};
+
+export type OrderDetailRow = {
+  order: typeof import("../db/schema.js").orders.$inferSelect;
+  customer: typeof import("../db/schema.js").customers.$inferSelect | null;
+  address: typeof import("../db/schema.js").customerAddresses.$inferSelect | null;
+  items: (typeof import("../db/schema.js").orderItems.$inferSelect & { productTitle: string | null })[];
+};

@@ -6,7 +6,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate
+    type: RollingUpdate
   selector:
     matchLabels:
       app: backend
@@ -30,13 +30,23 @@ spec:
             - name: PORT
               value: "4000"
             - name: APP_URL
-              value: "https://qweyha520.bar"
+              value: "https://www.qweyha520.bar"
           readinessProbe:
             httpGet:
               path: /api/health
               port: 4000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               cpu: 50m

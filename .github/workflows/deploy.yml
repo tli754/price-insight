@@ -7,6 +7,15 @@ on:
         description: 'Image tag to deploy (commit SHA or "latest")'
         required: false
         default: 'latest'
+      target:
+        description: 'Which service to deploy'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - backend
+          - frontend
 
 env:
   GKE_PROJECT: wd-tools
@@ -57,6 +66,14 @@ jobs:
           OPENAI_MODEL=$(gcloud secrets versions access latest --secret="backend-openai-model" --project="$PROJECT")
           JINA_API_KEY=$(gcloud secrets versions access latest --secret="backend-jina-api-key" --project="$PROJECT")
           SERPAPI_API_KEY=$(gcloud secrets versions access latest --secret="backend-serpapi-api-key" --project="$PROJECT")
+          DATAFORSEO_LOGIN=$(gcloud secrets versions access latest --secret="backend-dataforseo-login" --project="$PROJECT")
+          DATAFORSEO_PASSWORD=$(gcloud secrets versions access latest --secret="backend-dataforseo-password" --project="$PROJECT")
+          SHOPIFY_TOKEN_URL=$(gcloud secrets versions access latest --secret="backend-shopify-token-url" --project="$PROJECT" 2>/dev/null || echo "")
+          SHOPIFY_PRODUCTS_URL=$(gcloud secrets versions access latest --secret="backend-shopify-products-url" --project="$PROJECT" 2>/dev/null || echo "")
+          SHOPIFY_ORDERS_URL=$(gcloud secrets versions access latest --secret="backend-shopify-orders-url" --project="$PROJECT" 2>/dev/null || echo "")
+          SHOPIFY_CLIENT_ID=$(gcloud secrets versions access latest --secret="backend-shopify-client-id" --project="$PROJECT" 2>/dev/null || echo "")
+          SHOPIFY_CLIENT_SECRET=$(gcloud secrets versions access latest --secret="backend-shopify-client-secret" --project="$PROJECT" 2>/dev/null || echo "")
+          OWN_STORE_NAME=$(gcloud secrets versions access latest --secret="backend-own-store-name" --project="$PROJECT" 2>/dev/null || echo "")
 
           kubectl create secret generic backend-secrets \
             --namespace=price-insight \
@@ -72,6 +89,14 @@ jobs:
             --from-literal=OPENAI_MODEL="$OPENAI_MODEL" \
             --from-literal=JINA_API_KEY="$JINA_API_KEY" \
             --from-literal=SERPAPI_API_KEY="$SERPAPI_API_KEY" \
+            --from-literal=DATAFORSEO_LOGIN="$DATAFORSEO_LOGIN" \
+            --from-literal=DATAFORSEO_PASSWORD="$DATAFORSEO_PASSWORD" \
+            --from-literal=SHOPIFY_TOKEN_URL="$SHOPIFY_TOKEN_URL" \
+            --from-literal=SHOPIFY_PRODUCTS_URL="$SHOPIFY_PRODUCTS_URL" \
+            --from-literal=SHOPIFY_ORDERS_URL="$SHOPIFY_ORDERS_URL" \
+            --from-literal=SHOPIFY_CLIENT_ID="$SHOPIFY_CLIENT_ID" \
+            --from-literal=SHOPIFY_CLIENT_SECRET="$SHOPIFY_CLIENT_SECRET" \
+            --from-literal=OWN_STORE_NAME="$OWN_STORE_NAME" \
             --dry-run=client -o yaml | kubectl apply -f -
 
           NUXT_SESSION_PASSWORD=$(gcloud secrets versions access latest --secret="frontend-nuxt-session-password" --project="$PROJECT")
@@ -92,6 +117,7 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Run database migrations
+        if: inputs.target == 'both' || inputs.target == 'backend'
         run: |
           kubectl delete job db-migrate --ignore-not-found -n price-insight
 
@@ -106,6 +132,7 @@ jobs:
           fi
 
       - name: Roll out backend
+        if: inputs.target == 'both' || inputs.target == 'backend'
         run: |
           kubectl set image deployment/backend \
             backend=${{ env.BACKEND_IMAGE }}:${{ inputs.image_tag }} \
@@ -113,6 +140,7 @@ jobs:
           kubectl rollout status deployment/backend -n price-insight --timeout=120s
 
       - name: Roll out frontend
+        if: inputs.target == 'both' || inputs.target == 'frontend'
         run: |
           kubectl set image deployment/frontend \
             frontend=${{ env.FRONTEND_IMAGE }}:${{ inputs.image_tag }} \

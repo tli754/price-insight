@@ -1,6 +1,19 @@
 # CLAUDE.md
 
+@.claude/skills/implementation/SKILL.md
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+### Git
+
+ALWAYS ask the user for confirmation before running `git push` or any command that pushes to a remote.
+
+### Database migrations
+
+NEVER run `db:push` against any shared environment (staging, production).
+`db:push` applies schema without recording in `__drizzle_migrations`, permanently
+desynchronising schema state from migration history. Only use `db:push` locally.
+All schema changes to shared environments MUST go through `db:generate` → commit migration → deploy.
 
 ### Diagrams
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { CompetitorDetailResponse, CompetitorProductTableRow } from '~/shared/types/competitor'
 
-const { public: { apiUrl } } = useRuntimeConfig()
+definePageMeta({ middleware: ['auth'] })
+
 const route = useRoute()
 
 const { data, pending } = await useFetch<CompetitorDetailResponse>(
-  `${apiUrl}/api/competitors/${route.params.id}/products`,
+  `/api/competitors/${route.params.id}/products`,
   { lazy: true }
 )
 
@@ -77,7 +78,7 @@ const formatDateTime = (iso: string | null): string => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-7xl px-6 py-6">
+  <div class="mx-auto max-w-[2000px] px-6 py-6">
     <div class="mb-4 flex items-center gap-3">
       <UButton variant="ghost" color="neutral" icon="i-lucide-arrow-left" @click="navigateTo('/competitors')" />
       <h1 class="text-lg font-semibold text-gray-900">{{ competitorName }}</h1>

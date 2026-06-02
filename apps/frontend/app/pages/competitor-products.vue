@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ middleware: ['auth'] })
+
 const rows = [
   {
     id: 1,
@@ -8,7 +10,8 @@ const rows = [
     price: '$28.99',
     oldPrice: null,
     source: 'amazon.com',
-    googlePosition: 1
+    googlePosition: 1,
+    status: 'confirmed'
   },
   {
     id: 2,
@@ -18,7 +21,8 @@ const rows = [
     price: '$19.95',
     oldPrice: '$24.99',
     source: 'trademe.co.nz',
-    googlePosition: 3
+    googlePosition: 3,
+    status: 'suggested'
   },
   {
     id: 3,
@@ -28,7 +32,8 @@ const rows = [
     price: '$25.00',
     oldPrice: null,
     source: 'thewarehouse.co.nz',
-    googlePosition: 2
+    googlePosition: 2,
+    status: 'confirmed'
   },
   {
     id: 4,
@@ -38,7 +43,8 @@ const rows = [
     price: '$32.00',
     oldPrice: '$39.99',
     source: 'amazon.com',
-    googlePosition: 5
+    googlePosition: 5,
+    status: 'suggested'
   },
   {
     id: 5,
@@ -48,7 +54,8 @@ const rows = [
     price: '$27.50',
     oldPrice: null,
     source: 'mitre10.co.nz',
-    googlePosition: 8
+    googlePosition: 8,
+    status: 'suggested'
   }
 ]
 
@@ -60,12 +67,13 @@ const columns = [
   { accessorKey: 'oldPrice', header: 'Old Price' },
   { accessorKey: 'source', header: 'Source' },
   { accessorKey: 'googlePosition', header: 'Google Position' },
+  { accessorKey: 'status', header: 'Status' },
   { id: 'actions', header: '' }
 ]
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl px-6 py-6">
+  <div class="mx-auto max-w-[2000px] px-6 py-6">
     <div class="mb-4 flex items-center justify-between">
       <h1 class="text-lg font-semibold text-gray-900">Competitor Products</h1>
     </div>
@@ -94,6 +102,15 @@ const columns = [
         </template>
         <template #googlePosition-cell="{ row }">
           <UBadge color="neutral" variant="soft" size="sm">#{{ row.original.googlePosition }}</UBadge>
+        </template>
+        <template #status-cell="{ row }">
+          <UBadge
+            :color="row.original.status === 'confirmed' ? 'success' : 'warning'"
+            variant="soft"
+            size="sm"
+          >
+            {{ row.original.status }}
+          </UBadge>
         </template>
         <template #actions-cell>
           <UButton size="sm" variant="ghost" color="neutral" label="View" />
