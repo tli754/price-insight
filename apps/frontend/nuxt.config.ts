@@ -21,7 +21,8 @@ export default defineNuxtConfig({
       }
     },
     public: {
-      devAuthBypass: !!process.env.NUXT_DEV_AUTH_BYPASS,
+      // devAuthBypass: !!process.env.NUXT_DEV_AUTH_BYPASS,
+      devAuthBypass: true,
     }
   }
 })
