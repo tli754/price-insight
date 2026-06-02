@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { CompetitorListItem } from '~/shared/types/competitor'
 
-const { public: { apiUrl } } = useRuntimeConfig()
+definePageMeta({ middleware: ['auth'] })
 
 const { data, pending } = await useFetch<{ items: CompetitorListItem[] }>(
-  `${apiUrl}/api/competitors`,
+  '/api/competitors',
   { lazy: true }
 )
 

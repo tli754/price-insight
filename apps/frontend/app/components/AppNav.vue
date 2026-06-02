@@ -3,6 +3,7 @@ const items = [
   { label: 'Products', to: '/products' },
   { label: 'Competitors', to: '/competitors' },
   { label: 'Competitor Products', to: '/competitor-products' },
+  { label: 'Orders', to: '/orders' },
   { label: 'Insight', to: '/insight' }
 ]
 </script>

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { CompetitorDetailResponse, CompetitorProductTableRow } from '~/shared/types/competitor'
 
-const { public: { apiUrl } } = useRuntimeConfig()
+definePageMeta({ middleware: ['auth'] })
+
 const route = useRoute()
 
 const { data, pending } = await useFetch<CompetitorDetailResponse>(
-  `${apiUrl}/api/competitors/${route.params.id}/products`,
+  `/api/competitors/${route.params.id}/products`,
   { lazy: true }
 )
 

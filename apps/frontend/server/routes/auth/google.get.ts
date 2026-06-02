@@ -14,7 +14,7 @@ export default defineOAuthGoogleEventHandler({
       loggedInAt: new Date().toISOString()
     })
 
-    return sendRedirect(event, "/")
+    return sendRedirect(event, "/products")
   },
   onError(event, error) {
     console.error("Google OAuth error:", error)
