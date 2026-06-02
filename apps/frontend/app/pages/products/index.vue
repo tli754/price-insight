@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { ProductRow } from '~/shared/types/product'
 
+definePageMeta({ middleware: ['auth'] })
+
 const { public: { apiUrl } } = useRuntimeConfig()
 const toast = useToast()
 
@@ -10,7 +12,14 @@ const { data, pending, refresh } = await useFetch<{ items: ProductRow[] }>(
 )
 const products = computed(() => data.value?.items ?? [])
 
-const search = ref('')
+const route = useRoute()
+const router = useRouter()
+
+const search = ref(typeof route.query.search === 'string' ? route.query.search : '')
+
+watch(search, (val) => {
+  router.replace({ query: { ...route.query, search: val || undefined } })
+})
 const syncing = ref(false)
 
 async function syncProducts() {

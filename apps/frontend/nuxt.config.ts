@@ -1,6 +1,9 @@
 export default defineNuxtConfig({
   compatibilityDate: "2026-05-02",
   devtools: { enabled: true },
+  routeRules: {
+    "/": { redirect: "/products" }
+  },
   modules: ["@nuxt/ui", "nuxt-auth-utils", "@nuxt/eslint"],
   eslint: {
     config: {

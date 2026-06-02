@@ -13,7 +13,7 @@ const errorMessage = ref(
 await fetch()
 
 if (loggedIn.value) {
-  await navigateTo("/")
+  await navigateTo("/products")
 }
 
 async function loginWithGoogle() {
@@ -33,7 +33,7 @@ async function loginWithPassword() {
       method: "POST",
       body: { password: password.value }
     })
-    await navigateTo("/")
+    await navigateTo("/products")
   } catch {
     errorMessage.value = "Invalid password"
   } finally {
