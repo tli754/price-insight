@@ -3,11 +3,10 @@ import type { ProductRow } from '~/shared/types/product'
 
 definePageMeta({ middleware: ['auth'] })
 
-const { public: { apiUrl } } = useRuntimeConfig()
 const toast = useToast()
 
 const { data, pending, refresh } = await useFetch<{ items: ProductRow[] }>(
-  `${apiUrl}/api/products`,
+  '/api/products',
   { lazy: true }
 )
 const products = computed(() => data.value?.items ?? [])
@@ -25,7 +24,7 @@ const syncing = ref(false)
 async function syncProducts() {
   syncing.value = true
   try {
-    const result = await $fetch<{ synced: number }>(`${apiUrl}/api/products/sync`, { method: 'POST' })
+    const result = await $fetch<{ synced: number }>('/api/products/sync', { method: 'POST' })
     toast.add({ title: `${result.synced} products synced`, color: 'success' })
     await refresh()
   } catch (e: unknown) {

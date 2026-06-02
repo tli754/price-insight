@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { OrderDetailResponse } from '~/shared/types/order'
 
+definePageMeta({ middleware: ['auth'] })
+
 const route = useRoute()
-const { public: { apiUrl } } = useRuntimeConfig()
 
 const { data, pending } = await useFetch<OrderDetailResponse>(
-  `${apiUrl}/api/orders/${route.params.id}`,
+  `/api/orders/${route.params.id}`,
   { lazy: true }
 )
 

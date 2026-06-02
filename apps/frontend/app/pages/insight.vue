@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ middleware: ['auth'] })
+
 const stats = [
   { label: 'Total Products', value: '5', icon: 'i-lucide-package' },
   { label: 'Active Competitors', value: '3', icon: 'i-lucide-store' },

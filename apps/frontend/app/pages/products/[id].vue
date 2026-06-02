@@ -2,18 +2,18 @@
 import type { CompetitorItem, CompetitorsByProductResponse } from '~/shared/types/competitor'
 import type { ProductRow } from '~/shared/types/product'
 
+definePageMeta({ middleware: ['auth'] })
+
 const route = useRoute()
-const config = useRuntimeConfig()
-const apiUrl = config.public.apiUrl
 
 const { data, pending } = await useFetch<{ item: ProductRow }>(
-  `${apiUrl}/api/products/${route.params.id}`,
+  `/api/products/${route.params.id}`,
   { lazy: true }
 )
 
 const { data: competitorsData, pending: competitorsPending, refresh: refreshCompetitors } =
   await useFetch<CompetitorsByProductResponse>(
-    `${apiUrl}/api/products/${route.params.id}/competitors`,
+    `/api/products/${route.params.id}/competitors`,
     { lazy: true }
   )
 
@@ -51,7 +51,7 @@ async function searchCompetitors() {
   searching.value = true
   searchError.value = null
   try {
-    await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors/search`, { method: 'POST' })
+    await $fetch(`/api/products/${route.params.id}/competitors/search`, { method: 'POST' })
     await refreshCompetitors()
   } catch (e: unknown) {
     searchError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Search failed'
@@ -66,7 +66,7 @@ const actioningId = ref<number | null>(null)
 async function confirmCompetitor(id: number) {
   actioningId.value = id
   try {
-    await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors/${id}`, {
+    await $fetch(`/api/products/${route.params.id}/competitors/${id}`, {
       method: 'PATCH',
       body: { status: 'confirmed' }
     })
@@ -80,7 +80,7 @@ async function confirmCompetitor(id: number) {
 async function deleteCompetitor(id: number) {
   actioningId.value = id
   try {
-    await $fetch(`${apiUrl}/api/products/${route.params.id}/competitors/${id}`, { method: 'DELETE' })
+    await $fetch(`/api/products/${route.params.id}/competitors/${id}`, { method: 'DELETE' })
     displayCompetitors.value = displayCompetitors.value.filter(c => c.id !== id)
   } finally {
     actioningId.value = null

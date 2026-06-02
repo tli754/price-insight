@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { OrderListResponse } from '~/shared/types/order'
 
-const { public: { apiUrl } } = useRuntimeConfig()
+definePageMeta({ middleware: ['auth'] })
+
 const toast = useToast()
 
 const page = ref(1)
@@ -24,7 +25,7 @@ const url = computed(() => {
   if (debouncedSearch.value) params.set('search', debouncedSearch.value)
   if (financialStatus.value) params.set('financialStatus', financialStatus.value)
   if (fulfillmentStatus.value) params.set('fulfillmentStatus', fulfillmentStatus.value)
-  return `${apiUrl}/api/orders?${params}`
+  return `/api/orders?${params}`
 })
 
 const { data, pending, error } = await useFetch<OrderListResponse>(url, { lazy: true, watch: [url] })
