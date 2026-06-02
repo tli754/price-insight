@@ -93,7 +93,9 @@ export function makeShopifyService() {
 export function makeOrderRepository() {
   return {
     getLastSyncedAt: vi.fn().mockResolvedValue(null),
-    importOrders: vi.fn().mockResolvedValue(0)
+    importOrders: vi.fn().mockResolvedValue(0),
+    listOrders: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    getOrderById: vi.fn().mockResolvedValue(null)
   };
 }
 

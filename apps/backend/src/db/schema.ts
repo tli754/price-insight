@@ -1,5 +1,6 @@
 import {
   bigint,
+  boolean,
   decimal,
   index,
   int,
@@ -183,6 +184,10 @@ export const customers = mysqlTable(
     firstName: varchar("first_name", { length: 255 }).notNull(),
     lastName: varchar("last_name", { length: 255 }).notNull(),
     phone: varchar("phone", { length: 64 }),
+    state: varchar("state", { length: 32 }),
+    currency: varchar("currency", { length: 16 }),
+    verifiedEmail: boolean("verified_email"),
+    tags: text("customer_tags"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
   },
@@ -202,6 +207,8 @@ export const customerAddresses = mysqlTable(
       .notNull()
       .references(() => customers.id, { onDelete: "cascade", onUpdate: "cascade" }),
     shopifyAddressId: bigint("shopify_address_id", shopifyId),
+    addressName: varchar("address_name", { length: 255 }),
+    company: varchar("company", { length: 255 }),
     address1: varchar("address1", { length: 255 }),
     address2: varchar("address2", { length: 255 }),
     city: varchar("city", { length: 128 }),
@@ -235,6 +242,11 @@ export const orders = mysqlTable(
     totalTax: decimal("total_tax", moneyColumn),
     totalShipping: decimal("total_shipping", moneyColumn),
     totalDiscounts: decimal("total_discounts", moneyColumn),
+    sourceName: varchar("source_name", { length: 255 }),
+    referringSite: text("referring_site"),
+    landingSite: text("landing_site"),
+    processedAt: timestamp("processed_at"),
+    totalWeight: decimal("total_weight", { precision: 10, scale: 3, mode: "number" }),
     cancelledAt: timestamp("cancelled_at"),
     shopifyCreatedAt: timestamp("shopify_created_at"),
     shopifyUpdatedAt: timestamp("shopify_updated_at"),
@@ -266,6 +278,7 @@ export const orderItems = mysqlTable(
     variantTitle: varchar("variant_title", { length: 255 }),
     sku: varchar("sku", { length: 255 }),
     quantity: int("quantity").notNull(),
+    currentQuantity: int("current_quantity"),
     unitPrice: decimal("unit_price", moneyColumn),
     totalDiscount: decimal("total_discount", moneyColumn),
     createdAt: timestamp("created_at").notNull().defaultNow()

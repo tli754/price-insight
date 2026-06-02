@@ -1,5 +1,10 @@
 <script setup lang="ts">
 const { loggedIn, user, clear, ready } = useUserSession()
+
+async function signOut() {
+  await clear()
+  await navigateTo('/login')
+}
 </script>
 
 <template>
@@ -26,7 +31,7 @@ const { loggedIn, user, clear, ready } = useUserSession()
                   {{ user?.email }}
                 </p>
               </div>
-              <UButton color="neutral" variant="soft" @click="clear()">
+              <UButton color="neutral" variant="soft" @click="signOut()">
                 Sign out
               </UButton>
             </div>
