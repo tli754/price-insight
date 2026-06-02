@@ -99,15 +99,11 @@ jobs:
             --from-literal=OWN_STORE_NAME="$OWN_STORE_NAME" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          NUXT_SESSION_PASSWORD=$(gcloud secrets versions access latest --secret="frontend-nuxt-session-password" --project="$PROJECT")
-          NUXT_DEV_AUTH_PASSWORD=$(gcloud secrets versions access latest --secret="frontend-nuxt-dev-auth-password" --project="$PROJECT")
           NUXT_API_URL=$(gcloud secrets versions access latest --secret="frontend-nuxt-api-url" --project="$PROJECT")
 
           kubectl create secret generic frontend-secrets \
             --namespace=price-insight \
-            --from-literal=NUXT_SESSION_PASSWORD="$NUXT_SESSION_PASSWORD" \
             --from-literal=NUXT_API_URL="$NUXT_API_URL" \
-            --from-literal=NUXT_DEV_AUTH_PASSWORD="$NUXT_DEV_AUTH_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Run database migrations

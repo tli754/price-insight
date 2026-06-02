@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { OrderListResponse } from '~/shared/types/order'
 
-definePageMeta({ middleware: ['auth'] })
 
 const toast = useToast()
 
