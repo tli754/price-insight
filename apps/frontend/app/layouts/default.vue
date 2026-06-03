@@ -1,9 +1,7 @@
 <script setup lang="ts">
-const { loggedIn, user, clear, ready } = useUserSession()
-
-async function signOut() {
-  await clear()
-  await navigateTo('/login')
+async function logout() {
+  await $fetch("/auth/logout", { method: "POST" })
+  await navigateTo("/login")
 }
 </script>
 
@@ -20,31 +18,9 @@ async function signOut() {
           </p>
         </div>
 
-        <AuthState>
-          <template #default>
-            <div v-if="loggedIn" class="flex items-center gap-3">
-              <div class="text-right">
-                <p class="text-sm font-medium text-highlighted">
-                  {{ user?.name || user?.email }}
-                </p>
-                <p class="text-xs text-toned">
-                  {{ user?.email }}
-                </p>
-              </div>
-              <UButton color="neutral" variant="soft" @click="signOut()">
-                Sign out
-              </UButton>
-            </div>
-            <div v-else-if="ready">
-              <UButton to="/login" color="primary" variant="solid">
-                Sign in
-              </UButton>
-            </div>
-          </template>
-          <template #placeholder>
-            <USkeleton class="h-9 w-28" />
-          </template>
-        </AuthState>
+        <UButton color="neutral" variant="solid" @click="logout">
+          Sign out
+        </UButton>
       </div>
     </header>
 

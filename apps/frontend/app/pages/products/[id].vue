@@ -2,7 +2,6 @@
 import type { CompetitorItem, CompetitorsByProductResponse } from '~/shared/types/competitor'
 import type { ProductRow } from '~/shared/types/product'
 
-definePageMeta({ middleware: ['auth'] })
 
 const route = useRoute()
 

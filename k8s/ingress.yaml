@@ -9,6 +9,20 @@ spec:
     - host: www.qweyha520.bar
       http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 4001
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 4001
           - path: /
             pathType: Prefix
             backend:

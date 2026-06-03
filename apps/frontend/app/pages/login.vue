@@ -1,26 +1,15 @@
 <script setup lang="ts">
 definePageMeta({ layout: false })
 
-const { loggedIn, fetch } = useUserSession()
-const route = useRoute()
-
 const pending = ref(false)
 const password = ref("")
-const errorMessage = ref(
-  typeof route.query.error === "string" ? route.query.error : ""
-)
+const errorMessage = ref("")
 
-await fetch()
-
-if (loggedIn.value) {
-  await navigateTo("/products")
-}
-
-async function loginWithPassword() {
+async function login() {
   pending.value = true
   errorMessage.value = ""
   try {
-    await $fetch("/auth/dev-login", {
+    await $fetch("/auth/login", {
       method: "POST",
       body: { password: password.value }
     })
@@ -38,14 +27,13 @@ async function loginWithPassword() {
     <div class="grid w-full overflow-hidden rounded-3xl border border-default/70 bg-white/85 shadow-xl lg:grid-cols-[1.15fr_0.85fr]">
       <section class="p-8 sm:p-10">
         <UBadge color="primary" variant="soft">
-          Secure Sign In
+          Sign In
         </UBadge>
         <h1 class="mt-6 max-w-md text-4xl font-semibold tracking-tight text-highlighted">
-          Sign in to review extracted products.
+          Sign in to Price Insight.
         </h1>
         <p class="mt-4 max-w-xl text-base leading-7 text-toned">
-          Use your Google account to access the Price Insight frontend. Session state is handled by
-          secure cookies through Nuxt Auth Utils.
+          Enter your password to access the extractor workspace.
         </p>
 
         <UAlert
@@ -61,15 +49,15 @@ async function loginWithPassword() {
           <UInput
             v-model="password"
             type="password"
-            placeholder="Dev password"
+            placeholder="Password"
             size="xl"
-            @keyup.enter="loginWithPassword"
+            @keyup.enter="login"
           />
           <UButton
             size="xl"
             color="primary"
             :loading="pending"
-            @click="loginWithPassword"
+            @click="login"
           >
             Sign in
           </UButton>
@@ -78,12 +66,11 @@ async function loginWithPassword() {
 
       <aside class="border-t border-default/60 bg-slate-950 p-8 text-white lg:border-l lg:border-t-0 sm:p-10">
         <p class="text-xs font-semibold uppercase tracking-[0.24em] text-white/60">
-          Access model
+          Price Insight
         </p>
         <div class="mt-6 space-y-5 text-sm leading-6 text-white/80">
-          <p>Google OAuth authenticates the user before they enter the extractor workspace.</p>
-          <p>The protected home page is only available to users with an active session.</p>
-          <p>Manual product approval and delete actions can be added after the auth flow is in place.</p>
+          <p>Review and manage extracted product pricing data.</p>
+          <p>Compare competitors, track price insights, and sync your Shopify catalogue.</p>
         </div>
       </aside>
     </div>

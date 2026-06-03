@@ -244,47 +244,6 @@ describe("POST /api/products/:id/competitors", () => {
   });
 });
 
-// ── CORS preflight for mutating verbs ─────────────────────────────────────────
-
-describe("CORS preflight", () => {
-  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
-
-  afterEach(async () => {
-    await app?.close();
-  });
-
-  it("allows DELETE in Access-Control-Allow-Methods", async () => {
-    ({ app } = await buildTestApp());
-
-    const response = await app.inject({
-      method: "OPTIONS",
-      url: "/api/products/1/competitors/1",
-      headers: {
-        Origin: "http://localhost:3000",
-        "Access-Control-Request-Method": "DELETE"
-      }
-    });
-
-    expect(response.statusCode).toBe(204);
-    expect(response.headers["access-control-allow-methods"]).toMatch(/DELETE/);
-  });
-
-  it("allows PATCH in Access-Control-Allow-Methods", async () => {
-    ({ app } = await buildTestApp());
-
-    const response = await app.inject({
-      method: "OPTIONS",
-      url: "/api/products/1/competitors/1",
-      headers: {
-        Origin: "http://localhost:3000",
-        "Access-Control-Request-Method": "PATCH"
-      }
-    });
-
-    expect(response.statusCode).toBe(204);
-    expect(response.headers["access-control-allow-methods"]).toMatch(/PATCH/);
-  });
-});
 
 // ── GET /api/products/:id/competitors ─────────────────────────────────────────
 

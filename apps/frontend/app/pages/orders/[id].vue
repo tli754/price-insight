@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { OrderDetailResponse } from '~/shared/types/order'
 
-definePageMeta({ middleware: ['auth'] })
 
 const route = useRoute()
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { ProductRow } from '~/shared/types/product'
 
-definePageMeta({ middleware: ['auth'] })
 
 const toast = useToast()
 

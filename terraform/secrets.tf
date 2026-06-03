@@ -21,11 +21,13 @@ locals {
 
   frontend_secrets = [
     "frontend-nuxt-session-password",
-    "frontend-nuxt-oauth-google-client-id",
-    "frontend-nuxt-oauth-google-client-secret",
-    "frontend-nuxt-dev-auth-bypass",
     "frontend-nuxt-dev-auth-password",
-    "frontend-nuxt-public-api-url",
+    "frontend-nuxt-api-url",
+  ]
+
+  gateway_secrets = [
+    "gateway-session-secret",
+    "gateway-dev-auth-password",
   ]
 }
 
@@ -73,6 +75,30 @@ resource "google_secret_manager_secret" "frontend" {
 
 resource "google_secret_manager_secret_version" "frontend" {
   for_each    = google_secret_manager_secret.frontend
+  secret      = each.value.id
+  secret_data = "placeholder"
+
+  lifecycle {
+    ignore_changes = [secret_data, enabled]
+  }
+}
+
+resource "google_secret_manager_secret" "gateway" {
+  for_each  = toset(local.gateway_secrets)
+  project   = var.project_id
+  secret_id = each.value
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "gateway" {
+  for_each    = google_secret_manager_secret.gateway
   secret      = each.value.id
   secret_data = "placeholder"
 

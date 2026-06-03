@@ -10,12 +10,13 @@ on:
       target:
         description: 'Which service to deploy'
         required: false
-        default: 'both'
+        default: 'all'
         type: choice
         options:
-          - both
+          - all
           - backend
           - frontend
+          - gateway
 
 env:
   GKE_PROJECT: wd-tools
@@ -23,6 +24,7 @@ env:
   GKE_ZONE: australia-southeast1-a
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
+  GATEWAY_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-gateway
 
 jobs:
   deploy:
@@ -110,8 +112,17 @@ jobs:
             --from-literal=NUXT_DEV_AUTH_PASSWORD="$NUXT_DEV_AUTH_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+          GATEWAY_SESSION_SECRET=$(gcloud secrets versions access latest --secret="gateway-session-secret" --project="$PROJECT")
+          GATEWAY_DEV_AUTH_PASSWORD=$(gcloud secrets versions access latest --secret="gateway-dev-auth-password" --project="$PROJECT")
+
+          kubectl create secret generic gateway-secrets \
+            --namespace=price-insight \
+            --from-literal=SESSION_SECRET="$GATEWAY_SESSION_SECRET" \
+            --from-literal=DEV_AUTH_PASSWORD="$GATEWAY_DEV_AUTH_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Run database migrations
-        if: inputs.target == 'both' || inputs.target == 'backend'
+        if: inputs.target == 'all' || inputs.target == 'backend'
         run: |
           kubectl delete job db-migrate --ignore-not-found -n price-insight
 
@@ -126,7 +137,7 @@ jobs:
           fi
 
       - name: Roll out backend
-        if: inputs.target == 'both' || inputs.target == 'backend'
+        if: inputs.target == 'all' || inputs.target == 'backend'
         run: |
           kubectl set image deployment/backend \
             backend=${{ env.BACKEND_IMAGE }}:${{ inputs.image_tag }} \
@@ -134,9 +145,17 @@ jobs:
           kubectl rollout status deployment/backend -n price-insight --timeout=120s
 
       - name: Roll out frontend
-        if: inputs.target == 'both' || inputs.target == 'frontend'
+        if: inputs.target == 'all' || inputs.target == 'frontend'
         run: |
           kubectl set image deployment/frontend \
             frontend=${{ env.FRONTEND_IMAGE }}:${{ inputs.image_tag }} \
             -n price-insight
           kubectl rollout status deployment/frontend -n price-insight --timeout=120s
+
+      - name: Roll out gateway
+        if: inputs.target == 'all' || inputs.target == 'gateway'
+        run: |
+          kubectl set image deployment/gateway \
+            gateway=${{ env.GATEWAY_IMAGE }}:${{ inputs.image_tag }} \
+            -n price-insight
+          kubectl rollout status deployment/gateway -n price-insight --timeout=120s
