@@ -33,6 +33,11 @@ async function logout() {
             Sign out
           </UButton>
         </div>
+        <div v-else>
+          <UButton to="/login" color="primary" variant="solid">
+            Sign in
+          </UButton>
+        </div>
       </div>
     </header>
 
