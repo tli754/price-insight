@@ -54,7 +54,9 @@ jobs:
             --project wd-tools
 
       - name: Apply base manifests
-        run: kubectl apply -f k8s/ --recursive
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/ --recursive
 
       - name: Sync secrets
         run: |
