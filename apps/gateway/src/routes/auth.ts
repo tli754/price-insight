@@ -1,11 +1,18 @@
+import { createHash } from "crypto";
 import type { FastifyInstance } from "fastify";
 import type { AppEnv } from "../config/env.js";
 
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 export default async function authRoutes(app: FastifyInstance, opts: { env: AppEnv }) {
+  const expectedHash = sha256(opts.env.DEV_AUTH_PASSWORD);
+
   app.post("/auth/login", async (request, reply) => {
     const { password } = request.body as { password: string };
 
-    if (!password || password !== opts.env.DEV_AUTH_PASSWORD) {
+    if (!password || password !== expectedHash) {
       return reply.status(401).send({ error: "Invalid password" });
     }
 
