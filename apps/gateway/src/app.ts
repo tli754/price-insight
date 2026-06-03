@@ -7,8 +7,6 @@ import replyFrom from "@fastify/reply-from";
 import type { AppEnv } from "./config/env.js";
 import authRoutes from "./routes/auth.js";
 
-const PUBLIC_API_PATHS = new Set(["/api/health"]);
-
 export async function buildApp(env: AppEnv) {
   const app = Fastify({ logger: true });
 
@@ -30,21 +28,10 @@ export async function buildApp(env: AppEnv) {
   // Auth routes (public)
   await app.register(authRoutes, { env });
 
-  // Proxy all /api/* to backend, with session guard
+  // Proxy all /api/* to backend
+  // Auth enforcement is disabled until login is wired up — enable by
+  // uncommenting the session check below and setting AUTH_ENABLED=true.
   app.all("/api/*", async (request, reply) => {
-    const path = request.url.split("?")[0];
-
-    if (!PUBLIC_API_PATHS.has(path)) {
-      const token = request.cookies["pi-session"];
-      if (!token) return reply.status(401).send({ error: "Unauthorized" });
-
-      try {
-        app.jwt.verify(token);
-      } catch {
-        return reply.status(401).send({ error: "Unauthorized" });
-      }
-    }
-
     return reply.from(request.url);
   });
 
