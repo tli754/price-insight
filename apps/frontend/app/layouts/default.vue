@@ -1,9 +1,7 @@
 <script setup lang="ts">
-const { data: session, refresh } = await useFetch<{ loggedIn: boolean; user?: { name: string; email: string } }>('/auth/session')
-
 async function logout() {
-  await $fetch('/auth/logout', { method: 'POST' })
-  await refresh()
+  await $fetch("/auth/logout", { method: "POST" })
+  await navigateTo("/login")
 }
 </script>
 
@@ -20,24 +18,9 @@ async function logout() {
           </p>
         </div>
 
-        <div v-if="session?.loggedIn" class="flex items-center gap-3">
-          <div class="text-right">
-            <p class="text-sm font-medium text-highlighted">
-              {{ session.user?.name }}
-            </p>
-            <p class="text-xs text-toned">
-              {{ session.user?.email }}
-            </p>
-          </div>
-          <UButton color="neutral" variant="soft" @click="logout">
-            Sign out
-          </UButton>
-        </div>
-        <div v-else>
-          <UButton to="/login" color="primary" variant="solid">
-            Sign in
-          </UButton>
-        </div>
+        <UButton color="neutral" variant="solid" @click="logout">
+          Sign out
+        </UButton>
       </div>
     </header>
 
