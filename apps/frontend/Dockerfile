@@ -12,7 +12,7 @@ RUN pnpm install --filter @price-insight/frontend --frozen-lockfile
 
 # Copy source and build
 COPY apps/frontend/ ./apps/frontend/
-RUN pnpm turbo build --filter @price-insight/frontend
+RUN NUXT_GATEWAY_URL=http://gateway.price-insight.svc.cluster.local:4001 pnpm turbo build --filter @price-insight/frontend
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache tini

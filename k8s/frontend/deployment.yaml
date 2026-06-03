@@ -27,7 +27,7 @@ spec:
               value: production
           readinessProbe:
             httpGet:
-              path: /api/health
+              path: /login
               port: 3000
             initialDelaySeconds: 15
             periodSeconds: 10
@@ -35,7 +35,7 @@ spec:
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /api/health
+              path: /login
               port: 3000
             initialDelaySeconds: 45
             periodSeconds: 30
