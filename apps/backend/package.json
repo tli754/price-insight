@@ -14,7 +14,6 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@fastify/cors": "^11.1.0",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.44.2",
     "fastify": "^5.4.0",

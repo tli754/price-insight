@@ -14,9 +14,6 @@ importers:
 
   apps/backend:
     dependencies:
-      '@fastify/cors':
-        specifier: ^11.1.0
-        version: 11.2.0
       dotenv:
         specifier: ^16.5.0
         version: 16.6.1

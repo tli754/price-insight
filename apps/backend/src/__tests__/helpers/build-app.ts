@@ -6,7 +6,6 @@
  */
 
 import Fastify from "fastify";
-import cors from "@fastify/cors";
 import { vi } from "vitest";
 
 import { AppError } from "../../lib/app-error.js";
@@ -19,7 +18,6 @@ import productRoutes from "../../routes/products.js";
 export const fakeEnv = {
   NODE_ENV: "test" as const,
   PORT: 4000,
-  APP_URL: "http://localhost:3000",
   MYSQL_HOST: "localhost",
   MYSQL_PORT: 3306,
   MYSQL_USER: "test",
@@ -117,8 +115,6 @@ export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
   };
 
   const app = Fastify({ logger: false });
-
-  await app.register(cors, { origin: fakeEnv.APP_URL, credentials: true, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] });
 
   app.decorate("env", fakeEnv);
   app.decorate("productRepository", mocks.productRepository as any);

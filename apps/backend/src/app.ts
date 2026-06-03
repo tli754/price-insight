@@ -1,5 +1,4 @@
 import Fastify from "fastify";
-import cors from "@fastify/cors";
 
 import type { AppEnv } from "./config/env.js";
 import { createDatabase } from "./db/index.js";
@@ -18,12 +17,6 @@ import { ShopifyService } from "./services/shopify-service.js";
 export async function buildApp(env: AppEnv) {
   const app = Fastify({
     logger: true
-  });
-
-  await app.register(cors, {
-    origin: env.APP_URL,
-    credentials: true,
-    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
   });
 
   const { db, pool } = createDatabase(env);
