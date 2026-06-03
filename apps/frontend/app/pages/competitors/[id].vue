@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { CompetitorDetailResponse, CompetitorProductTableRow } from '~/shared/types/competitor'
 
-definePageMeta({ middleware: ['auth'] })
 
 const route = useRoute()
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { CompetitorListItem } from '~/shared/types/competitor'
 
-definePageMeta({ middleware: ['auth'] })
 
 const { data, pending } = await useFetch<{ items: CompetitorListItem[] }>(
   '/api/competitors',
