@@ -39,6 +39,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_ENV
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -53,7 +55,7 @@ jobs:
           file: apps/backend/Dockerfile
           push: true
           tags: |
-            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:${{ env.SHORT_SHA }}
             ${{ env.BACKEND_IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.BACKEND_IMAGE }}:latest
           cache-to: type=inline
@@ -70,6 +72,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_ENV
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -84,7 +88,7 @@ jobs:
           file: apps/frontend/Dockerfile
           push: true
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:${{ env.SHORT_SHA }}
             ${{ env.FRONTEND_IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:latest
           cache-to: type=inline
@@ -101,6 +105,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_ENV
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -115,7 +121,7 @@ jobs:
           file: apps/gateway/Dockerfile
           push: true
           tags: |
-            ${{ env.GATEWAY_IMAGE }}:${{ github.sha }}
+            ${{ env.GATEWAY_IMAGE }}:${{ env.SHORT_SHA }}
             ${{ env.GATEWAY_IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.GATEWAY_IMAGE }}:latest
           cache-to: type=inline
