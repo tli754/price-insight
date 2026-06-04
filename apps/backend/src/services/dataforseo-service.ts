@@ -185,6 +185,46 @@ export class DataForSeoService {
     return null;
   }
 
+  async postShoppingTasks(products: Array<{ id: number; title: string }>, pingbackUrl: string): Promise<number> {
+    const data = await this.post<DfsTaskPostResponse>(
+      "/v3/merchant/google/products/task_post",
+      products.map((p) => ({
+        language_code: LANGUAGE_CODE,
+        location_code: LOCATION_CODE,
+        keyword: p.title,
+        price_min: 5,
+        tag: String(p.id),
+        pingback_url: pingbackUrl
+      }))
+    );
+    return data.tasks.filter((t) => t.id).length;
+  }
+
+  async fetchShoppingTaskResult(taskId: string): Promise<DfsShoppingGetResponse> {
+    return this.get<DfsShoppingGetResponse>(
+      `/v3/merchant/google/products/task_get/advanced/${taskId}`
+    );
+  }
+
+  async fetchProductInfoTaskResult(taskId: string): Promise<DfsProductInfoGetResponse> {
+    return this.get<DfsProductInfoGetResponse>(
+      `/v3/merchant/google/product_info/task_get/advanced/${taskId}`
+    );
+  }
+
+  async postProductInfoTasks(productIds: string[], tag: number, pingbackUrl: string): Promise<void> {
+    await this.post<DfsTaskPostResponse>(
+      "/v3/merchant/google/product_info/task_post",
+      productIds.map((product_id) => ({
+        language_code: LANGUAGE_CODE,
+        location_code: LOCATION_CODE,
+        product_id,
+        tag: String(tag),
+        pingback_url: pingbackUrl
+      }))
+    );
+  }
+
   async createShoppingTask(keyword: string): Promise<string> {
     const data = await this.post<DfsTaskPostResponse>(
       "/v3/merchant/google/products/task_post",

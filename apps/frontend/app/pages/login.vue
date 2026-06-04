@@ -29,7 +29,7 @@ async function login() {
 </script>
 
 <template>
-  <div class="mx-auto flex min-h-screen max-w-[2000px] items-center px-6 py-12">
+  <div class="mx-auto flex min-h-screen max-w-[1500px] items-center px-6 py-12">
     <div class="grid w-full overflow-hidden rounded-3xl border border-default/70 bg-white/85 shadow-xl lg:grid-cols-[1.15fr_0.85fr]">
       <section class="p-8 sm:p-10">
         <UBadge color="primary" variant="soft">

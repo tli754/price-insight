@@ -72,6 +72,7 @@ jobs:
           SERPAPI_API_KEY=$(gcloud secrets versions access latest --secret="backend-serpapi-api-key" --project="$PROJECT")
           DATAFORSEO_LOGIN=$(gcloud secrets versions access latest --secret="backend-dataforseo-login" --project="$PROJECT")
           DATAFORSEO_PASSWORD=$(gcloud secrets versions access latest --secret="backend-dataforseo-password" --project="$PROJECT")
+          DATAFORSEO_WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret="backend-dataforseo-webhook-secret" --project="$PROJECT")
           SHOPIFY_TOKEN_URL=$(gcloud secrets versions access latest --secret="backend-shopify-token-url" --project="$PROJECT" 2>/dev/null || echo "")
           SHOPIFY_PRODUCTS_URL=$(gcloud secrets versions access latest --secret="backend-shopify-products-url" --project="$PROJECT" 2>/dev/null || echo "")
           SHOPIFY_ORDERS_URL=$(gcloud secrets versions access latest --secret="backend-shopify-orders-url" --project="$PROJECT" 2>/dev/null || echo "")
@@ -95,6 +96,7 @@ jobs:
             --from-literal=SERPAPI_API_KEY="$SERPAPI_API_KEY" \
             --from-literal=DATAFORSEO_LOGIN="$DATAFORSEO_LOGIN" \
             --from-literal=DATAFORSEO_PASSWORD="$DATAFORSEO_PASSWORD" \
+            --from-literal=DATAFORSEO_WEBHOOK_SECRET="$DATAFORSEO_WEBHOOK_SECRET" \
             --from-literal=SHOPIFY_TOKEN_URL="$SHOPIFY_TOKEN_URL" \
             --from-literal=SHOPIFY_PRODUCTS_URL="$SHOPIFY_PRODUCTS_URL" \
             --from-literal=SHOPIFY_ORDERS_URL="$SHOPIFY_ORDERS_URL" \

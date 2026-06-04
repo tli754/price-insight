@@ -39,6 +39,33 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
     return { synced };
   });
 
+  fastify.post("/products/find-competitors", async (request, reply) => {
+    const body = request.body as { productIds?: unknown };
+    const raw = Array.isArray(body?.productIds) ? body.productIds : [];
+    const productIds = raw.filter((id): id is number => Number.isInteger(id) && id > 0);
+
+    if (productIds.length === 0) {
+      throw new AppError(400, "INVALID_PRODUCT_IDS", "productIds must be a non-empty array of positive integers.");
+    }
+
+    const rows = await fastify.productRepository.getProductsByIds(productIds);
+    const withTitle = rows.filter((p): p is typeof p & { title: string } => !!p.title);
+
+    if (withTitle.length === 0) {
+      reply.code(202);
+      return { submitted: 0 };
+    }
+
+    const pingbackUrl =
+      `${fastify.env.WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping` +
+      `?secret=${fastify.env.DATAFORSEO_WEBHOOK_SECRET}&id=$id&tag=$tag`;
+
+    const submitted = await fastify.dataForSeoService.postShoppingTasks(withTitle, pingbackUrl);
+
+    reply.code(202);
+    return { submitted };
+  });
+
   fastify.delete("/products/:id", async (request, reply) => {
     const id = parseProductId((request.params as { id: string }).id);
     const product = await fastify.productRepository.getProductById(id);

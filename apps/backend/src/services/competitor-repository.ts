@@ -316,6 +316,61 @@ export class CompetitorRepository {
     });
   }
 
+  async upsertSuggestedCompetitor(productId: number, item: CompetitorProductInput): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [existing] = item.externalId
+        ? await tx
+            .select({ id: competitorProducts.id })
+            .from(competitorProducts)
+            .where(
+              and(
+                eq(competitorProducts.productId, productId),
+                eq(competitorProducts.externalId, item.externalId),
+                eq(competitorProducts.source, item.source),
+                eq(competitorProducts.status, "suggested")
+              )
+            )
+            .limit(1)
+        : [];
+
+      let competitorProductId: number;
+
+      if (existing) {
+        competitorProductId = existing.id;
+      } else {
+        const result = await tx
+          .insert(competitorProducts)
+          .values({
+            productId,
+            competitorId: null,
+            title: item.title,
+            externalId: item.externalId,
+            productLink: item.productLink,
+            source: item.source,
+            currency: item.currency,
+            thumbnail: item.thumbnail,
+            tag: item.tag,
+            googlePosition: item.googlePosition ?? null,
+            status: "suggested",
+            country: item.country ?? null,
+            rating: item.rating ?? null,
+            reviewCount: item.reviewCount ?? null,
+            shippingRaw: item.shippingRaw ?? null,
+            shippingExtracted: item.shippingExtracted ?? null,
+            extractedOldPrice: item.extractedOldPrice ?? null
+          })
+          .$returningId();
+        competitorProductId = Number(result[0]?.id);
+      }
+
+      await tx.insert(priceHistory).values({
+        competitorProductId,
+        price: item.rawPrice,
+        extractedPrice: item.extractedPrice
+      });
+    });
+  }
+
   async confirmCompetitorProduct(id: number): Promise<void> {
     const [row] = await this.db
       .select()

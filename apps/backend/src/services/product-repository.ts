@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import { productImages, products, type ProductImageRow, type ProductRow } from "../db/schema.js";
@@ -100,6 +100,11 @@ export class ProductRepository {
 
   async listProducts(): Promise<ProductRow[]> {
     return this.db.select().from(products).orderBy(desc(products.updatedAt));
+  }
+
+  async getProductsByIds(ids: number[]): Promise<ProductRow[]> {
+    if (ids.length === 0) return [];
+    return this.db.select().from(products).where(inArray(products.id, ids));
   }
 
   async deleteProduct(id: number): Promise<void> {
