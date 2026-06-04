@@ -40,7 +40,8 @@ export const fakeEnv = {
   SERPAPI_NUM_RESULTS: 40,
   DATAFORSEO_LOGIN: "fake",
   DATAFORSEO_PASSWORD: "fake",
-  DATAFORSEO_WEBHOOK_SECRET: "fake-webhook-secret"
+  DATAFORSEO_WEBHOOK_SECRET: "fake-webhook-secret",
+  WEBHOOK_HOST: "https://www.qweyha520.bar"
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -49,6 +50,7 @@ export function makeProductRepository() {
   return {
     listProducts: vi.fn().mockResolvedValue([]),
     getProductById: vi.fn().mockResolvedValue(null),
+    getProductsByIds: vi.fn().mockResolvedValue([]),
     importProducts: vi.fn().mockResolvedValue(0),
     deleteProduct: vi.fn().mockResolvedValue(undefined)
   };
@@ -77,6 +79,7 @@ export function makeCompetitorRepository() {
 
 export function makeDataForSeoService() {
   return {
+    postShoppingTasks: vi.fn().mockResolvedValue(0),
     fetchShoppingTaskResult: vi.fn().mockResolvedValue({ tasks: [] }),
     fetchProductInfoTaskResult: vi.fn().mockResolvedValue({ tasks: [] }),
     postProductInfoTasks: vi.fn().mockResolvedValue(undefined),

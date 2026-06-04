@@ -287,7 +287,7 @@ describe("GET /webhook/dataforseo/pingback/product_info", () => {
 
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(2);
     const sources = mocks.competitorRepository.upsertSuggestedCompetitor.mock.calls.map(
-      ([, row]: [number, { source: string }]) => row.source
+      (call: unknown[]) => (call[1] as { source: string }).source
     );
     expect(sources).toContain("NZ Shop");
     expect(sources).toContain("AU Shop");

@@ -185,6 +185,21 @@ export class DataForSeoService {
     return null;
   }
 
+  async postShoppingTasks(products: Array<{ id: number; title: string }>, pingbackUrl: string): Promise<number> {
+    const data = await this.post<DfsTaskPostResponse>(
+      "/v3/merchant/google/products/task_post",
+      products.map((p) => ({
+        language_code: LANGUAGE_CODE,
+        location_code: LOCATION_CODE,
+        keyword: p.title,
+        price_min: 5,
+        tag: String(p.id),
+        pingback_url: pingbackUrl
+      }))
+    );
+    return data.tasks.filter((t) => t.id).length;
+  }
+
   async fetchShoppingTaskResult(taskId: string): Promise<DfsShoppingGetResponse> {
     return this.get<DfsShoppingGetResponse>(
       `/v3/merchant/google/products/task_get/advanced/${taskId}`
