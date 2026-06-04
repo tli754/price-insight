@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { ProductRow } from '~/shared/types/product'
 
-
 const toast = useToast()
 
 const { data, pending, refresh } = await useFetch<{ items: ProductRow[] }>(
@@ -18,7 +17,29 @@ const search = ref(typeof route.query.search === 'string' ? route.query.search :
 watch(search, (val) => {
   router.replace({ query: { ...route.query, search: val || undefined } })
 })
+
 const syncing = ref(false)
+const findingCompetitors = ref(false)
+
+async function findCompetitors() {
+  findingCompetitors.value = true
+  try {
+    const result = await $fetch<{ submitted: number }>('/api/products/find-competitors', {
+      method: 'POST',
+      body: { productIds: paginated.value.map(p => p.id) }
+    })
+    toast.add({
+      title: `${result.submitted} competitor search${result.submitted !== 1 ? 'es' : ''} submitted`,
+      description: 'Results will appear shortly via background sync.',
+      color: 'success'
+    })
+  } catch (e: unknown) {
+    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Failed to submit competitor search'
+    toast.add({ title: msg, color: 'error' })
+  } finally {
+    findingCompetitors.value = false
+  }
+}
 
 async function syncProducts() {
   syncing.value = true
@@ -33,7 +54,6 @@ async function syncProducts() {
     syncing.value = false
   }
 }
-
 
 const statusColor = (status: string) => {
   if (status === 'active') return 'success'
@@ -51,18 +71,100 @@ const filtered = computed(() =>
   )
 )
 
-const columns = [
-  { accessorKey: 'thumbnail', header: 'Image' },
-  { accessorKey: 'title', header: 'Product Name' },
-  { accessorKey: 'sku', header: 'SKU' },
-  { accessorKey: 'price', header: 'Price' },
-  { accessorKey: 'inventoryQuantity', header: 'Inventory' },
-  { accessorKey: 'status', header: 'Status' },
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+type SortKey = 'title' | 'price' | 'inventoryQuantity'
+const sortKey = ref<SortKey | null>(null)
+const sortDir = ref<'asc' | 'desc'>('asc')
+
+function toggleSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'asc'
+  }
+  page.value = 1
+}
+
+const sorted = computed(() => {
+  if (!sortKey.value) return filtered.value
+  const key = sortKey.value
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...filtered.value].sort((a, b) => {
+    const av = a[key] ?? null
+    const bv = b[key] ?? null
+    if (av === null && bv === null) return 0
+    if (av === null) return 1
+    if (bv === null) return -1
+    if (typeof av === 'string' && typeof bv === 'string')
+      return av.localeCompare(bv) * dir
+    return ((av as number) - (bv as number)) * dir
+  })
+})
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+const page = ref(1)
+const pageSizeStr = ref('20')
+const pageSize = computed(() => Number(pageSizeStr.value))
+
+const pageSizeOptions = [
+  { label: '20 per page', value: '20' },
+  { label: '30 per page', value: '30' },
+  { label: '50 per page', value: '50' },
+  { label: '100 per page', value: '100' },
 ]
+
+watch(pageSizeStr, () => { page.value = 1 })
+watch(search, () => { page.value = 1 })
+
+const paginated = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return sorted.value.slice(start, start + pageSize.value)
+})
+
+// ── Column resize ─────────────────────────────────────────────────────────────
+
+const colWidths = reactive({
+  thumbnail: 72,
+  title: 400,
+  sku: 130,
+  price: 110,
+  inventory: 110,
+  status: 100,
+})
+
+type ColKey = keyof typeof colWidths
+let resizing: { key: ColKey; startX: number; startW: number } | null = null
+
+function startResize(e: MouseEvent, key: ColKey) {
+  resizing = { key, startX: e.clientX, startW: colWidths[key] }
+  e.preventDefault()
+}
+
+function onResizeMove(e: MouseEvent) {
+  if (!resizing) return
+  colWidths[resizing.key] = Math.max(40, resizing.startW + e.clientX - resizing.startX)
+}
+
+function stopResize() {
+  resizing = null
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+})
 </script>
 
 <template>
-  <div class="mx-auto max-w-[2000px] px-6 py-6">
+  <div class="mx-auto max-w-[1500px] px-6 py-6">
     <div class="mb-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <h1 class="text-lg font-semibold text-gray-900">Products</h1>
@@ -99,47 +201,120 @@ const columns = [
 
     <!-- Products table -->
     <template v-else>
-      <div class="mb-3 flex justify-end">
-        <UButton size="sm" icon="i-lucide-download" :loading="syncing" @click="syncProducts">
-          Load Products
-        </UButton>
+      <div class="mb-3 flex items-center justify-between">
+        <USelect
+          v-model="pageSizeStr"
+          :items="pageSizeOptions"
+          class="w-36"
+        />
+        <div class="flex items-center gap-2">
+          <UButton size="sm" icon="i-lucide-download" :loading="syncing" @click="syncProducts">
+            Load Products
+          </UButton>
+          <UButton size="sm" variant="soft" icon="i-lucide-search" :loading="findingCompetitors" @click="findCompetitors">
+            Find Competitor
+          </UButton>
+        </div>
       </div>
 
       <UCard>
-        <UTable :data="filtered" :columns="columns">
-          <template #thumbnail-cell="{ row }">
-            <NuxtLink :to="`/products/${row.original.id}`">
-              <img
-                v-if="row.original.thumbnail"
-                :src="row.original.thumbnail"
-                :alt="row.original.title ?? ''"
-                class="h-[60px] w-[60px] rounded object-cover"
-              />
-              <div v-else class="h-[60px] w-[60px] rounded bg-gray-100" />
-            </NuxtLink>
-          </template>
-          <template #title-cell="{ row }">
-            <NuxtLink
-              :to="`/products/${row.original.id}`"
-              class="block max-w-[250px] truncate font-medium text-gray-900 hover:underline"
-              :title="row.original.title ?? ''"
-            >
-              {{ row.original.title }}
-            </NuxtLink>
-          </template>
-          <template #sku-cell="{ row }">
-            <span class="font-mono text-sm text-gray-500">{{ row.original.sku }}</span>
-          </template>
-          <template #price-cell="{ row }">
-            <span v-if="row.original.price != null">${{ Number(row.original.price).toFixed(2) }}</span>
-            <span v-else class="text-gray-400">—</span>
-          </template>
-          <template #status-cell="{ row }">
-            <UBadge :color="statusColor(row.original.status)" variant="soft" size="sm">
-              {{ row.original.status }}
-            </UBadge>
-          </template>
-        </UTable>
+        <div class="overflow-x-auto rounded-lg border border-default/50">
+          <table class="table-fixed text-sm">
+            <colgroup>
+              <col :style="`width: ${colWidths.thumbnail}px`" />
+              <col :style="`width: ${colWidths.title}px`" />
+              <col :style="`width: ${colWidths.sku}px`" />
+              <col :style="`width: ${colWidths.price}px`" />
+              <col :style="`width: ${colWidths.inventory}px`" />
+              <col :style="`width: ${colWidths.status}px`" />
+            </colgroup>
+            <thead>
+              <tr class="border-b border-default/50 bg-default/20">
+                <th class="p-0" />
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  <button class="flex cursor-pointer items-center gap-1 hover:text-highlighted" @click="toggleSort('title')">
+                    Product Name
+                    <UIcon v-if="sortKey === 'title'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                  </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'title')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
+                  SKU
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'sku')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('price')">
+                    <UIcon v-if="sortKey === 'price'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                    Price
+                  </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'price')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('inventoryQuantity')">
+                    <UIcon v-if="sortKey === 'inventoryQuantity'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                    Inventory
+                  </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'inventory')" />
+                </th>
+                <th class="px-3 py-2 text-left font-medium text-toned">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="p in paginated"
+                :key="p.id"
+                class="border-b border-default/30 last:border-0 hover:bg-default/10"
+              >
+                <td class="p-0">
+                  <NuxtLink :to="`/products/${p.id}`">
+                    <img
+                      v-if="p.thumbnail"
+                      :src="p.thumbnail"
+                      :alt="p.title ?? ''"
+                      class="h-[60px] w-[60px] rounded object-cover"
+                    />
+                    <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
+                  </NuxtLink>
+                </td>
+                <td class="px-3 py-2">
+                  <NuxtLink
+                    :to="`/products/${p.id}`"
+                    class="block truncate font-medium text-gray-900 hover:underline"
+                    :title="p.title ?? ''"
+                  >
+                    {{ p.title }}
+                  </NuxtLink>
+                </td>
+                <td class="px-3 py-2">
+                  <span class="font-mono text-sm text-gray-500">{{ p.sku }}</span>
+                </td>
+                <td class="px-3 py-2 text-right">
+                  <span v-if="p.price != null">${{ Number(p.price).toFixed(2) }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-3 py-2 text-right">
+                  <span v-if="p.inventoryQuantity != null">{{ p.inventoryQuantity }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-3 py-2">
+                  <UBadge :color="statusColor(p.status)" variant="soft" size="sm">
+                    {{ p.status }}
+                  </UBadge>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="filtered.length > pageSize" class="mt-4 flex justify-center">
+          <UPagination v-model:page="page" :total="filtered.length" :items-per-page="pageSize" />
+        </div>
+
       </UCard>
     </template>
   </div>
