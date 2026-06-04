@@ -27,11 +27,27 @@ const url = computed(() => {
   return `/api/orders?${params}`
 })
 
-const { data, pending, error } = await useFetch<OrderListResponse>(url, { lazy: true, watch: [url] })
+const { data, pending, error, refresh } = await useFetch<OrderListResponse>(url, { lazy: true, watch: [url] })
 
 watch(error, (e) => {
   if (e) toast.add({ title: 'Failed to load orders', color: 'error' })
 })
+
+const syncing = ref(false)
+
+async function syncOrders() {
+  syncing.value = true
+  try {
+    const result = await $fetch<{ synced: number }>('/api/orders/sync', { method: 'POST' })
+    toast.add({ title: `${result.synced} orders synced`, color: 'success' })
+    await refresh()
+  } catch (e: unknown) {
+    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Shopify sync failed'
+    toast.add({ title: msg, color: 'error' })
+  } finally {
+    syncing.value = false
+  }
+}
 
 const orders = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
@@ -79,6 +95,9 @@ const columns = [
         <UInput v-model="search" placeholder="Search by order # or email..." icon="i-lucide-search" class="w-64" />
         <USelect v-model="financialStatus" :options="[{ label: 'All payments', value: '' }, { label: 'Paid', value: 'paid' }, { label: 'Pending', value: 'pending' }, { label: 'Refunded', value: 'refunded' }]" class="w-40" />
         <USelect v-model="fulfillmentStatus" :options="[{ label: 'All fulfillment', value: '' }, { label: 'Fulfilled', value: 'fulfilled' }, { label: 'Unfulfilled', value: 'unfulfilled' }, { label: 'Partial', value: 'partial' }]" class="w-44" />
+        <UButton size="sm" icon="i-lucide-download" :loading="syncing" @click="syncOrders">
+          Sync Orders
+        </UButton>
       </div>
     </div>
 
@@ -95,6 +114,9 @@ const columns = [
     <UCard v-else-if="!orders.length" class="py-16 text-center">
       <p class="text-sm font-semibold text-highlighted">No orders found</p>
       <p class="mt-1 text-sm text-toned">Sync orders from Shopify to see them here.</p>
+      <UButton class="mt-4" icon="i-lucide-download" :loading="syncing" @click="syncOrders">
+        Sync Orders
+      </UButton>
     </UCard>
 
     <!-- Orders table -->
