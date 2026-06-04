@@ -125,3 +125,15 @@ jobs:
             ${{ env.GATEWAY_IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.GATEWAY_IMAGE }}:latest
           cache-to: type=inline
+
+  call-deploy:
+    name: Deploy
+    needs: [build-backend, build-frontend, build-gateway]
+    if: ${{ !failure() && !cancelled() }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      image_tag: ${{ github.sha }}
+      target: ${{ inputs.target }}
