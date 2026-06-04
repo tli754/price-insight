@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag to deploy (commit SHA or "latest")'
+        description: 'Image tag to deploy (8-char commit SHA). Defaults to HEAD SHA of master.'
         required: false
-        default: 'latest'
+        default: ''
       target:
         description: 'Which service to deploy'
         required: false
@@ -35,6 +35,14 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        run: |
+          if [ -z "${{ inputs.image_tag }}" ] || [ "${{ inputs.image_tag }}" = "latest" ]; then
+            echo "IMAGE_TAG=$(git rev-parse --short=8 HEAD)" >> $GITHUB_ENV
+          else
+            echo "IMAGE_TAG=${{ inputs.image_tag }}" >> $GITHUB_ENV
+          fi
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -130,7 +138,7 @@ jobs:
         run: |
           kubectl delete job db-migrate --ignore-not-found -n price-insight
 
-          export BACKEND_IMAGE=${{ env.BACKEND_IMAGE }}:${{ inputs.image_tag }}
+          export BACKEND_IMAGE=${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
           envsubst < .github/k8s/migration-job.yaml | kubectl apply -f -
 
           if ! kubectl wait --for=condition=complete job/db-migrate \
@@ -144,7 +152,7 @@ jobs:
         if: inputs.target == 'all' || inputs.target == 'backend'
         run: |
           kubectl set image deployment/backend \
-            backend=${{ env.BACKEND_IMAGE }}:${{ inputs.image_tag }} \
+            backend=${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }} \
             -n price-insight
           kubectl rollout status deployment/backend -n price-insight --timeout=120s
 
@@ -152,7 +160,7 @@ jobs:
         if: inputs.target == 'all' || inputs.target == 'frontend'
         run: |
           kubectl set image deployment/frontend \
-            frontend=${{ env.FRONTEND_IMAGE }}:${{ inputs.image_tag }} \
+            frontend=${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
             -n price-insight
           kubectl rollout status deployment/frontend -n price-insight --timeout=120s
 
@@ -160,6 +168,6 @@ jobs:
         if: inputs.target == 'all' || inputs.target == 'gateway'
         run: |
           kubectl set image deployment/gateway \
-            gateway=${{ env.GATEWAY_IMAGE }}:${{ inputs.image_tag }} \
+            gateway=${{ env.GATEWAY_IMAGE }}:${{ env.IMAGE_TAG }} \
             -n price-insight
           kubectl rollout status deployment/gateway -n price-insight --timeout=120s
