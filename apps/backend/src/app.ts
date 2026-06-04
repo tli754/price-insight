@@ -7,6 +7,7 @@ import analysisRoutes from "./routes/analysis.js";
 import healthRoutes from "./routes/health.js";
 import ordersRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
+import webhookRoutes from "./routes/webhook.js";
 import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
 import { CompetitorRepository } from "./services/competitor-repository.js";
 import { DataForSeoService } from "./services/dataforseo-service.js";
@@ -35,6 +36,7 @@ export async function buildApp(env: AppEnv) {
   app.decorate("productRepository", productRepository);
   app.decorate("competitorRepository", competitorRepository);
   app.decorate("competitorAnalysisService", competitorAnalysisService);
+  app.decorate("dataForSeoService", dataForSeo);
   app.decorate("orderRepository", orderRepository);
   app.decorate("shopifyService", shopifyService);
 
@@ -75,6 +77,7 @@ export async function buildApp(env: AppEnv) {
   await app.register(productRoutes, { prefix: "/api" });
   await app.register(ordersRoutes, { prefix: "/api" });
   await app.register(analysisRoutes, { prefix: "/api" });
+  await app.register(webhookRoutes);
 
   return app;
 }

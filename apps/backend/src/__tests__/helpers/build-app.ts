@@ -13,6 +13,7 @@ import analysisRoutes from "../../routes/analysis.js";
 import healthRoutes from "../../routes/health.js";
 import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
+import webhookRoutes from "../../routes/webhook.js";
 
 // ── Minimal fake env ──────────────────────────────────────────────────────────
 export const fakeEnv = {
@@ -38,7 +39,8 @@ export const fakeEnv = {
   SERPAPI_GOOGLE_DOMAIN: "google.co.nz",
   SERPAPI_NUM_RESULTS: 40,
   DATAFORSEO_LOGIN: "fake",
-  DATAFORSEO_PASSWORD: "fake"
+  DATAFORSEO_PASSWORD: "fake",
+  DATAFORSEO_WEBHOOK_SECRET: "fake-webhook-secret"
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -65,9 +67,21 @@ export function makeCompetitorRepository() {
     deleteSuggestedByProduct: vi.fn().mockResolvedValue(undefined),
     getDeletedExternalIds: vi.fn().mockResolvedValue(new Set()),
     insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined),
+    upsertSuggestedCompetitor: vi.fn().mockResolvedValue(undefined),
     updateCompetitorProductStatus: vi.fn().mockResolvedValue(undefined),
     confirmCompetitorProduct: vi.fn().mockResolvedValue(undefined),
+    recordPricesForConfirmed: vi.fn().mockResolvedValue(undefined),
     recordPriceInsight: vi.fn().mockResolvedValue(undefined)
+  };
+}
+
+export function makeDataForSeoService() {
+  return {
+    fetchShoppingTaskResult: vi.fn().mockResolvedValue({ tasks: [] }),
+    fetchProductInfoTaskResult: vi.fn().mockResolvedValue({ tasks: [] }),
+    postProductInfoTasks: vi.fn().mockResolvedValue(undefined),
+    parseShoppingCandidates: vi.fn().mockReturnValue([]),
+    fetchProductInfoResults: vi.fn().mockReturnValue([])
   };
 }
 
@@ -101,25 +115,31 @@ export type TestMocks = {
   productRepository: ReturnType<typeof makeProductRepository>;
   competitorRepository: ReturnType<typeof makeCompetitorRepository>;
   competitorAnalysisService: ReturnType<typeof makeCompetitorAnalysisService>;
+  dataForSeoService: ReturnType<typeof makeDataForSeoService>;
   orderRepository: ReturnType<typeof makeOrderRepository>;
   shopifyService: ReturnType<typeof makeShopifyService> | null;
 };
 
-export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
+export async function buildTestApp(
+  overrides: Partial<TestMocks> = {},
+  envOverrides: Partial<typeof fakeEnv & { OWN_STORE_NAME?: string }> = {}
+) {
   const mocks: TestMocks = {
     productRepository: overrides.productRepository ?? makeProductRepository(),
     competitorRepository: overrides.competitorRepository ?? makeCompetitorRepository(),
     competitorAnalysisService: overrides.competitorAnalysisService ?? makeCompetitorAnalysisService(),
+    dataForSeoService: overrides.dataForSeoService ?? makeDataForSeoService(),
     orderRepository: overrides.orderRepository ?? makeOrderRepository(),
     shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null
   };
 
   const app = Fastify({ logger: false });
 
-  app.decorate("env", fakeEnv);
+  app.decorate("env", { ...fakeEnv, ...envOverrides } as typeof fakeEnv);
   app.decorate("productRepository", mocks.productRepository as any);
   app.decorate("competitorRepository", mocks.competitorRepository as any);
   app.decorate("competitorAnalysisService", mocks.competitorAnalysisService as any);
+  app.decorate("dataForSeoService", mocks.dataForSeoService as any);
   app.decorate("orderRepository", mocks.orderRepository as any);
   app.decorate("shopifyService", mocks.shopifyService as any);
 
@@ -143,6 +163,7 @@ export async function buildTestApp(overrides: Partial<TestMocks> = {}) {
   await app.register(productRoutes, { prefix: "/api" });
   await app.register(ordersRoutes, { prefix: "/api" });
   await app.register(analysisRoutes, { prefix: "/api" });
+  await app.register(webhookRoutes);
 
   await app.ready();
 

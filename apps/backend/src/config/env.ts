@@ -12,6 +12,7 @@ const envSchema = z.object({
   SERPAPI_API_KEY: z.string().min(1),
   DATAFORSEO_LOGIN: z.string().min(1),
   DATAFORSEO_PASSWORD: z.string().min(1),
+  DATAFORSEO_WEBHOOK_SECRET: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
   SHOPIFY_TOKEN_URL: z.string().url().optional(),
