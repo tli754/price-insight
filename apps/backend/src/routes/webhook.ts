@@ -61,7 +61,7 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(200).send();
     }
 
-    const webhookBase = `https://${request.hostname}/webhook/dataforseo/pingback/product_info`;
+    const webhookBase = `${fastify.env.WEBHOOK_HOST}/webhook/dataforseo/pingback/product_info`;
     const secret = fastify.env.DATAFORSEO_WEBHOOK_SECRET;
 
     try {
