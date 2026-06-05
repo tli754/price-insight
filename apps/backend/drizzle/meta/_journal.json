@@ -29,6 +29,13 @@
       "when": 1780023846100,
       "tag": "0003_useful_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1780626884844,
+      "tag": "0004_known_gunslinger",
+      "breakpoints": true
     }
   ]
 }
