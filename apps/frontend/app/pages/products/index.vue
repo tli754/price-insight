@@ -12,7 +12,12 @@ const products = computed(() => data.value?.items ?? [])
 const route = useRoute()
 const router = useRouter()
 
-const search = ref(typeof route.query.search === 'string' ? route.query.search : '')
+const inputValue = ref(typeof route.query.search === 'string' ? route.query.search : '')
+const search = ref(inputValue.value)
+
+function applySearch() {
+  search.value = inputValue.value
+}
 
 watch(search, (val) => {
   router.replace({ query: { ...route.query, search: val || undefined } })
@@ -178,7 +183,10 @@ onUnmounted(() => {
           @click="refresh"
         />
       </div>
-      <UInput v-model="search" placeholder="Search products..." icon="i-lucide-search" class="w-64" />
+      <div class="flex items-center gap-2">
+        <UInput v-model="inputValue" placeholder="Search products..." icon="i-lucide-search" class="w-56" @keyup.enter="applySearch" />
+        <UButton size="sm" icon="i-lucide-search" @click="applySearch">Search</UButton>
+      </div>
     </div>
 
     <!-- Loading skeleton -->
