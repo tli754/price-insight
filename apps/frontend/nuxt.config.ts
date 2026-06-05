@@ -6,6 +6,8 @@ export default defineNuxtConfig({
   routeRules: {
     "/": { redirect: "/products" },
     "/api/health": {},
+    "/api/_nuxt_icon/**": {},
+    "/api/_nuxt/**": {},
     "/api/**": { proxy: `${gatewayUrl}/api/**` },
     "/auth/**": { proxy: `${gatewayUrl}/auth/**` },
   },
