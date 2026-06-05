@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OrderListResponse } from '~/shared/types/order'
-
+import { mockOrders, mockOrderMap } from '~/data/mock-orders'
 
 const toast = useToast()
 
@@ -8,6 +8,7 @@ const page = ref(1)
 const search = ref('')
 const financialStatus = ref('')
 const fulfillmentStatus = ref('')
+const syncStatusFilter = ref('')
 const debouncedSearch = ref('')
 
 let searchTimeout: ReturnType<typeof setTimeout>
@@ -52,12 +53,58 @@ async function syncOrders() {
 const orders = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 
+// ── Mock summary stats (computed from mock data for today) ──────────────────
+const todayStr = new Date().toDateString()
+const todayMockOrders = computed(() =>
+  mockOrders.filter(o => new Date(o.createdAt).toDateString() === todayStr)
+)
+const summaryCards = computed(() => [
+  {
+    label: 'Orders Today',
+    value: todayMockOrders.value.length,
+    icon: 'i-lucide-shopping-bag',
+  },
+  {
+    label: 'Revenue Today',
+    value: `NZD ${todayMockOrders.value.reduce((s, o) => s + o.total, 0).toFixed(2)}`,
+    icon: 'i-lucide-dollar-sign',
+  },
+  {
+    label: 'Units Sold',
+    value: todayMockOrders.value.reduce((s, o) => s + o.totalQuantity, 0),
+    icon: 'i-lucide-package',
+  },
+  {
+    label: 'Sync Failures',
+    value: mockOrders.filter(o => o.syncStatus === 'failed').length,
+    icon: 'i-lucide-alert-circle',
+    alert: mockOrders.some(o => o.syncStatus === 'failed'),
+  },
+])
+
+// ── Mock sync fields overlaid on real order rows ────────────────────────────
+const syncStatusColor = (status: string) => {
+  if (status === 'synced') return 'success'
+  if (status === 'pending') return 'warning'
+  if (status === 'failed') return 'error'
+  return 'neutral'
+}
+
+const syncSourceLabel = (source: string) => {
+  if (source === 'webhook') return 'Webhook'
+  if (source === 'scheduled_2am') return '2 AM Job'
+  if (source === 'manual') return 'Manual'
+  return source
+}
+
+const lastSyncTime = 'Jun 2, 2026 2:00 AM'
+
 const formatDate = (iso: string | null) => {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('en-NZ', {
     dateStyle: 'medium',
     timeStyle: 'short',
-    timeZone: 'Pacific/Auckland'
+    timeZone: 'Pacific/Auckland',
   })
 }
 
@@ -71,34 +118,71 @@ const financialColor = (status: string | null) => {
 const fulfillmentColor = (status: string | null) => {
   if (status === 'fulfilled') return 'success'
   if (status === 'partial') return 'warning'
-  if (status === 'unfulfilled' || !status) return 'neutral'
   return 'neutral'
 }
 
 const columns = [
   { accessorKey: 'orderNumber', header: 'Order' },
   { accessorKey: 'customer', header: 'Customer' },
+  { accessorKey: 'itemCount', header: 'Items' },
+  { accessorKey: 'totalPrice', header: 'Total' },
   { accessorKey: 'financialStatus', header: 'Payment' },
   { accessorKey: 'fulfillmentStatus', header: 'Fulfillment' },
-  { accessorKey: 'totalPrice', header: 'Total' },
-  { accessorKey: 'totalShipping', header: 'Shipping' },
-  { accessorKey: 'itemCount', header: 'Items' },
+  { accessorKey: 'syncStatus', header: 'Sync' },
+  { accessorKey: 'syncSource', header: 'Source' },
   { accessorKey: 'shopifyCreatedAt', header: 'Date' },
 ]
 </script>
 
 <template>
   <div class="mx-auto max-w-7xl px-6 py-6">
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <h1 class="text-lg font-semibold text-gray-900">Orders</h1>
+
+    <!-- Header -->
+    <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-gray-900">Orders</h1>
+        <p class="mt-0.5 text-xs text-gray-500">
+          Last scheduled sync: {{ lastSyncTime }} ·
+          <span class="text-green-600 font-medium">Webhook active</span>
+        </p>
+      </div>
       <div class="flex flex-wrap items-center gap-2">
-        <UInput v-model="search" placeholder="Search by order # or email..." icon="i-lucide-search" class="w-64" />
-        <USelect v-model="financialStatus" :options="[{ label: 'All payments', value: '' }, { label: 'Paid', value: 'paid' }, { label: 'Pending', value: 'pending' }, { label: 'Refunded', value: 'refunded' }]" class="w-40" />
-        <USelect v-model="fulfillmentStatus" :options="[{ label: 'All fulfillment', value: '' }, { label: 'Fulfilled', value: 'fulfilled' }, { label: 'Unfulfilled', value: 'unfulfilled' }, { label: 'Partial', value: 'partial' }]" class="w-44" />
-        <UButton size="sm" icon="i-lucide-download" :loading="syncing" @click="syncOrders">
-          Sync Orders
+        <UInput v-model="search" placeholder="Search by order # or email..." icon="i-lucide-search" class="w-56" />
+        <USelect
+          v-model="financialStatus"
+          :items="[{ label: 'Paid', value: 'paid' }, { label: 'Pending', value: 'pending' }, { label: 'Refunded', value: 'refunded' }]"
+          placeholder="All payments"
+          class="w-36"
+        />
+        <USelect
+          v-model="fulfillmentStatus"
+          :items="[{ label: 'Fulfilled', value: 'fulfilled' }, { label: 'Unfulfilled', value: 'unfulfilled' }, { label: 'Partial', value: 'partial' }]"
+          placeholder="All fulfillment"
+          class="w-40"
+        />
+        <USelect
+          v-model="syncStatusFilter"
+          :items="[{ label: 'Synced', value: 'synced' }, { label: 'Failed', value: 'failed' }, { label: 'Pending', value: 'pending' }]"
+          placeholder="All sync"
+          class="w-32"
+        />
+        <UButton size="sm" icon="i-lucide-refresh-cw" :loading="syncing" @click="syncOrders">
+          Sync Now
         </UButton>
       </div>
+    </div>
+
+    <!-- Summary cards (mock data) -->
+    <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <UCard v-for="card in summaryCards" :key="card.label" class="py-3">
+        <div class="flex items-center gap-3">
+          <UIcon :name="card.icon" class="h-5 w-5 shrink-0" :class="card.alert ? 'text-red-500' : 'text-gray-400'" />
+          <div>
+            <p class="text-xs text-gray-500">{{ card.label }}</p>
+            <p class="text-lg font-semibold" :class="card.alert ? 'text-red-600' : 'text-gray-900'">{{ card.value }}</p>
+          </div>
+        </div>
+      </UCard>
     </div>
 
     <!-- Loading skeleton -->
@@ -114,8 +198,8 @@ const columns = [
     <UCard v-else-if="!orders.length" class="py-16 text-center">
       <p class="text-sm font-semibold text-highlighted">No orders found</p>
       <p class="mt-1 text-sm text-toned">Sync orders from Shopify to see them here.</p>
-      <UButton class="mt-4" icon="i-lucide-download" :loading="syncing" @click="syncOrders">
-        Sync Orders
+      <UButton class="mt-4" icon="i-lucide-refresh-cw" :loading="syncing" @click="syncOrders">
+        Sync Now
       </UButton>
     </UCard>
 
@@ -135,7 +219,7 @@ const columns = [
             <span v-if="row.original.customerFirstName || row.original.customerLastName">
               {{ row.original.customerFirstName }} {{ row.original.customerLastName }}
             </span>
-            <span v-else-if="row.original.email" class="text-gray-500 text-sm">{{ row.original.email }}</span>
+            <span v-else-if="row.original.email" class="text-sm text-gray-500">{{ row.original.email }}</span>
             <span v-else class="text-gray-400">—</span>
           </template>
           <template #financialStatus-cell="{ row }">
@@ -150,19 +234,29 @@ const columns = [
             </UBadge>
           </template>
           <template #totalPrice-cell="{ row }">
-            <span v-if="row.original.totalPrice != null">
+            <span v-if="row.original.totalPrice != null" class="font-medium">
               {{ row.original.currency ?? '' }} {{ Number(row.original.totalPrice).toFixed(2) }}
             </span>
             <span v-else class="text-gray-400">—</span>
           </template>
-          <template #totalShipping-cell="{ row }">
-            <span v-if="row.original.totalShipping != null">
-              {{ Number(row.original.totalShipping).toFixed(2) }}
+          <!-- Mock sync fields keyed by order number -->
+          <template #syncStatus-cell="{ row }">
+            <template v-if="mockOrderMap.has(row.original.orderNumber)">
+              <UBadge :color="syncStatusColor(mockOrderMap.get(row.original.orderNumber)!.syncStatus)" variant="soft" size="sm">
+                {{ mockOrderMap.get(row.original.orderNumber)!.syncStatus }}
+              </UBadge>
+            </template>
+            <UBadge v-else color="success" variant="soft" size="sm">synced</UBadge>
+          </template>
+          <template #syncSource-cell="{ row }">
+            <span class="text-xs text-gray-500">
+              {{ mockOrderMap.has(row.original.orderNumber)
+                ? syncSourceLabel(mockOrderMap.get(row.original.orderNumber)!.syncSource)
+                : 'Webhook' }}
             </span>
-            <span v-else class="text-gray-400">—</span>
           </template>
           <template #shopifyCreatedAt-cell="{ row }">
-            {{ formatDate(row.original.shopifyCreatedAt) }}
+            <span class="text-sm text-gray-600">{{ formatDate(row.original.shopifyCreatedAt) }}</span>
           </template>
         </UTable>
       </UCard>
