@@ -7,9 +7,8 @@
  *   cd apps/backend && npx tsx src/scripts/load-recent-orders.ts
  *
  * Options (env vars):
- *   SINCE=2024-01-01   Only fetch orders updated since this ISO date.
+ *   SINCE=2024-01-01   Only fetch orders created on or after this date (NZST/NZDT).
  *                      Omit to fetch ALL orders.
- *   BATCH_LOG=50       Log progress every N jobs enqueued (default: 50).
  */
 
 import "dotenv/config";
@@ -34,12 +33,15 @@ if (
 }
 
 const since = process.env.SINCE ?? null;
-const filter = since ? `updated_at:>=${since}` : "";
-const batchLog = parseInt(process.env.BATCH_LOG ?? "50", 10);
+// Use created_at so SINCE filters by order placement date, not modification date.
+// Append T00:00:00+12:00 (NZST) to make the boundary unambiguous — Shopify would
+// otherwise interpret a bare date in the store timezone, which can bleed into the
+// previous UTC day.
+const filter = since ? `created_at:>=${since}T00:00:00+12:00` : "";
 
 console.log(
   since
-    ? `[load-orders] Fetching orders updated since ${since}…`
+    ? `[load-orders] Fetching orders created on or after ${since} (NZST)…`
     : "[load-orders] Fetching ALL orders from Shopify…"
 );
 
@@ -57,29 +59,37 @@ const graphqlService = new ShopifyGraphQLService(env.SHOPIFY_PRODUCTS_URL);
 
 try {
   const accessToken = await shopifyService.getAccessToken();
-  const orders = await graphqlService.fetchOrders(accessToken, filter);
-  console.log(`[load-orders] ${orders.length} orders fetched`);
 
-  if (orders.length === 0) {
-    console.log("[load-orders] Nothing to enqueue.");
-  } else {
-    let enqueued = 0;
-    for (const order of orders) {
-      const jobData: SyncOrderJobData = {
+  let totalEnqueued = 0;
+  let pageNum = 0;
+
+  for await (const page of graphqlService.streamOrders(accessToken, filter)) {
+    pageNum++;
+
+    if (page.length === 0) continue;
+
+    const jobs = page.map((order) => ({
+      name: "sync-order" as const,
+      data: {
         type: "sync-order",
         source: "manual",
         shopifyOrderId: order.id,
         orderName: order.name,
         shopifyUpdatedAt: order.updatedAt,
         shopifyOrder: order,
-      };
-      await queue.add("sync-order", jobData);
-      enqueued++;
-      if (enqueued % batchLog === 0) {
-        console.log(`[load-orders] Enqueued ${enqueued}/${orders.length}…`);
-      }
-    }
-    console.log(`[load-orders] Done. ${enqueued} jobs enqueued. Worker will skip unchanged orders.`);
+      } satisfies SyncOrderJobData,
+    }));
+
+    await queue.addBulk(jobs);
+    totalEnqueued += jobs.length;
+
+    console.log(`[load-orders] Page ${pageNum}: enqueued ${jobs.length} orders (total: ${totalEnqueued})…`);
+  }
+
+  if (totalEnqueued === 0) {
+    console.log("[load-orders] Nothing to enqueue.");
+  } else {
+    console.log(`[load-orders] Done. ${totalEnqueued} jobs enqueued. Worker will skip unchanged orders.`);
   }
 } catch (err) {
   console.error("[load-orders] Failed:", err);

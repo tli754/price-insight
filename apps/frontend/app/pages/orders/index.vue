@@ -55,6 +55,12 @@ async function syncOrders() {
 
 const orders = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
+const totalSales = computed(() => data.value?.totalSales ?? null)
+
+const formattedSales = computed(() => {
+  if (totalSales.value == null) return null
+  return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(totalSales.value)
+})
 
 // ── Mock summary stats (computed from mock data for today) ──────────────────
 const todayStr = new Date().toDateString()
@@ -142,7 +148,11 @@ const columns = [
     <!-- Header -->
     <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="text-lg font-semibold text-gray-900">Orders</h1>
+        <h1 class="flex items-center gap-2 text-lg font-semibold text-gray-900">
+          Orders
+          <UBadge v-if="data" color="neutral" variant="soft" size="sm">{{ total.toLocaleString() }}</UBadge>
+          <UBadge v-if="formattedSales" color="neutral" variant="soft" size="sm">{{ formattedSales }}</UBadge>
+        </h1>
         <p class="mt-0.5 text-xs text-gray-500">
           Last scheduled sync: {{ lastSyncTime }} ·
           <span class="text-green-600 font-medium">Webhook active</span>

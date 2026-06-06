@@ -44,7 +44,7 @@ const ordersRoutes: FastifyPluginAsync = async (fastify) => {
     };
     const page = Math.max(1, parseInt(query.page ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? "20", 10) || 20));
-    const { items, total } = await fastify.orderRepository.listOrders({
+    const { items, total, totalSales } = await fastify.orderRepository.listOrders({
       page,
       limit,
       search: query.search || undefined,
@@ -52,7 +52,7 @@ const ordersRoutes: FastifyPluginAsync = async (fastify) => {
       fulfillmentStatus: query.fulfillmentStatus || undefined
     });
     reply.code(200);
-    return { items, total, page, limit };
+    return { items, total, totalSales, page, limit };
   });
 
   fastify.get("/orders/:id", async (request, reply) => {

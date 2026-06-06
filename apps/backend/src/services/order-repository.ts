@@ -1,4 +1,4 @@
-import { and, count as sqlCount, desc, eq, inArray, like, max, or } from "drizzle-orm";
+import { and, count as sqlCount, desc, eq, inArray, like, max, or, sum as sqlSum } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -270,7 +270,7 @@ export class OrderRepository {
     search?: string;
     financialStatus?: string;
     fulfillmentStatus?: string;
-  }): Promise<{ items: OrderListRow[]; total: number }> {
+  }): Promise<{ items: OrderListRow[]; total: number; totalSales: number | null }> {
     const { page, limit, search, financialStatus, fulfillmentStatus } = opts;
     const offset = (page - 1) * limit;
 
@@ -288,7 +288,7 @@ export class OrderRepository {
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [rows, [{ total }]] = await Promise.all([
+    const [rows, [{ total, totalSales }]] = await Promise.all([
       this.db
         .select({
           id: orders.id,
@@ -314,12 +314,16 @@ export class OrderRepository {
         .limit(limit)
         .offset(offset),
       this.db
-        .select({ total: sqlCount(orders.id) })
+        .select({ total: sqlCount(orders.id), totalSales: sqlSum(orders.totalPrice) })
         .from(orders)
         .where(where)
     ]);
 
-    return { items: rows as OrderListRow[], total: Number(total) };
+    return {
+      items: rows as OrderListRow[],
+      total: Number(total),
+      totalSales: totalSales != null ? parseFloat(String(totalSales)) : null,
+    };
   }
 
   // ── GraphQL-based upsert ───────────────────────────────────────────────────
