@@ -1,61 +1,90 @@
 <script setup lang="ts">
-import { mockOrderSyncJobs, mockQueueStats } from '~/data/mock-queue'
-import type { MockOrderSyncJob } from '~/shared/types/mock-queue'
+import type { QueueJob, QueueResponse } from '~/shared/types/queue'
 
-// ── Refresh ────────────────────────────────────────────────────────────────
-const refreshing = ref(false)
-const lastRefreshed = ref(new Date(mockQueueStats.lastRefreshedAt))
+const toast = useToast()
 
-async function refresh() {
-  refreshing.value = true
-  await new Promise(r => setTimeout(r, 300))
-  lastRefreshed.value = new Date()
-  refreshing.value = false
-}
+// ── Data fetch ─────────────────────────────────────────────────────────────
+const { data, pending: loading, refresh } = await useFetch<QueueResponse>(
+  '/api/shopify/orders/queue',
+  { lazy: true }
+)
 
-const lastRefreshedLabel = computed(() =>
-  lastRefreshed.value.toLocaleString('en-NZ', {
+onMounted(refresh)
+
+const counts = computed(() => data.value?.counts ?? { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 })
+const jobs = computed(() => data.value?.jobs ?? [])
+const lastRefreshedAt = computed(() => data.value?.lastRefreshedAt)
+
+const lastRefreshedLabel = computed(() => {
+  if (!lastRefreshedAt.value) return '—'
+  return new Date(lastRefreshedAt.value).toLocaleString('en-NZ', {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'Pacific/Auckland',
   })
-)
+})
+
+// ── Refresh ────────────────────────────────────────────────────────────────
+const refreshing = ref(false)
+async function doRefresh() {
+  refreshing.value = true
+  try {
+    await refresh()
+  } finally {
+    refreshing.value = false
+  }
+}
+
+// ── Clean ──────────────────────────────────────────────────────────────────
+const cleaning = ref(false)
+async function cleanQueue() {
+  cleaning.value = true
+  try {
+    const res = await $fetch<{ removed: { completed: number; failed: number; delayed: number } }>(
+      '/api/shopify/orders/queue/clean',
+      { method: 'POST' }
+    )
+    const total = res.removed.completed + res.removed.failed + res.removed.delayed
+    toast.add({ title: 'Queue cleaned', description: `${total} job(s) removed.`, color: 'success' })
+    await refresh()
+  } catch {
+    toast.add({ title: 'Clean failed', description: 'Could not clean the queue.', color: 'error' })
+  } finally {
+    cleaning.value = false
+  }
+}
 
 // ── Summary cards ──────────────────────────────────────────────────────────
 const summaryCards = computed(() => [
-  { label: 'Waiting',       value: mockQueueStats.counts.waiting,            color: 'neutral' },
-  { label: 'Active',        value: mockQueueStats.counts.active,             color: 'primary' },
-  { label: 'Completed',     value: mockQueueStats.counts.completed,          color: 'success' },
-  { label: 'Failed',        value: mockQueueStats.counts.failed,             color: 'error',  alert: mockQueueStats.counts.failed > 0 },
-  { label: 'Delayed',       value: mockQueueStats.counts.delayed,            color: 'warning' },
-  { label: 'Retrying',      value: mockQueueStats.counts.retrying,           color: 'warning' },
-  { label: 'Manual Today',  value: mockQueueStats.today.manual,              color: 'neutral' },
-  { label: 'Webhook Today', value: mockQueueStats.today.webhook,             color: 'neutral' },
+  { label: 'Waiting',   value: counts.value.waiting,   color: 'neutral' },
+  { label: 'Active',    value: counts.value.active,    color: 'primary' },
+  { label: 'Completed', value: counts.value.completed, color: 'success' },
+  { label: 'Failed',    value: counts.value.failed,    color: 'error',   alert: counts.value.failed > 0 },
+  { label: 'Delayed',   value: counts.value.delayed,   color: 'warning' },
+  { label: 'Paused',    value: counts.value.paused,    color: 'neutral' },
 ])
 
 // ── Failures ───────────────────────────────────────────────────────────────
-const recentFailures = computed(() =>
-  mockOrderSyncJobs.filter(j => j.status === 'failed')
-)
+const recentFailures = computed(() => jobs.value.filter(j => j.state === 'failed'))
 
 // ── Jobs table ─────────────────────────────────────────────────────────────
-const statusFilter = ref<MockOrderSyncJob['status'] | 'all'>('all')
+const statusFilter = ref<QueueJob['state'] | 'all'>('all')
 const search = ref('')
 
 const filteredJobs = computed(() => {
-  let jobs = mockOrderSyncJobs
+  let list = jobs.value
   if (statusFilter.value !== 'all') {
-    jobs = jobs.filter(j => j.status === statusFilter.value)
+    list = list.filter(j => j.state === statusFilter.value)
   }
   if (search.value.trim()) {
     const q = search.value.trim().toLowerCase()
-    jobs = jobs.filter(j =>
-      j.id.toLowerCase().includes(q) ||
-      (j.orderNumber ?? '').toLowerCase().includes(q) ||
-      (j.shopifyOrderId ?? '').toLowerCase().includes(q)
+    list = list.filter(j =>
+      (j.id ?? '').toLowerCase().includes(q) ||
+      (j.data.orderName ?? '').toLowerCase().includes(q) ||
+      (j.data.shopifyOrderId ?? '').toLowerCase().includes(q)
     )
   }
-  return jobs
+  return list
 })
 
 const filterOptions = [
@@ -65,19 +94,17 @@ const filterOptions = [
   { label: 'Completed', value: 'completed' },
   { label: 'Failed',    value: 'failed' },
   { label: 'Delayed',   value: 'delayed' },
-  { label: 'Retrying',  value: 'retrying' },
 ]
 
 const jobColumns = [
-  { accessorKey: 'type',        header: 'Job Type' },
-  { accessorKey: 'orderNumber', header: 'Order / Scope' },
-  { accessorKey: 'source',      header: 'Source' },
-  { accessorKey: 'status',      header: 'Status' },
-  { accessorKey: 'attempts',    header: 'Attempts' },
-  { accessorKey: 'createdAt',   header: 'Created' },
-  { accessorKey: 'updatedAt',   header: 'Updated' },
-  { accessorKey: 'finishedAt',  header: 'Finished' },
-  { accessorKey: 'errorMessage',header: 'Error' },
+  { accessorKey: 'name',      header: 'Job Type' },
+  { accessorKey: 'orderName', header: 'Order' },
+  { accessorKey: 'source',    header: 'Source' },
+  { accessorKey: 'state',     header: 'Status' },
+  { accessorKey: 'attempts',  header: 'Attempts' },
+  { accessorKey: 'createdAt', header: 'Created' },
+  { accessorKey: 'finishedAt',header: 'Finished' },
+  { accessorKey: 'failedReason', header: 'Error' },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -85,25 +112,23 @@ const statusColor = (s: string) => {
   if (s === 'completed') return 'success'
   if (s === 'active')    return 'primary'
   if (s === 'failed')    return 'error'
-  if (s === 'waiting' || s === 'delayed' || s === 'retrying') return 'warning'
+  if (s === 'waiting' || s === 'delayed') return 'warning'
   return 'neutral'
 }
 
 const sourceLabel = (s: string) => {
-  if (s === 'webhook')       return 'Webhook'
   if (s === 'scheduled_2am') return '2 AM Sync'
   if (s === 'manual')        return 'Manual'
   return s
 }
 
-const typeLabel = (t: string) => {
-  if (t === 'sync-single-order')        return 'Single Order'
-  if (t === 'sync-orders-scheduled')    return 'Scheduled Sync'
-  if (t === 'sync-orders-manual-today') return 'Sync Today'
-  return t
+const typeLabel = (name: string) => {
+  if (name === 'sync-order')      return 'Sync Order'
+  if (name === 'discover-orders') return 'Discover Orders'
+  return name
 }
 
-const fmt = (iso: string | undefined) => {
+const fmt = (iso: string | null | undefined) => {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('en-NZ', {
     dateStyle: 'medium',
@@ -123,22 +148,35 @@ const fmt = (iso: string | undefined) => {
         <p class="mt-0.5 text-sm text-gray-500">Monitor Shopify order sync jobs</p>
         <p class="mt-0.5 text-xs text-gray-400">Last refreshed: {{ lastRefreshedLabel }}</p>
       </div>
-      <UButton
-        icon="i-lucide-refresh-cw"
-        size="sm"
-        variant="soft"
-        :loading="refreshing"
-        :disabled="refreshing"
-        @click="refresh"
-      >
-        Refresh
-      </UButton>
+      <div class="flex items-center gap-2">
+        <UButton
+          icon="i-lucide-refresh-cw"
+          size="sm"
+          variant="soft"
+          :loading="refreshing || loading"
+          :disabled="refreshing || loading"
+          @click="doRefresh"
+        >
+          Refresh
+        </UButton>
+        <UButton
+          icon="i-lucide-trash-2"
+          size="sm"
+          color="error"
+          variant="soft"
+          :loading="cleaning"
+          :disabled="cleaning"
+          @click="cleanQueue"
+        >
+          Clean
+        </UButton>
+      </div>
     </div>
 
     <!-- Loading skeleton -->
-    <template v-if="refreshing">
-      <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <USkeleton v-for="n in 8" :key="n" class="h-20 w-full" />
+    <template v-if="loading">
+      <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <USkeleton v-for="n in 6" :key="n" class="h-20 w-full" />
       </div>
       <USkeleton class="mb-4 h-32 w-full" />
       <USkeleton class="h-64 w-full" />
@@ -146,7 +184,7 @@ const fmt = (iso: string | undefined) => {
 
     <template v-else>
       <!-- Summary cards -->
-      <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <UCard
           v-for="card in summaryCards"
           :key="card.label"
@@ -181,12 +219,12 @@ const fmt = (iso: string | undefined) => {
             :key="job.id"
             class="flex flex-wrap items-start gap-x-4 gap-y-1 rounded-lg bg-red-50 px-4 py-3 text-sm"
           >
-            <span class="font-semibold text-gray-900">{{ job.orderNumber ?? job.scope ?? job.id }}</span>
-            <span class="text-gray-600">{{ typeLabel(job.type) }}</span>
-            <UBadge color="neutral" variant="soft" size="sm">{{ sourceLabel(job.source) }}</UBadge>
-            <span class="grow text-red-700">{{ job.errorMessage ?? '—' }}</span>
+            <span class="font-semibold text-gray-900">{{ job.data.orderName ?? job.id }}</span>
+            <span class="text-gray-600">{{ typeLabel(job.name) }}</span>
+            <UBadge color="neutral" variant="soft" size="sm">{{ sourceLabel(job.data.source) }}</UBadge>
+            <span class="grow text-red-700">{{ job.failedReason ?? '—' }}</span>
             <span class="text-gray-400">{{ job.attemptsMade }}/{{ job.maxAttempts }} attempts</span>
-            <span class="text-gray-400">{{ fmt(job.updatedAt) }}</span>
+            <span class="text-gray-400">{{ fmt(job.finishedAt ?? job.processedAt) }}</span>
           </div>
         </div>
         <p v-else class="text-sm text-gray-400">No failed order sync jobs.</p>
@@ -215,20 +253,18 @@ const fmt = (iso: string | undefined) => {
         </template>
 
         <UTable v-if="filteredJobs.length" :data="filteredJobs" :columns="jobColumns">
-          <template #type-cell="{ row }">
-            <span class="text-sm">{{ typeLabel(row.original.type) }}</span>
+          <template #name-cell="{ row }">
+            <span class="text-sm">{{ typeLabel(row.original.name) }}</span>
           </template>
-          <template #orderNumber-cell="{ row }">
-            <span class="font-medium">
-              {{ row.original.orderNumber ?? row.original.scope ?? '—' }}
-            </span>
+          <template #orderName-cell="{ row }">
+            <span class="font-medium">{{ row.original.data.orderName ?? '—' }}</span>
           </template>
           <template #source-cell="{ row }">
-            <span class="text-sm text-gray-600">{{ sourceLabel(row.original.source) }}</span>
+            <span class="text-sm text-gray-600">{{ sourceLabel(row.original.data.source) }}</span>
           </template>
-          <template #status-cell="{ row }">
-            <UBadge :color="statusColor(row.original.status)" variant="soft" size="sm">
-              {{ row.original.status }}
+          <template #state-cell="{ row }">
+            <UBadge :color="statusColor(row.original.state)" variant="soft" size="sm">
+              {{ row.original.state }}
             </UBadge>
           </template>
           <template #attempts-cell="{ row }">
@@ -239,15 +275,12 @@ const fmt = (iso: string | undefined) => {
           <template #createdAt-cell="{ row }">
             <span class="text-sm text-gray-500">{{ fmt(row.original.createdAt) }}</span>
           </template>
-          <template #updatedAt-cell="{ row }">
-            <span class="text-sm text-gray-500">{{ fmt(row.original.updatedAt) }}</span>
-          </template>
           <template #finishedAt-cell="{ row }">
             <span class="text-sm text-gray-500">{{ fmt(row.original.finishedAt) }}</span>
           </template>
-          <template #errorMessage-cell="{ row }">
-            <span v-if="row.original.errorMessage" class="text-xs text-red-600">
-              {{ row.original.errorMessage }}
+          <template #failedReason-cell="{ row }">
+            <span v-if="row.original.failedReason" class="text-xs text-red-600">
+              {{ row.original.failedReason }}
             </span>
             <span v-else class="text-gray-300">—</span>
           </template>

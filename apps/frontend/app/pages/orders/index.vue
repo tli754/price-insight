@@ -39,11 +39,14 @@ const syncing = ref(false)
 async function syncOrders() {
   syncing.value = true
   try {
-    const result = await $fetch<{ synced: number }>('/api/orders/sync', { method: 'POST' })
-    toast.add({ title: `${result.synced} orders synced`, color: 'success' })
+    const result = await $fetch<{ jobsEnqueued: number }>(
+      '/api/shopify/orders/sync',
+      { method: 'POST', body: { mode: 'today', source: 'manual' } }
+    )
+    toast.add({ title: 'Sync queued', description: `${result.jobsEnqueued} order(s) queued for sync.`, color: 'success' })
     await refresh()
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Shopify sync failed'
+    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Could not queue sync'
     toast.add({ title: msg, color: 'error' })
   } finally {
     syncing.value = false
@@ -101,9 +104,8 @@ const lastSyncTime = 'Jun 2, 2026 2:00 AM'
 
 const formatDate = (iso: string | null) => {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('en-NZ', {
+  return new Date(iso).toLocaleDateString('en-NZ', {
     dateStyle: 'medium',
-    timeStyle: 'short',
     timeZone: 'Pacific/Auckland',
   })
 }
@@ -166,8 +168,8 @@ const columns = [
           placeholder="All sync"
           class="w-32"
         />
-        <UButton size="sm" icon="i-lucide-refresh-cw" :loading="syncing" @click="syncOrders">
-          Sync Now
+        <UButton size="sm" color="primary" icon="i-lucide-play" :loading="syncing" @click="syncOrders">
+          Sync Orders
         </UButton>
       </div>
     </div>
@@ -198,8 +200,8 @@ const columns = [
     <UCard v-else-if="!orders.length" class="py-16 text-center">
       <p class="text-sm font-semibold text-highlighted">No orders found</p>
       <p class="mt-1 text-sm text-toned">Sync orders from Shopify to see them here.</p>
-      <UButton class="mt-4" icon="i-lucide-refresh-cw" :loading="syncing" @click="syncOrders">
-        Sync Now
+      <UButton class="mt-4" color="primary" icon="i-lucide-play" :loading="syncing" @click="syncOrders">
+        Sync Orders
       </UButton>
     </UCard>
 

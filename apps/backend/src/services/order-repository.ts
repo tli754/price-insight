@@ -8,6 +8,7 @@ import {
   orders,
   products
 } from "../db/schema.js";
+import type { MappedCustomer, MappedAddress, MappedOrder } from "../lib/order-mapper.js";
 
 // ── Shopify API types ──────────────────────────────────────────────────────────
 
@@ -319,6 +320,162 @@ export class OrderRepository {
     ]);
 
     return { items: rows as OrderListRow[], total: Number(total) };
+  }
+
+  // ── GraphQL-based upsert ───────────────────────────────────────────────────
+
+  private async upsertMappedCustomer(customer: MappedCustomer): Promise<number> {
+    const [existing] = await this.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(eq(customers.shopifyCustomerId, customer.shopifyCustomerId))
+      .limit(1);
+
+    const payload = {
+      shopifyCustomerId: customer.shopifyCustomerId,
+      email: customer.email,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      phone: customer.phone,
+      state: customer.state,
+      currency: customer.currency,
+      verifiedEmail: customer.verifiedEmail,
+      tags: customer.tags,
+    };
+
+    if (existing) {
+      await this.db.update(customers).set(payload).where(eq(customers.id, existing.id));
+      return existing.id;
+    }
+
+    const result = await this.db.insert(customers).values(payload).$returningId();
+    return Number(result[0]?.id);
+  }
+
+  private async upsertMappedAddress(customerId: number, address: MappedAddress): Promise<void> {
+    if (!address.shopifyAddressId) return;
+
+    const [existing] = await this.db
+      .select({ id: customerAddresses.id })
+      .from(customerAddresses)
+      .where(eq(customerAddresses.shopifyAddressId, address.shopifyAddressId))
+      .limit(1);
+
+    const payload = {
+      customerId,
+      shopifyAddressId: address.shopifyAddressId,
+      addressName: address.addressName,
+      company: address.company,
+      address1: address.address1,
+      address2: address.address2,
+      city: address.city,
+      province: address.province,
+      country: address.country,
+      zip: address.zip,
+    };
+
+    if (existing) {
+      await this.db.update(customerAddresses).set(payload).where(eq(customerAddresses.id, existing.id));
+    } else {
+      await this.db.insert(customerAddresses).values(payload);
+    }
+  }
+
+  async upsertMappedOrder(mapped: MappedOrder): Promise<{ skipped: boolean }> {
+    // Upsert customer + address first (outside transaction — idempotent).
+    let customerId: number | null = null;
+    if (mapped.customer) {
+      customerId = await this.upsertMappedCustomer(mapped.customer);
+      if (mapped.customer.address) {
+        await this.upsertMappedAddress(customerId, mapped.customer.address);
+      }
+    }
+
+    // Staleness check — find existing order row.
+    const [existing] = await this.db
+      .select({ id: orders.id, shopifyUpdatedAt: orders.shopifyUpdatedAt })
+      .from(orders)
+      .where(eq(orders.shopifyOrderId, mapped.shopifyOrderId))
+      .limit(1);
+
+    if (existing?.shopifyUpdatedAt) {
+      const stored = new Date(existing.shopifyUpdatedAt);
+      if (mapped.shopifyUpdatedAt <= stored) {
+        return { skipped: true };
+      }
+    }
+
+    // Upsert order + replace line items inside a transaction.
+    await this.db.transaction(async (tx) => {
+      const orderPayload = {
+        shopifyOrderId: mapped.shopifyOrderId,
+        customerId,
+        orderNumber: mapped.orderNumber,
+        email: mapped.email,
+        financialStatus: mapped.financialStatus,
+        fulfillmentStatus: mapped.fulfillmentStatus,
+        currency: mapped.currency,
+        subtotalPrice: mapped.subtotalPrice,
+        totalPrice: mapped.totalPrice,
+        totalTax: mapped.totalTax,
+        totalShipping: mapped.totalShipping,
+        totalDiscounts: mapped.totalDiscounts,
+        sourceName: mapped.sourceName,
+        processedAt: mapped.processedAt,
+        cancelledAt: mapped.cancelledAt,
+        shopifyCreatedAt: mapped.shopifyCreatedAt,
+        shopifyUpdatedAt: mapped.shopifyUpdatedAt,
+      };
+
+      let orderId: number;
+      if (existing) {
+        await tx.update(orders).set(orderPayload).where(eq(orders.id, existing.id));
+        orderId = existing.id;
+      } else {
+        const result = await tx.insert(orders).values(orderPayload).$returningId();
+        orderId = Number(result[0]?.id);
+      }
+
+      // Resolve product FK mappings.
+      const shopifyProductIds = mapped.items
+        .map((i) => i.shopifyProductId)
+        .filter((id): id is number => id != null);
+
+      const productLookup = new Map<number, number>();
+      if (shopifyProductIds.length > 0) {
+        const rows = await tx
+          .select({ id: products.id, externalId: products.externalId })
+          .from(products)
+          .where(inArray(products.externalId, shopifyProductIds));
+        for (const row of rows) productLookup.set(row.externalId, row.id);
+      }
+
+      // Replace line items.
+      await tx.delete(orderItems).where(eq(orderItems.orderId, orderId));
+
+      if (mapped.items.length > 0) {
+        await tx.insert(orderItems).values(
+          mapped.items.map((item) => ({
+            orderId,
+            productId: item.shopifyProductId != null
+              ? (productLookup.get(item.shopifyProductId) ?? null)
+              : null,
+            shopifyLineItemId: item.shopifyLineItemId,
+            shopifyProductId: item.shopifyProductId,
+            shopifyVariantId: item.shopifyVariantId,
+            title: item.title,
+            variantTitle: item.variantTitle,
+            sku: item.sku,
+            quantity: item.quantity,
+            currentQuantity: item.currentQuantity,
+            unitPrice: item.unitPrice,
+            totalDiscount: item.totalDiscount,
+          }))
+        );
+      }
+    });
+
+    return { skipped: false };
   }
 
   async getOrderById(id: number): Promise<OrderDetailRow | null> {
