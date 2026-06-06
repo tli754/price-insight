@@ -17,6 +17,7 @@ export interface OrderListItem {
 export interface OrderListResponse {
   items: OrderListItem[]
   total: number
+  totalSales: number | null
   page: number
   limit: number
 }

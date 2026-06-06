@@ -8,6 +8,20 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 vi.mock("../db/index.js", () => ({ createDatabase: vi.fn() }));
+vi.mock("../config/redis.js", () => ({
+  createRedisConnection: vi.fn().mockReturnValue({ quit: vi.fn().mockResolvedValue(undefined) }),
+}));
+vi.mock("../services/order-sync-queue.js", () => ({
+  createOrderSyncQueue: vi.fn().mockReturnValue({
+    add: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  }),
+  ORDER_SYNC_QUEUE: "shopify-order-sync",
+}));
+vi.mock("../workers/order-sync-worker.js", () => ({
+  createOrderSyncWorker: vi.fn().mockReturnValue({ close: vi.fn().mockResolvedValue(undefined) }),
+}));
+vi.mock("../scheduler.js", () => ({ setupScheduler: vi.fn().mockResolvedValue(undefined) }));
 
 import { buildApp } from "../app.js";
 import { createDatabase } from "../db/index.js";
