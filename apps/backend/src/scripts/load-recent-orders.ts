@@ -1,61 +1,90 @@
 /**
- * Load orders from Shopify updated in the last 7 days (for testing).
+ * Load orders from Shopify into the database via the BullMQ queue.
+ * Safe to run multiple times — the worker skips orders that haven't changed
+ * (staleness check on shopify_updated_at).
  *
  * Usage:
  *   cd apps/backend && npx tsx src/scripts/load-recent-orders.ts
  *
- * Optional: pass a custom number of days
- *   cd apps/backend && DAYS=14 npx tsx src/scripts/load-recent-orders.ts
+ * Options (env vars):
+ *   SINCE=2024-01-01   Only fetch orders updated since this ISO date.
+ *                      Omit to fetch ALL orders.
+ *   BATCH_LOG=50       Log progress every N jobs enqueued (default: 50).
  */
 
 import "dotenv/config";
 
 import { loadEnv } from "../config/env.js";
-import { createDatabase } from "../db/index.js";
-import { OrderRepository } from "../services/order-repository.js";
+import { createRedisConnection } from "../config/redis.js";
+import { createOrderSyncQueue } from "../services/order-sync-queue.js";
+import type { SyncOrderJobData } from "../services/order-sync-queue.js";
+import { ShopifyGraphQLService } from "../services/shopify-graphql-service.js";
 import { ShopifyService } from "../services/shopify-service.js";
 
 const env = loadEnv();
 
-if (!env.SHOPIFY_TOKEN_URL || !env.SHOPIFY_PRODUCTS_URL || !env.SHOPIFY_CLIENT_ID || !env.SHOPIFY_CLIENT_SECRET) {
-  console.error("Shopify credentials are not configured. Check your .env file.");
+if (
+  !env.SHOPIFY_TOKEN_URL ||
+  !env.SHOPIFY_PRODUCTS_URL ||
+  !env.SHOPIFY_CLIENT_ID ||
+  !env.SHOPIFY_CLIENT_SECRET
+) {
+  console.error("[load-orders] Shopify credentials are not configured. Check your .env file.");
   process.exit(1);
 }
 
-if (!env.SHOPIFY_ORDERS_URL) {
-  console.error("SHOPIFY_ORDERS_URL is not configured. Check your .env file.");
-  process.exit(1);
-}
+const since = process.env.SINCE ?? null;
+const filter = since ? `updated_at:>=${since}` : "";
+const batchLog = parseInt(process.env.BATCH_LOG ?? "50", 10);
 
-const days = parseInt(process.env.DAYS ?? "7", 10);
-const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+console.log(
+  since
+    ? `[load-orders] Fetching orders updated since ${since}…`
+    : "[load-orders] Fetching ALL orders from Shopify…"
+);
 
-console.log(`[load-recent-orders] Fetching orders updated since ${since} (last ${days} days)…`);
+const redis = createRedisConnection(env);
+const queue = createOrderSyncQueue(redis);
 
-const { db, pool } = createDatabase(env);
-const shopify = new ShopifyService(
+const shopifyService = new ShopifyService(
   env.SHOPIFY_TOKEN_URL,
   env.SHOPIFY_PRODUCTS_URL,
   env.SHOPIFY_CLIENT_ID,
   env.SHOPIFY_CLIENT_SECRET,
   env.SHOPIFY_ORDERS_URL
 );
-const orderRepo = new OrderRepository(db);
+const graphqlService = new ShopifyGraphQLService(env.SHOPIFY_PRODUCTS_URL);
 
 try {
-  const accessToken = await shopify.getAccessToken();
-  const orders = await shopify.fetchOrders(accessToken, since);
-  console.log(`[load-recent-orders] ${orders.length} orders fetched from Shopify`);
+  const accessToken = await shopifyService.getAccessToken();
+  const orders = await graphqlService.fetchOrders(accessToken, filter);
+  console.log(`[load-orders] ${orders.length} orders fetched`);
 
   if (orders.length === 0) {
-    console.log("[load-recent-orders] Nothing to import.");
+    console.log("[load-orders] Nothing to enqueue.");
   } else {
-    const synced = await orderRepo.importOrders(orders);
-    console.log(`[load-recent-orders] Done. ${synced} orders imported.`);
+    let enqueued = 0;
+    for (const order of orders) {
+      const jobData: SyncOrderJobData = {
+        type: "sync-order",
+        source: "manual",
+        shopifyOrderId: order.id,
+        orderName: order.name,
+        shopifyUpdatedAt: order.updatedAt,
+        shopifyOrder: order,
+      };
+      await queue.add("sync-order", jobData);
+      enqueued++;
+      if (enqueued % batchLog === 0) {
+        console.log(`[load-orders] Enqueued ${enqueued}/${orders.length}…`);
+      }
+    }
+    console.log(`[load-orders] Done. ${enqueued} jobs enqueued. Worker will skip unchanged orders.`);
   }
 } catch (err) {
-  console.error("[load-recent-orders] Failed:", err);
+  console.error("[load-orders] Failed:", err);
   process.exit(1);
 } finally {
-  await pool.end();
+  await queue.close();
+  await redis.quit();
 }
