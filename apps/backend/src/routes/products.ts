@@ -66,6 +66,19 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
     return { submitted };
   });
 
+  fastify.get("/products/:id/sales", async (request) => {
+    const params = request.params as { id: string };
+    const query = request.query as { page?: string; limit?: string };
+    const id = parseProductId(params.id);
+    const page = Math.max(1, parseInt(query.page ?? "1", 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? "20", 10) || 20));
+
+    const product = await fastify.productRepository.getProductById(id);
+    if (!product) throw new AppError(404, "PRODUCT_NOT_FOUND", "Product not found.");
+
+    return fastify.orderRepository.getProductSalesHistory(id, { page, limit });
+  });
+
   fastify.delete("/products/:id", async (request, reply) => {
     const id = parseProductId((request.params as { id: string }).id);
     const product = await fastify.productRepository.getProductById(id);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { CompetitorItem, CompetitorsByProductResponse } from '~/shared/types/competitor'
+import type { ProductSalesHistoryResponse } from '~/shared/types/order'
 import type { ProductRow } from '~/shared/types/product'
 
 
@@ -15,6 +16,16 @@ const { data: competitorsData, pending: competitorsPending, refresh: refreshComp
     `/api/products/${route.params.id}/competitors`,
     { lazy: true }
   )
+
+const salesPage = ref(1)
+const salesPageSize = 20
+const salesUrl = computed(() =>
+  `/api/products/${route.params.id}/sales?page=${salesPage.value}&limit=${salesPageSize}`
+)
+const { data: salesData, pending: salesPending } = await useFetch<ProductSalesHistoryResponse>(
+  salesUrl,
+  { lazy: true, watch: [salesUrl] }
+)
 
 const product = computed(() => data.value?.item ?? null)
 
@@ -108,6 +119,18 @@ function formatPrice(extracted: number | null, raw: string | null, currency: str
   if (raw) return raw
   if (extracted == null) return '—'
   return [currency, extracted].filter(Boolean).join(' ')
+}
+
+function financialColor(status: string | null) {
+  if (status === 'paid') return 'success' as const
+  if (status === 'refunded' || status === 'voided') return 'error' as const
+  if (status === 'pending') return 'warning' as const
+  return 'neutral' as const
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function formatCapturedAt(val: string | null): string {
@@ -389,6 +412,134 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+      </UCard>
+
+      <!-- Sales History -->
+      <UCard class="mb-6">
+        <template #header>Sales History</template>
+
+        <div v-if="salesPending" class="space-y-3">
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <USkeleton v-for="i in 4" :key="i" class="h-20 rounded-lg" />
+          </div>
+          <USkeleton class="h-44 w-full rounded-lg" />
+          <USkeleton class="h-48 w-full rounded-lg" />
+        </div>
+
+        <template v-else-if="salesData">
+          <!-- Summary cards -->
+          <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="rounded-lg border border-default/50 bg-default/5 p-3">
+              <p class="text-xs text-toned">Total Sold</p>
+              <p class="mt-1 text-2xl font-semibold text-highlighted">{{ salesData.summary.totalQty }}</p>
+              <p class="text-xs text-toned">units all-time</p>
+            </div>
+            <div class="rounded-lg border border-default/50 bg-default/5 p-3">
+              <p class="text-xs text-toned">Total Revenue</p>
+              <p class="mt-1 text-2xl font-semibold text-highlighted">${{ Math.round(salesData.summary.totalRevenue).toLocaleString() }}</p>
+              <p class="text-xs text-toned">all-time</p>
+            </div>
+            <div class="rounded-lg border border-default/50 bg-default/5 p-3">
+              <p class="text-xs text-toned">Orders</p>
+              <p class="mt-1 text-2xl font-semibold text-highlighted">{{ salesData.summary.orderCount }}</p>
+              <p class="text-xs text-toned">containing this product</p>
+            </div>
+            <div class="rounded-lg border border-default/50 bg-default/5 p-3">
+              <p class="text-xs text-toned">Last Sale</p>
+              <p class="mt-1 text-lg font-semibold text-highlighted">{{ fmtDate(salesData.summary.lastSoldAt) }}</p>
+              <p v-if="salesData.summary.avgUnitPrice" class="text-xs text-toned">
+                avg ${{ Number(salesData.summary.avgUnitPrice).toFixed(2) }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Period stats -->
+          <div class="mb-4 flex flex-wrap gap-6 rounded-lg border border-default/50 bg-default/5 px-4 py-3 text-sm">
+            <div>
+              <span class="text-toned">7d:</span>
+              <span class="ml-1 font-medium text-highlighted">{{ salesData.summary.sold7d }} units</span>
+              <span class="ml-1 text-toned">(${{ Math.round(salesData.summary.revenue7d).toLocaleString() }})</span>
+            </div>
+            <div>
+              <span class="text-toned">30d:</span>
+              <span class="ml-1 font-medium text-highlighted">{{ salesData.summary.sold30d }} units</span>
+              <span class="ml-1 text-toned">(${{ Math.round(salesData.summary.revenue30d).toLocaleString() }})</span>
+            </div>
+            <div>
+              <span class="text-toned">90d:</span>
+              <span class="ml-1 font-medium text-highlighted">{{ salesData.summary.sold90d }} units</span>
+              <span class="ml-1 text-toned">(${{ Math.round(salesData.summary.revenue90d).toLocaleString() }})</span>
+            </div>
+          </div>
+
+          <!-- Monthly chart -->
+          <div v-if="salesData.monthly.length" class="mb-4">
+            <p class="mb-1 text-xs font-medium text-toned">Units Sold — Last 12 Months</p>
+            <div class="rounded-lg border border-default/50 bg-default/5 p-3">
+              <SalesBarChart :monthly="salesData.monthly" />
+            </div>
+          </div>
+
+          <!-- Line items table -->
+          <div v-if="salesData.total > 0" class="rounded-lg border border-default/50">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-default/50 bg-default/20">
+                    <th class="px-3 py-2 text-left font-medium text-toned">Date</th>
+                    <th class="px-3 py-2 text-left font-medium text-toned">Order</th>
+                    <th class="px-3 py-2 text-left font-medium text-toned">Customer</th>
+                    <th class="px-3 py-2 text-right font-medium text-toned">Qty</th>
+                    <th class="px-3 py-2 text-right font-medium text-toned">Unit Price</th>
+                    <th class="px-3 py-2 text-right font-medium text-toned">Line Total</th>
+                    <th class="px-3 py-2 text-left font-medium text-toned">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="item in salesData.items"
+                    :key="`${item.orderId}-${item.qty}`"
+                    class="border-b border-default/30 last:border-0 hover:bg-default/10"
+                  >
+                    <td class="whitespace-nowrap px-3 py-2 text-xs text-toned">{{ fmtDate(item.processedAt) }}</td>
+                    <td class="px-3 py-2">
+                      <NuxtLink :to="`/orders/${item.orderId}`" class="font-mono text-primary-600 hover:underline">
+                        {{ item.orderNumber }}
+                      </NuxtLink>
+                    </td>
+                    <td class="px-3 py-2 text-toned">
+                      {{ [item.customerFirstName, item.customerLastName].filter(Boolean).join(' ') || '—' }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-medium">{{ item.qty }}</td>
+                    <td class="px-3 py-2 text-right">
+                      {{ item.unitPrice != null ? `$${Number(item.unitPrice).toFixed(2)}` : '—' }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-medium">
+                      ${{ Number(item.lineTotal).toFixed(2) }}
+                    </td>
+                    <td class="px-3 py-2">
+                      <UBadge :color="financialColor(item.financialStatus)" variant="soft" size="xs">
+                        {{ item.financialStatus || '—' }}
+                      </UBadge>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="flex items-center justify-between border-t border-default/30 px-3 py-2">
+              <p class="text-xs text-toned">{{ salesData.total }} total line items</p>
+              <UPagination
+                v-if="salesData.total > salesPageSize"
+                v-model:page="salesPage"
+                :total="salesData.total"
+                :items-per-page="salesPageSize"
+              />
+            </div>
+          </div>
+          <div v-else class="py-6 text-center text-sm text-toned">No sales recorded for this product.</div>
+        </template>
+
+        <div v-else class="py-6 text-center text-sm text-toned">No sales data available.</div>
       </UCard>
 
       <!-- Product info grid -->

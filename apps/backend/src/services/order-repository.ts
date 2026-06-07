@@ -1,4 +1,4 @@
-import { and, count as sqlCount, desc, eq, inArray, like, max, or, sum as sqlSum } from "drizzle-orm";
+import { and, count as sqlCount, desc, eq, inArray, isNotNull, like, max, or, sql, sum as sqlSum } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -533,6 +533,123 @@ export class OrderRepository {
 
     return { order, customer, address, items };
   }
+
+  async getProductSalesHistory(
+    productId: number,
+    opts: { page: number; limit: number }
+  ): Promise<ProductSalesHistory> {
+    const offset = (opts.page - 1) * opts.limit;
+
+    const [summaryRows, monthlyRows, itemRows, [{ itemsTotal }]] = await Promise.all([
+      this.db
+        .select({
+          totalQty: sql<string>`SUM(${orderItems.quantity})`,
+          totalRevenue: sql<string>`SUM(${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0))`,
+          avgUnitPrice: sql<string>`AVG(${orderItems.unitPrice})`,
+          orderCount: sql<string>`COUNT(DISTINCT ${orders.id})`,
+          lastSoldAt: max(orders.processedAt),
+          sold7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN ${orderItems.quantity} ELSE 0 END)`,
+          sold30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN ${orderItems.quantity} ELSE 0 END)`,
+          sold90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN ${orderItems.quantity} ELSE 0 END)`,
+          revenue7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN ${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          revenue30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN ${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          revenue90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN ${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+        })
+        .from(orderItems)
+        .innerJoin(orders, eq(orderItems.orderId, orders.id))
+        .where(and(
+          eq(orderItems.productId, productId),
+          isNotNull(orders.processedAt),
+          sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
+        )),
+
+      this.db
+        .select({
+          month: sql<string>`DATE_FORMAT(${orders.processedAt}, '%Y-%m')`,
+          qty: sql<string>`SUM(${orderItems.quantity})`,
+          revenue: sql<string>`SUM(${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0))`,
+        })
+        .from(orderItems)
+        .innerJoin(orders, eq(orderItems.orderId, orders.id))
+        .where(and(
+          eq(orderItems.productId, productId),
+          isNotNull(orders.processedAt),
+          sql`${orders.processedAt} >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`,
+          sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
+        ))
+        .groupBy(sql`DATE_FORMAT(${orders.processedAt}, '%Y-%m')`)
+        .orderBy(sql`DATE_FORMAT(${orders.processedAt}, '%Y-%m')`),
+
+      this.db
+        .select({
+          orderId: orders.id,
+          orderNumber: orders.orderNumber,
+          processedAt: orders.processedAt,
+          customerFirstName: customers.firstName,
+          customerLastName: customers.lastName,
+          financialStatus: orders.financialStatus,
+          fulfillmentStatus: orders.fulfillmentStatus,
+          currency: orders.currency,
+          qty: orderItems.quantity,
+          unitPrice: orderItems.unitPrice,
+        })
+        .from(orderItems)
+        .innerJoin(orders, eq(orderItems.orderId, orders.id))
+        .leftJoin(customers, eq(orders.customerId, customers.id))
+        .where(and(
+          eq(orderItems.productId, productId),
+          sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
+        ))
+        .orderBy(desc(orders.processedAt))
+        .limit(opts.limit)
+        .offset(offset),
+
+      this.db
+        .select({ itemsTotal: sqlCount() })
+        .from(orderItems)
+        .innerJoin(orders, eq(orderItems.orderId, orders.id))
+        .where(and(
+          eq(orderItems.productId, productId),
+          sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
+        )),
+    ]);
+
+    const s = summaryRows[0];
+    return {
+      summary: {
+        totalQty: Number(s?.totalQty ?? 0),
+        totalRevenue: parseFloat(s?.totalRevenue ?? "0"),
+        avgUnitPrice: s?.avgUnitPrice != null ? parseFloat(String(s.avgUnitPrice)) : null,
+        orderCount: Number(s?.orderCount ?? 0),
+        lastSoldAt: s?.lastSoldAt instanceof Date ? s.lastSoldAt.toISOString() : null,
+        sold7d: Number(s?.sold7d ?? 0),
+        sold30d: Number(s?.sold30d ?? 0),
+        sold90d: Number(s?.sold90d ?? 0),
+        revenue7d: parseFloat(s?.revenue7d ?? "0"),
+        revenue30d: parseFloat(s?.revenue30d ?? "0"),
+        revenue90d: parseFloat(s?.revenue90d ?? "0"),
+      },
+      monthly: monthlyRows.map(r => ({
+        month: r.month ?? "",
+        qty: Number(r.qty ?? 0),
+        revenue: parseFloat(r.revenue ?? "0"),
+      })),
+      items: itemRows.map(r => ({
+        orderId: r.orderId,
+        orderNumber: r.orderNumber,
+        processedAt: r.processedAt instanceof Date ? r.processedAt.toISOString() : null,
+        customerFirstName: r.customerFirstName ?? null,
+        customerLastName: r.customerLastName ?? null,
+        financialStatus: r.financialStatus,
+        fulfillmentStatus: r.fulfillmentStatus,
+        currency: r.currency,
+        qty: r.qty,
+        unitPrice: r.unitPrice,
+        lineTotal: r.qty * (r.unitPrice ?? 0),
+      })),
+      total: Number(itemsTotal ?? 0),
+    };
+  }
 }
 
 export type OrderListRow = {
@@ -556,4 +673,35 @@ export type OrderDetailRow = {
   customer: typeof import("../db/schema.js").customers.$inferSelect | null;
   address: typeof import("../db/schema.js").customerAddresses.$inferSelect | null;
   items: (typeof import("../db/schema.js").orderItems.$inferSelect & { productTitle: string | null })[];
+};
+
+export type ProductSalesHistory = {
+  summary: {
+    totalQty: number;
+    totalRevenue: number;
+    avgUnitPrice: number | null;
+    orderCount: number;
+    lastSoldAt: string | null;
+    sold7d: number;
+    sold30d: number;
+    sold90d: number;
+    revenue7d: number;
+    revenue30d: number;
+    revenue90d: number;
+  };
+  monthly: { month: string; qty: number; revenue: number }[];
+  items: {
+    orderId: number;
+    orderNumber: string;
+    processedAt: string | null;
+    customerFirstName: string | null;
+    customerLastName: string | null;
+    financialStatus: string | null;
+    fulfillmentStatus: string | null;
+    currency: string | null;
+    qty: number;
+    unitPrice: number | null;
+    lineTotal: number;
+  }[];
+  total: number;
 };
