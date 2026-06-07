@@ -106,3 +106,44 @@ export interface OrderDetail {
 export interface OrderDetailResponse {
   item: OrderDetail
 }
+
+export interface ProductSalesSummary {
+  totalQty: number
+  totalRevenue: number
+  avgUnitPrice: number | null
+  orderCount: number
+  lastSoldAt: string | null
+  sold7d: number
+  sold30d: number
+  sold90d: number
+  revenue7d: number
+  revenue30d: number
+  revenue90d: number
+}
+
+export interface ProductSalesMonthly {
+  month: string
+  qty: number
+  revenue: number
+}
+
+export interface ProductSalesLineItem {
+  orderId: number
+  orderNumber: string
+  processedAt: string | null
+  customerFirstName: string | null
+  customerLastName: string | null
+  financialStatus: string | null
+  fulfillmentStatus: string | null
+  currency: string | null
+  qty: number
+  unitPrice: number | null
+  lineTotal: number
+}
+
+export interface ProductSalesHistoryResponse {
+  summary: ProductSalesSummary
+  monthly: ProductSalesMonthly[]
+  items: ProductSalesLineItem[]
+  total: number
+}
