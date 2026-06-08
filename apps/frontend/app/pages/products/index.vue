@@ -134,11 +134,11 @@ const paginated = computed(() => {
 // ── Column resize ─────────────────────────────────────────────────────────────
 
 const colWidths = reactive({
-  thumbnail: 72,
+  thumbnail: 60,
   title: 400,
-  sku: 130,
   price: 110,
   inventory: 110,
+  inventoryAlert: 120,
   status: 100,
   avgCompetitor: 140,
   sales7d: 130,
@@ -166,6 +166,16 @@ function stopResize() {
 function fmtSales(qty: number | undefined, rev: number | undefined): string {
   if (!qty) return '—'
   return `${qty} ($${Math.round(rev ?? 0).toLocaleString()})`
+}
+
+function inventoryAlert(p: ProductRow): { months: string; color: 'error' | 'warning' | 'success' } | null {
+  if (p.inventoryQuantity == null || !p.sold90d) return null
+  const monthlyRate = p.sold90d / 3
+  const months = p.inventoryQuantity / monthlyRate
+  const label = months >= 12 ? `${Math.floor(months)}mo` : `${months.toFixed(1)}mo`
+  if (months < 1) return { months: label, color: 'error' }
+  if (months < 3) return { months: label, color: 'warning' }
+  return { months: label, color: 'success' }
 }
 
 onMounted(() => {
@@ -238,13 +248,13 @@ onUnmounted(() => {
 
       <UCard>
         <div class="overflow-x-auto rounded-lg border border-default/50">
-          <table class="table-fixed text-sm">
+          <table class="min-w-max table-fixed text-sm">
             <colgroup>
               <col :style="`width: ${colWidths.thumbnail}px`" />
               <col :style="`width: ${colWidths.title}px`" />
-              <col :style="`width: ${colWidths.sku}px`" />
               <col :style="`width: ${colWidths.price}px`" />
               <col :style="`width: ${colWidths.inventory}px`" />
+              <col :style="`width: ${colWidths.inventoryAlert}px`" />
               <col :style="`width: ${colWidths.status}px`" />
               <col :style="`width: ${colWidths.avgCompetitor}px`" />
               <col :style="`width: ${colWidths.sales7d}px`" />
@@ -253,7 +263,7 @@ onUnmounted(() => {
             </colgroup>
             <thead>
               <tr class="border-b border-default/50 bg-default/20">
-                <th class="p-0" />
+                <th class="w-[60px] p-0" />
                 <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
                   <button class="flex cursor-pointer items-center gap-1 hover:text-highlighted" @click="toggleSort('title')">
                     Product Name
@@ -261,10 +271,6 @@ onUnmounted(() => {
                     <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
                   </button>
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'title')" />
-                </th>
-                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
-                  SKU
-                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'sku')" />
                 </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
                   <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('price')">
@@ -281,6 +287,10 @@ onUnmounted(() => {
                     Inventory
                   </button>
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'inventory')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-center font-medium text-toned">
+                  Inventory Alert
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'inventoryAlert')" />
                 </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
                   Status
@@ -321,8 +331,8 @@ onUnmounted(() => {
                 :key="p.id"
                 class="border-b border-default/30 last:border-0 hover:bg-default/10"
               >
-                <td class="p-0">
-                  <NuxtLink :to="`/products/${p.id}`">
+                <td class="w-[60px] p-0">
+                  <NuxtLink :to="`/products/${p.id}`" class="block">
                     <img
                       v-if="p.thumbnail"
                       :src="p.thumbnail"
@@ -341,15 +351,18 @@ onUnmounted(() => {
                     {{ p.title }}
                   </NuxtLink>
                 </td>
-                <td class="px-3 py-2">
-                  <span class="font-mono text-sm text-gray-500">{{ p.sku }}</span>
-                </td>
                 <td class="px-3 py-2 text-right">
                   <span v-if="p.price != null">${{ Number(p.price).toFixed(2) }}</span>
                   <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="px-3 py-2 text-right">
                   <span v-if="p.inventoryQuantity != null">{{ p.inventoryQuantity }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <UBadge v-if="inventoryAlert(p)" :color="inventoryAlert(p)!.color" variant="soft" size="sm">
+                    {{ inventoryAlert(p)!.months }}
+                  </UBadge>
                   <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="px-3 py-2">
