@@ -2,6 +2,7 @@
 import type { CompetitorItem, CompetitorsByProductResponse } from '~/shared/types/competitor'
 import type { ProductSalesHistoryResponse } from '~/shared/types/order'
 import type { ProductRow } from '~/shared/types/product'
+import type { GetLatestAiReportResponse, GenerateAiReportResponse, ProductAiReport } from '~/shared/types/ai-report'
 
 
 const route = useRoute()
@@ -39,7 +40,6 @@ watch(competitorsData, (val) => {
   })
 }, { immediate: true })
 
-const suggestedCompetitors = computed(() => displayCompetitors.value.filter(c => c.status === 'suggested'))
 const confirmedCompetitors = computed(() => displayCompetitors.value.filter(c => c.status === 'confirmed'))
 
 // Image gallery
@@ -192,6 +192,65 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', onResizeMove)
   window.removeEventListener('mouseup', stopResize)
 })
+
+// AI Report
+const { data: aiReportData } = await useFetch<GetLatestAiReportResponse>(
+  `/api/products/${route.params.id}/reports/ai/latest`,
+  { lazy: true }
+)
+
+const aiReport = computed<ProductAiReport | null>(() => aiReportData.value?.report ?? null)
+const aiGenerating = ref(false)
+const aiError = ref<string | null>(null)
+
+async function generateAiReport() {
+  aiGenerating.value = true
+  aiError.value = null
+  try {
+    const result = await $fetch<GenerateAiReportResponse>(
+      `/api/products/${route.params.id}/reports/ai`,
+      { method: 'POST' }
+    )
+    aiReportData.value = { productId: result.productId, report: result.report }
+  } catch (e: unknown) {
+    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Report generation failed'
+  } finally {
+    aiGenerating.value = false
+  }
+}
+
+function fmtAiDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function confidenceColor(confidence: string) {
+  if (confidence === 'high') return 'success' as const
+  if (confidence === 'medium') return 'warning' as const
+  return 'neutral' as const
+}
+
+function pricingRecommendationColor(rec: string) {
+  if (rec === 'INCREASE_PRICE') return 'success' as const
+  if (rec === 'DECREASE_PRICE') return 'error' as const
+  if (rec === 'HOLD_PRICE') return 'primary' as const
+  return 'neutral' as const
+}
+
+function trendColor(trend: string) {
+  if (trend === 'GROWING') return 'success' as const
+  if (trend === 'SLOWING') return 'error' as const
+  if (trend === 'STABLE') return 'primary' as const
+  return 'neutral' as const
+}
+
+function matchTypeColor(matchType: string) {
+  if (matchType === 'DIRECT_MATCH') return 'success' as const
+  if (matchType === 'SIMILAR_PRODUCT') return 'primary' as const
+  if (matchType === 'WEAK_MATCH') return 'warning' as const
+  if (matchType === 'REJECTED') return 'error' as const
+  return 'neutral' as const
+}
 </script>
 
 <template>
@@ -411,6 +470,162 @@ onUnmounted(() => {
               <PriceBoxChart :prices="chartPrices" :our-price="product.price" />
             </div>
           </div>
+        </div>
+      </UCard>
+
+      <!-- AI Insights -->
+      <UCard class="mb-6">
+        <template #header>
+          <div class="flex items-center justify-between gap-3">
+            <span>AI Insights</span>
+            <div class="flex items-center gap-2">
+              <span v-if="aiReport?.completedAt" class="text-xs text-toned">
+                Generated {{ fmtAiDate(aiReport.completedAt) }}
+              </span>
+              <UButton
+                size="xs"
+                :variant="aiReport ? 'soft' : 'solid'"
+                color="primary"
+                icon="i-lucide-sparkles"
+                :loading="aiGenerating"
+                :disabled="aiGenerating"
+                @click="generateAiReport"
+              >
+                {{ aiReport ? 'Refresh AI Report' : 'Generate AI Report' }}
+              </UButton>
+            </div>
+          </div>
+        </template>
+
+        <p v-if="aiError" class="mb-3 text-sm text-error-600">{{ aiError }}</p>
+
+        <!-- Empty state -->
+        <div v-if="!aiReport && !aiGenerating" class="py-8 text-center text-sm text-toned">
+          No AI report has been generated for this product yet. Click <strong>Generate AI Report</strong> to analyse
+          pricing, competitors, sales trend, and listing quality.
+        </div>
+
+        <!-- Failed state -->
+        <div v-else-if="aiReport?.status === 'failed'" class="py-6 text-center text-sm text-error-600">
+          Report generation failed: {{ aiReport.errorMessage ?? 'Unknown error' }}
+        </div>
+
+        <!-- Report output -->
+        <div v-else-if="aiReport?.output" class="space-y-5">
+
+          <!-- Pricing Recommendation -->
+          <div v-if="aiReport.output.pricing" class="rounded-lg border border-default/50 p-4">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <h3 class="text-sm font-semibold text-highlighted">Pricing Recommendation</h3>
+              <UBadge :color="pricingRecommendationColor(aiReport.output.pricing.recommendation)" variant="soft" size="sm">
+                {{ aiReport.output.pricing.recommendation.replace(/_/g, ' ') }}
+              </UBadge>
+              <UBadge :color="confidenceColor(aiReport.output.pricing.confidence)" variant="outline" size="sm">
+                {{ aiReport.output.pricing.confidence }} confidence
+              </UBadge>
+            </div>
+            <p class="mb-2 text-sm text-highlighted">{{ aiReport.output.pricing.summary }}</p>
+            <p class="mb-1 text-xs font-medium text-toned">Action</p>
+            <p class="mb-2 text-sm text-highlighted">{{ aiReport.output.pricing.action }}</p>
+            <div v-if="aiReport.output.pricing.reasoning.length" class="mb-2">
+              <p class="mb-1 text-xs font-medium text-toned">Reasoning</p>
+              <ul class="list-inside list-disc space-y-0.5 text-sm text-highlighted">
+                <li v-for="r in aiReport.output.pricing.reasoning" :key="r">{{ r }}</li>
+              </ul>
+            </div>
+            <div v-if="aiReport.output.pricing.risks.length">
+              <p class="mb-1 text-xs font-medium text-toned">Risks</p>
+              <ul class="list-inside list-disc space-y-0.5 text-sm text-error-600">
+                <li v-for="r in aiReport.output.pricing.risks" :key="r">{{ r }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Sales Trend -->
+          <div v-if="aiReport.output.salesTrend" class="rounded-lg border border-default/50 p-4">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <h3 class="text-sm font-semibold text-highlighted">Sales Trend</h3>
+              <UBadge :color="trendColor(aiReport.output.salesTrend.trend)" variant="soft" size="sm">
+                {{ aiReport.output.salesTrend.trend.replace(/_/g, ' ') }}
+              </UBadge>
+              <UBadge :color="confidenceColor(aiReport.output.salesTrend.confidence)" variant="outline" size="sm">
+                {{ aiReport.output.salesTrend.confidence }} confidence
+              </UBadge>
+            </div>
+            <p class="mb-2 text-sm text-highlighted">{{ aiReport.output.salesTrend.summary }}</p>
+            <p class="mb-2 text-sm text-highlighted">{{ aiReport.output.salesTrend.recentPerformance }}</p>
+            <div v-if="aiReport.output.salesTrend.insights.length" class="mb-2">
+              <p class="mb-1 text-xs font-medium text-toned">Insights</p>
+              <ul class="list-inside list-disc space-y-0.5 text-sm text-highlighted">
+                <li v-for="i in aiReport.output.salesTrend.insights" :key="i">{{ i }}</li>
+              </ul>
+            </div>
+            <p v-if="aiReport.output.salesTrend.action" class="text-sm text-highlighted">
+              <span class="font-medium text-toned">Action: </span>{{ aiReport.output.salesTrend.action }}
+            </p>
+          </div>
+
+          <!-- Competitor Match Quality -->
+          <div v-if="aiReport.output.competitorMatch" class="rounded-lg border border-default/50 p-4">
+            <h3 class="mb-2 text-sm font-semibold text-highlighted">Competitor Match Quality</h3>
+            <p class="mb-3 text-sm text-highlighted">{{ aiReport.output.competitorMatch.summary }}</p>
+            <div v-if="aiReport.output.competitorMatch.competitors.length" class="mb-3 space-y-2">
+              <div
+                v-for="c in aiReport.output.competitorMatch.competitors"
+                :key="String(c.competitorProductId)"
+                class="flex flex-wrap items-start gap-2 text-sm"
+              >
+                <UBadge :color="matchTypeColor(c.matchType)" variant="soft" size="sm">
+                  {{ c.matchType.replace(/_/g, ' ') }}
+                </UBadge>
+                <span class="text-toned">Score: {{ c.matchScore }}/100</span>
+                <span v-if="c.warning" class="text-warning-600">⚠ {{ c.warning }}</span>
+                <span class="text-highlighted">{{ c.reasons.join(' · ') }}</span>
+              </div>
+            </div>
+            <div v-if="aiReport.output.competitorMatch.recommendedActions.length">
+              <p class="mb-1 text-xs font-medium text-toned">Recommended Actions</p>
+              <ul class="list-inside list-disc space-y-0.5 text-sm text-highlighted">
+                <li v-for="a in aiReport.output.competitorMatch.recommendedActions" :key="a">{{ a }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Listing Improvement -->
+          <div v-if="aiReport.output.listingImprovement" class="rounded-lg border border-default/50 p-4">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <h3 class="text-sm font-semibold text-highlighted">Listing Improvement</h3>
+              <span class="text-sm text-toned">
+                Score: <strong class="text-highlighted">{{ aiReport.output.listingImprovement.listingScore }}/100</strong>
+              </span>
+            </div>
+            <p class="mb-3 text-sm text-highlighted">{{ aiReport.output.listingImprovement.summary }}</p>
+            <div v-if="aiReport.output.listingImprovement.mainIssues.length" class="mb-3">
+              <p class="mb-1 text-xs font-medium text-toned">Main Issues</p>
+              <ul class="list-inside list-disc space-y-0.5 text-sm text-error-600">
+                <li v-for="i in aiReport.output.listingImprovement.mainIssues" :key="i">{{ i }}</li>
+              </ul>
+            </div>
+            <div class="mb-3">
+              <p class="mb-1 text-xs font-medium text-toned">Improved Title</p>
+              <p class="text-sm text-highlighted">{{ aiReport.output.listingImprovement.improvedTitle }}</p>
+            </div>
+            <div v-if="aiReport.output.listingImprovement.improvedBulletPoints.length" class="mb-3">
+              <p class="mb-1 text-xs font-medium text-toned">Bullet Points</p>
+              <ul class="list-inside list-disc space-y-0.5 text-sm text-highlighted">
+                <li v-for="b in aiReport.output.listingImprovement.improvedBulletPoints" :key="b">{{ b }}</li>
+              </ul>
+            </div>
+            <div v-if="aiReport.output.listingImprovement.seoKeywords.length">
+              <p class="mb-1 text-xs font-medium text-toned">SEO Keywords</p>
+              <div class="flex flex-wrap gap-1">
+                <UBadge v-for="k in aiReport.output.listingImprovement.seoKeywords" :key="k" color="neutral" variant="soft" size="xs">
+                  {{ k }}
+                </UBadge>
+              </div>
+            </div>
+          </div>
+
         </div>
       </UCard>
 

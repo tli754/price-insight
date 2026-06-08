@@ -1,6 +1,8 @@
 import type { Queue } from "bullmq";
 
 import type { AppEnv } from "../config/env.js";
+import type { AiReportRepository } from "../services/ai-report-repository.js";
+import type { AiReportService } from "../services/ai-report-service.js";
 import type { CompetitorAnalysisService } from "../services/competitor-analysis-service.js";
 import type { CompetitorRepository } from "../services/competitor-repository.js";
 import type { DataForSeoService } from "../services/dataforseo-service.js";
@@ -21,5 +23,7 @@ declare module "fastify" {
     shopifyService: ShopifyService | null;
     shopifyGraphQLService: ShopifyGraphQLService | null;
     orderSyncQueue: Queue<OrderSyncJobData>;
+    aiReportRepository: AiReportRepository;
+    aiReportService: AiReportService;
   }
 }

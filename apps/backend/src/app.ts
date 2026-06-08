@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import OpenAI from "openai";
 
 import type { AppEnv } from "./config/env.js";
 import { createRedisConnection } from "./config/redis.js";
@@ -9,9 +10,12 @@ import healthRoutes from "./routes/health.js";
 import ordersRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
 import queueRoutes from "./routes/queue.js";
+import reportRoutes from "./routes/reports.js";
 import shopifyRoutes from "./routes/shopify.js";
 import webhookRoutes from "./routes/webhook.js";
 import { setupScheduler } from "./scheduler.js";
+import { AiReportRepository } from "./services/ai-report-repository.js";
+import { AiReportService } from "./services/ai-report-service.js";
 import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
 import { CompetitorRepository } from "./services/competitor-repository.js";
 import { DataForSeoService } from "./services/dataforseo-service.js";
@@ -44,6 +48,17 @@ export async function buildApp(env: AppEnv) {
 
   const orderRepository = new OrderRepository(db);
 
+  const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  const aiReportRepository = new AiReportRepository(db);
+  const aiReportService = new AiReportService(
+    aiReportRepository,
+    productRepository,
+    competitorRepository,
+    orderRepository,
+    openai,
+    env.OPENAI_MODEL
+  );
+
   const redis = createRedisConnection(env);
   const orderSyncQueue = createOrderSyncQueue(redis);
   const orderSyncWorker = createOrderSyncWorker(
@@ -67,6 +82,8 @@ export async function buildApp(env: AppEnv) {
   app.decorate("shopifyService", shopifyService);
   app.decorate("shopifyGraphQLService", shopifyGraphQLService);
   app.decorate("orderSyncQueue", orderSyncQueue);
+  app.decorate("aiReportRepository", aiReportRepository);
+  app.decorate("aiReportService", aiReportService);
 
   app.setErrorHandler((error: unknown, request, reply) => {
     request.log.error(error);
@@ -110,6 +127,7 @@ export async function buildApp(env: AppEnv) {
   await app.register(shopifyRoutes, { prefix: "/api" });
   await app.register(queueRoutes, { prefix: "/api" });
   await app.register(analysisRoutes, { prefix: "/api" });
+  await app.register(reportRoutes, { prefix: "/api" });
   await app.register(webhookRoutes);
 
   return app;
