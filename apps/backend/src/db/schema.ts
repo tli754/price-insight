@@ -4,6 +4,7 @@ import {
   decimal,
   index,
   int,
+  json,
   mysqlTable,
   text,
   timestamp,
@@ -292,3 +293,31 @@ export const orderItems = mysqlTable(
 
 export type OrderItemRow = typeof orderItems.$inferSelect;
 export type NewOrderItemRow = typeof orderItems.$inferInsert;
+
+export const productAiReports = mysqlTable(
+  "product_ai_reports",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    productId: int("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    status: varchar("status", { length: 20 }).notNull(),
+    model: varchar("model", { length: 100 }).notNull(),
+    reportTypes: json("report_types").$type<string[]>().notNull(),
+    inputHash: varchar("input_hash", { length: 64 }).notNull(),
+    inputSnapshot: json("input_snapshot").$type<unknown>(),
+    output: json("output").$type<unknown>(),
+    errorMessage: text("error_message"),
+    generatedBy: varchar("generated_by", { length: 255 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => ({
+    productCreatedIdx: index("idx_product_ai_reports_product_created").on(table.productId, table.createdAt),
+    productStatusIdx: index("idx_product_ai_reports_product_status").on(table.productId, table.status),
+    inputHashIdx: index("idx_product_ai_reports_input_hash").on(table.inputHash),
+  })
+);
+
+export type ProductAiReportRow = typeof productAiReports.$inferSelect;
+export type NewProductAiReportRow = typeof productAiReports.$inferInsert;
