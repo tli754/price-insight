@@ -56,15 +56,21 @@ watch(product, () => { selectedImageIndex.value = 0 })
 // Search
 const searching = ref(false)
 const searchError = ref<string | null>(null)
+const toast = useToast()
 
 async function searchCompetitors() {
   searching.value = true
   searchError.value = null
   try {
-    await $fetch(`/api/products/${route.params.id}/competitors/search`, { method: 'POST' })
-    await refreshCompetitors()
+    const result = await $fetch<{ submitted: number }>(`/api/products/${route.params.id}/competitors/search`, { method: 'POST' })
+    if (result.submitted > 0) {
+      toast.add({ title: 'Competitor search submitted', description: 'Results will appear shortly — refresh to check.', color: 'success' })
+    } else {
+      toast.add({ title: 'No search submitted', description: 'Product has no title to search with.', color: 'warning' })
+    }
   } catch (e: unknown) {
-    searchError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Search failed'
+    const err = e as { data?: { error?: { message?: string }; message?: string } }
+    searchError.value = err?.data?.error?.message ?? err?.data?.message ?? 'Search failed'
   } finally {
     searching.value = false
   }
@@ -275,7 +281,6 @@ function matchTypeColor(matchType: string) {
       <!-- Header -->
       <div class="mb-6 flex items-start justify-between gap-4">
         <div class="flex items-center gap-3">
-          <UButton variant="ghost" color="neutral" icon="i-lucide-arrow-left" @click="navigateTo('/products')" />
           <UBadge :color="statusColor(product.status)" variant="soft">
             {{ product.status }}
           </UBadge>
