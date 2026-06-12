@@ -12,6 +12,7 @@ import productRoutes from "./routes/products.js";
 import queueRoutes from "./routes/queue.js";
 import reportRoutes from "./routes/reports.js";
 import shopifyRoutes from "./routes/shopify.js";
+import shopifyWebhookRoutes from "./routes/shopify-webhook.js";
 import webhookRoutes from "./routes/webhook.js";
 import { setupScheduler } from "./scheduler.js";
 import { AiReportRepository } from "./services/ai-report-repository.js";
@@ -129,6 +130,7 @@ export async function buildApp(env: AppEnv) {
   await app.register(analysisRoutes, { prefix: "/api" });
   await app.register(reportRoutes, { prefix: "/api" });
   await app.register(webhookRoutes);
+  await app.register(shopifyWebhookRoutes);
 
   return app;
 }

@@ -79,6 +79,16 @@ export type ShopifyOrder = {
 export class OrderRepository {
   constructor(private readonly db: Database) {}
 
+  async getShopifyOrderUpdatedAt(shopifyNumericId: number): Promise<Date | null> {
+    const [row] = await this.db
+      .select({ shopifyUpdatedAt: orders.shopifyUpdatedAt })
+      .from(orders)
+      .where(eq(orders.shopifyOrderId, shopifyNumericId))
+      .limit(1);
+    if (!row?.shopifyUpdatedAt) return null;
+    return new Date(row.shopifyUpdatedAt);
+  }
+
   async getLastSyncedAt(): Promise<string | null> {
     const [row] = await this.db
       .select({ maxUpdatedAt: max(orders.shopifyUpdatedAt) })

@@ -12,12 +12,23 @@ export type SyncOrderJobData = {
   shopifyOrder: ShopifyGQLOrder;
 };
 
+export type SyncWebhookOrderJobData = {
+  type: "sync-order";
+  source: "webhook";
+  webhookId: string;
+  topic: string;
+  shopDomain: string;
+  shopifyOrderId: string;
+  orderName: string;
+  shopifyUpdatedAt: string;
+};
+
 export type DiscoverOrdersJobData = {
   type: "discover-orders";
   source: "scheduled_2am";
 };
 
-export type OrderSyncJobData = SyncOrderJobData | DiscoverOrdersJobData;
+export type OrderSyncJobData = SyncOrderJobData | SyncWebhookOrderJobData | DiscoverOrdersJobData;
 
 export const ORDER_SYNC_QUEUE = "shopify-order-sync";
 
