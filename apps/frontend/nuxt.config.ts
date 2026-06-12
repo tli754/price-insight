@@ -9,6 +9,9 @@ export default defineNuxtConfig({
     "/api/**": { proxy: `${gatewayUrl}/api/**` },
     "/auth/**": { proxy: `${gatewayUrl}/auth/**` },
   },
+  icon: {
+    localApiEndpoint: "/_nuxt_icon",
+  },
   modules: ["@nuxt/ui", "@nuxt/eslint"],
   eslint: {
     config: {

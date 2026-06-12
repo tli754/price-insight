@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "54ee0639-308a-4457-92fd-adb5db45b5d3",
-  "prevId": "8774ef26-b5ee-43c5-9097-8a1a212d6721",
+  "id": "31f55d10-1f82-443b-9e75-721f151b5b6b",
+  "prevId": "54ee0639-308a-4457-92fd-adb5db45b5d3",
   "tables": {
     "competitor": {
       "name": "competitor",
@@ -87,7 +87,7 @@
           "name": "competitor_id",
           "type": "int",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "title": {
@@ -99,7 +99,7 @@
         },
         "external_id": {
           "name": "external_id",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -146,6 +146,56 @@
           "notNull": false,
           "autoincrement": false
         },
+        "status": {
+          "name": "status",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'suggested'"
+        },
+        "country": {
+          "name": "country",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rating": {
+          "name": "rating",
+          "type": "decimal(3,1)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "review_count": {
+          "name": "review_count",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "shipping_raw": {
+          "name": "shipping_raw",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "shipping_extracted": {
+          "name": "shipping_extracted",
+          "type": "decimal(12,4)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "extracted_old_price": {
+          "name": "extracted_old_price",
+          "type": "decimal(12,4)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -175,7 +225,7 @@
           "columns": [
             "product_id",
             "competitor_id",
-            "product_link"
+            "external_id"
           ],
           "isUnique": true
         }

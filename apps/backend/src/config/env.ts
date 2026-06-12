@@ -26,7 +26,11 @@ const envSchema = z.object({
   SERPAPI_HL: z.string().default("en"),
   SERPAPI_GOOGLE_DOMAIN: z.string().default("google.co.nz"),
   SERPAPI_NUM_RESULTS: z.coerce.number().int().min(1).max(100).default(40),
-  OWN_STORE_NAME: z.string().optional()
+  OWN_STORE_NAME: z.string().optional(),
+  REDIS_HOST: z.string().default("127.0.0.1"),
+  REDIS_PORT: z.coerce.number().int().positive().default(6379),
+  REDIS_PASSWORD: z.string().default(""),
+  REDIS_DB: z.coerce.number().int().min(0).default(0),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

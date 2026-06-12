@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "af14d4d3-98b9-41cb-8916-9b57392e5d69",
-  "prevId": "d98c5795-31cb-437f-ad9f-86dfa771f2b1",
+  "id": "8774ef26-b5ee-43c5-9097-8a1a212d6721",
+  "prevId": "8ca8f77b-b682-4c90-a0f2-e2ac2fd391a5",
   "tables": {
     "competitor": {
       "name": "competitor",

@@ -1,18 +1,37 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { AppError } from "../lib/app-error.js";
+import { getTodayNZRange } from "../lib/nz-date-range.js";
+import type { SyncOrderJobData } from "../services/order-sync-queue.js";
 
 const ordersRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/orders/sync", async (request, reply) => {
-    if (!fastify.shopifyService) {
+    if (!fastify.shopifyService || !fastify.shopifyGraphQLService) {
       throw new AppError(503, "SHOPIFY_NOT_CONFIGURED", "Shopify credentials are not configured.");
     }
-    const lastSyncedAt = await fastify.orderRepository.getLastSyncedAt();
+    if (!fastify.orderSyncQueue) {
+      throw new AppError(503, "QUEUE_NOT_CONFIGURED", "Order sync queue is not available.");
+    }
+
+    const { from, to } = getTodayNZRange();
+    const filter = `updated_at:>=${from.toISOString()} updated_at:<=${to.toISOString()}`;
     const accessToken = await fastify.shopifyService.getAccessToken();
-    const shopifyOrders = await fastify.shopifyService.fetchOrders(accessToken, lastSyncedAt ?? undefined);
-    const synced = await fastify.orderRepository.importOrders(shopifyOrders);
-    reply.code(200);
-    return { synced };
+    const orders = await fastify.shopifyGraphQLService.fetchOrders(accessToken, filter);
+
+    for (const order of orders) {
+      const jobData: SyncOrderJobData = {
+        type: "sync-order",
+        source: "manual",
+        shopifyOrderId: order.id,
+        orderName: order.name,
+        shopifyUpdatedAt: order.updatedAt,
+        shopifyOrder: order,
+      };
+      await fastify.orderSyncQueue.add("sync-order", jobData);
+    }
+
+    reply.code(202);
+    return { status: "queued", jobsEnqueued: orders.length };
   });
 
   fastify.get("/orders", async (request, reply) => {
@@ -25,7 +44,7 @@ const ordersRoutes: FastifyPluginAsync = async (fastify) => {
     };
     const page = Math.max(1, parseInt(query.page ?? "1", 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? "20", 10) || 20));
-    const { items, total } = await fastify.orderRepository.listOrders({
+    const { items, total, totalSales } = await fastify.orderRepository.listOrders({
       page,
       limit,
       search: query.search || undefined,
@@ -33,7 +52,7 @@ const ordersRoutes: FastifyPluginAsync = async (fastify) => {
       fulfillmentStatus: query.fulfillmentStatus || undefined
     });
     reply.code(200);
-    return { items, total, page, limit };
+    return { items, total, totalSales, page, limit };
   });
 
   fastify.get("/orders/:id", async (request, reply) => {

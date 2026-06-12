@@ -12,7 +12,12 @@ const products = computed(() => data.value?.items ?? [])
 const route = useRoute()
 const router = useRouter()
 
-const search = ref(typeof route.query.search === 'string' ? route.query.search : '')
+const inputValue = ref(typeof route.query.search === 'string' ? route.query.search : '')
+const search = ref(inputValue.value)
+
+function applySearch() {
+  search.value = inputValue.value
+}
 
 watch(search, (val) => {
   router.replace({ query: { ...route.query, search: val || undefined } })
@@ -73,16 +78,18 @@ const filtered = computed(() =>
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-type SortKey = 'title' | 'price' | 'inventoryQuantity'
-const sortKey = ref<SortKey | null>(null)
-const sortDir = ref<'asc' | 'desc'>('asc')
+type SortKey = 'title' | 'price' | 'inventoryQuantity' | 'sold7d' | 'sold30d' | 'sold90d'
+const sortKey = ref<SortKey | null>('sold7d')
+const sortDir = ref<'asc' | 'desc'>('desc')
+
+const salesSortKeys: SortKey[] = ['sold7d', 'sold30d', 'sold90d']
 
 function toggleSort(key: SortKey) {
   if (sortKey.value === key) {
     sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
   } else {
     sortKey.value = key
-    sortDir.value = 'asc'
+    sortDir.value = salesSortKeys.includes(key) ? 'desc' : 'asc'
   }
   page.value = 1
 }
@@ -133,6 +140,10 @@ const colWidths = reactive({
   price: 110,
   inventory: 110,
   status: 100,
+  avgCompetitor: 140,
+  sales7d: 130,
+  sales30d: 130,
+  sales90d: 130,
 })
 
 type ColKey = keyof typeof colWidths
@@ -150,6 +161,11 @@ function onResizeMove(e: MouseEvent) {
 
 function stopResize() {
   resizing = null
+}
+
+function fmtSales(qty: number | undefined, rev: number | undefined): string {
+  if (!qty) return '—'
+  return `${qty} ($${Math.round(rev ?? 0).toLocaleString()})`
 }
 
 onMounted(() => {
@@ -178,7 +194,10 @@ onUnmounted(() => {
           @click="refresh"
         />
       </div>
-      <UInput v-model="search" placeholder="Search products..." icon="i-lucide-search" class="w-64" />
+      <div class="flex items-center gap-2">
+        <UInput v-model="inputValue" placeholder="Search products..." icon="i-lucide-search" class="w-56" @keyup.enter="applySearch" />
+        <UButton size="sm" icon="i-lucide-search" @click="applySearch">Search</UButton>
+      </div>
     </div>
 
     <!-- Loading skeleton -->
@@ -227,6 +246,10 @@ onUnmounted(() => {
               <col :style="`width: ${colWidths.price}px`" />
               <col :style="`width: ${colWidths.inventory}px`" />
               <col :style="`width: ${colWidths.status}px`" />
+              <col :style="`width: ${colWidths.avgCompetitor}px`" />
+              <col :style="`width: ${colWidths.sales7d}px`" />
+              <col :style="`width: ${colWidths.sales30d}px`" />
+              <col :style="`width: ${colWidths.sales90d}px`" />
             </colgroup>
             <thead>
               <tr class="border-b border-default/50 bg-default/20">
@@ -259,8 +282,36 @@ onUnmounted(() => {
                   </button>
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'inventory')" />
                 </th>
-                <th class="px-3 py-2 text-left font-medium text-toned">
+                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
                   Status
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'status')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  Avg Competitor
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'avgCompetitor')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('sold7d')">
+                    <UIcon v-if="sortKey === 'sold7d'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                    7d Sales
+                  </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'sales7d')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('sold30d')">
+                    <UIcon v-if="sortKey === 'sold30d'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                    30d Sales
+                  </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'sales30d')" />
+                </th>
+                <th class="px-3 py-2 text-right font-medium text-toned">
+                  <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('sold90d')">
+                    <UIcon v-if="sortKey === 'sold90d'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                    90d Sales
+                  </button>
                 </th>
               </tr>
             </thead>
@@ -305,6 +356,24 @@ onUnmounted(() => {
                   <UBadge :color="statusColor(p.status)" variant="soft" size="sm">
                     {{ p.status }}
                   </UBadge>
+                </td>
+                <td class="px-3 py-2 text-right font-mono text-sm">
+                  <template v-if="p.avgCompetitorPrice != null">
+                    <span :class="p.avgCompetitorPrice < (p.price ?? Infinity) ? 'text-red-500' : 'text-green-600'">
+                      ${{ p.avgCompetitorPrice.toFixed(2) }}
+                    </span>
+                    <span class="ml-1 text-xs text-gray-400">({{ p.confirmedCompetitorCount }})</span>
+                  </template>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-3 py-2 text-right font-mono text-sm text-gray-600">
+                  {{ fmtSales(p.sold7d, p.revenue7d) }}
+                </td>
+                <td class="px-3 py-2 text-right font-mono text-sm text-gray-600">
+                  {{ fmtSales(p.sold30d, p.revenue30d) }}
+                </td>
+                <td class="px-3 py-2 text-right font-mono text-sm text-gray-600">
+                  {{ fmtSales(p.sold90d, p.revenue90d) }}
                 </td>
               </tr>
             </tbody>

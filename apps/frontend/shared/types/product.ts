@@ -27,6 +27,16 @@ export interface ProductRow {
   description: string | null
   createdAt: string
   updatedAt: string
+  // Sales stats (from order_items, last 7/30/90 days)
+  sold7d?: number
+  revenue7d?: number
+  sold30d?: number
+  revenue30d?: number
+  sold90d?: number
+  revenue90d?: number
+  // Competitor price stats (confirmed competitors only)
+  avgCompetitorPrice?: number
+  confirmedCompetitorCount?: number
   // Only present on GET /api/products/:id
   images?: ProductImage[]
 }

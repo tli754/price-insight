@@ -13,6 +13,9 @@ import analysisRoutes from "../../routes/analysis.js";
 import healthRoutes from "../../routes/health.js";
 import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
+import queueRoutes from "../../routes/queue.js";
+import reportRoutes from "../../routes/reports.js";
+import shopifyRoutes from "../../routes/shopify.js";
 import webhookRoutes from "../../routes/webhook.js";
 
 // ── Minimal fake env ──────────────────────────────────────────────────────────
@@ -41,7 +44,11 @@ export const fakeEnv = {
   DATAFORSEO_LOGIN: "fake",
   DATAFORSEO_PASSWORD: "fake",
   DATAFORSEO_WEBHOOK_SECRET: "fake-webhook-secret",
-  WEBHOOK_HOST: "https://www.qweyha520.bar"
+  WEBHOOK_HOST: "https://www.qweyha520.bar",
+  REDIS_HOST: "127.0.0.1",
+  REDIS_PORT: 6379,
+  REDIS_PASSWORD: "",
+  REDIS_DB: 0,
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -105,12 +112,50 @@ export function makeShopifyService() {
   };
 }
 
+export function makeShopifyGraphQLService() {
+  return {
+    fetchOrders: vi.fn().mockResolvedValue([])
+  };
+}
+
+export function makeOrderSyncQueue() {
+  return {
+    add: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 }),
+    getJobs: vi.fn().mockResolvedValue([]),
+  };
+}
+
 export function makeOrderRepository() {
   return {
     getLastSyncedAt: vi.fn().mockResolvedValue(null),
     importOrders: vi.fn().mockResolvedValue(0),
+    upsertMappedOrder: vi.fn().mockResolvedValue({ skipped: false }),
     listOrders: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-    getOrderById: vi.fn().mockResolvedValue(null)
+    getOrderById: vi.fn().mockResolvedValue(null),
+    getProductSalesHistory: vi.fn().mockResolvedValue({
+      summary: { totalQty: 0, totalRevenue: 0, avgUnitPrice: null, orderCount: 0, lastSoldAt: null, sold7d: 0, sold30d: 0, sold90d: 0, revenue7d: 0, revenue30d: 0, revenue90d: 0 },
+      monthly: [],
+      items: [],
+      total: 0,
+    }),
+  };
+}
+
+export function makeAiReportRepository() {
+  return {
+    getLatestSuccessful: vi.fn().mockResolvedValue(null),
+    getById: vi.fn().mockResolvedValue(null),
+    insert: vi.fn().mockResolvedValue(1),
+    updateCompleted: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+export function makeAiReportService() {
+  return {
+    getLatestReport: vi.fn().mockResolvedValue(null),
+    generateReport: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -121,6 +166,10 @@ export type TestMocks = {
   dataForSeoService: ReturnType<typeof makeDataForSeoService>;
   orderRepository: ReturnType<typeof makeOrderRepository>;
   shopifyService: ReturnType<typeof makeShopifyService> | null;
+  shopifyGraphQLService: ReturnType<typeof makeShopifyGraphQLService> | null;
+  orderSyncQueue: ReturnType<typeof makeOrderSyncQueue> | null;
+  aiReportRepository: ReturnType<typeof makeAiReportRepository>;
+  aiReportService: ReturnType<typeof makeAiReportService>;
 };
 
 export async function buildTestApp(
@@ -133,7 +182,11 @@ export async function buildTestApp(
     competitorAnalysisService: overrides.competitorAnalysisService ?? makeCompetitorAnalysisService(),
     dataForSeoService: overrides.dataForSeoService ?? makeDataForSeoService(),
     orderRepository: overrides.orderRepository ?? makeOrderRepository(),
-    shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null
+    shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null,
+    shopifyGraphQLService: "shopifyGraphQLService" in overrides ? overrides.shopifyGraphQLService ?? null : null,
+    orderSyncQueue: "orderSyncQueue" in overrides ? (overrides.orderSyncQueue as ReturnType<typeof makeOrderSyncQueue> | null) : makeOrderSyncQueue(),
+    aiReportRepository: overrides.aiReportRepository ?? makeAiReportRepository(),
+    aiReportService: overrides.aiReportService ?? makeAiReportService(),
   };
 
   const app = Fastify({ logger: false });
@@ -145,6 +198,10 @@ export async function buildTestApp(
   app.decorate("dataForSeoService", mocks.dataForSeoService as any);
   app.decorate("orderRepository", mocks.orderRepository as any);
   app.decorate("shopifyService", mocks.shopifyService as any);
+  app.decorate("shopifyGraphQLService", mocks.shopifyGraphQLService as any);
+  app.decorate("orderSyncQueue", mocks.orderSyncQueue as any);
+  app.decorate("aiReportRepository", mocks.aiReportRepository as any);
+  app.decorate("aiReportService", mocks.aiReportService as any);
 
   app.setErrorHandler((error: unknown, request, reply) => {
     if (error instanceof AppError) {
@@ -165,7 +222,10 @@ export async function buildTestApp(
   await app.register(healthRoutes, { prefix: "/api" });
   await app.register(productRoutes, { prefix: "/api" });
   await app.register(ordersRoutes, { prefix: "/api" });
+  await app.register(shopifyRoutes, { prefix: "/api" });
+  await app.register(queueRoutes, { prefix: "/api" });
   await app.register(analysisRoutes, { prefix: "/api" });
+  await app.register(reportRoutes, { prefix: "/api" });
   await app.register(webhookRoutes);
 
   await app.ready();
