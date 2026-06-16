@@ -66,8 +66,13 @@ jobs:
             local gcp_id="projects/${PROJECT}/secrets/${key}"
 
             if ! terraform state show "$res" &>/dev/null; then
-              echo "Importing $key"
-              terraform import "$res" "$gcp_id"
+              if gcloud secrets describe "$key" --project="$PROJECT" &>/dev/null; then
+                echo "Importing $key"
+                terraform import "$res" "$gcp_id"
+              else
+                echo "Secret $key not found in GCP, skipping import (will be created)"
+                return 0
+              fi
             fi
 
             if ! terraform state show "$ver_res" &>/dev/null; then
