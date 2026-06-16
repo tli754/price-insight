@@ -1,4 +1,4 @@
-name: Terraform Infrastructure
+name: Infrastructure
 
 # Manual-only trigger. Run plan first; apply requires explicit action input.
 on:
