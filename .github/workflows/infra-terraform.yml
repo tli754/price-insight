@@ -25,10 +25,10 @@ jobs:
       id-token: write
 
     env:
-      TF_DIR: infra/terraform/environments/prod
-      # Pass tfvars inline so no untracked tfvars file is needed in CI.
+      TF_DIR: infra/terraform
       TF_VAR_project_id: wd-tools
       TF_VAR_region: australia-southeast1
+      TF_VAR_ci_sa_email: price-insight-ci@wd-tools.iam.gserviceaccount.com
 
     steps:
       - uses: actions/checkout@v4
@@ -36,11 +36,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          # WIF provider — same pool used by deploy.yml.
-          # Value: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          # Dedicated Terraform service account (may differ from app CI SA).
-          service_account: ${{ secrets.GCP_TERRAFORM_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: terraform-ci@wd-tools.iam.gserviceaccount.com
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -70,7 +67,7 @@ jobs:
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-prod-${{ github.run_id }}
+          name: tfplan-${{ github.run_id }}
           path: |
             ${{ env.TF_DIR }}/tfplan
             ${{ env.TF_DIR }}/tfplan.txt
