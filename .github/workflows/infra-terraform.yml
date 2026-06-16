@@ -52,6 +52,50 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: terraform init
 
+      - name: Reconcile Terraform state
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          PROJECT=wd-tools
+
+          import_secret() {
+            local group="$1"
+            local key="$2"
+            local res="google_secret_manager_secret.${group}[\"${key}\"]"
+            local ver_res="google_secret_manager_secret_version.${group}[\"${key}\"]"
+            local gcp_id="projects/${PROJECT}/secrets/${key}"
+
+            if ! terraform state show "$res" &>/dev/null; then
+              echo "Importing $key"
+              terraform import "$res" "$gcp_id"
+            fi
+
+            if ! terraform state show "$ver_res" &>/dev/null; then
+              local ver
+              ver=$(gcloud secrets versions list "$key" \
+                --project="$PROJECT" --filter="state=ENABLED" \
+                --sort-by="~createTime" --limit=1 \
+                --format="value(name)" 2>/dev/null | grep -oE '[0-9]+$' || true)
+              if [ -n "$ver" ]; then
+                echo "Importing $key/versions/$ver"
+                terraform import "$ver_res" "${gcp_id}/versions/${ver}"
+              fi
+            fi
+          }
+
+          for key in \
+            backend-dataforseo-login backend-dataforseo-password \
+            backend-mysql-host backend-own-store-name \
+            backend-shopify-client-id backend-shopify-client-secret \
+            backend-shopify-orders-url backend-shopify-products-url \
+            backend-shopify-token-url; do
+            import_secret backend "$key"
+          done
+
+          import_secret frontend frontend-nuxt-api-url
+          import_secret gateway gateway-dev-auth-password
+          import_secret gateway gateway-session-secret
+
       - name: Terraform validate
         working-directory: ${{ env.TF_DIR }}
         run: terraform validate
