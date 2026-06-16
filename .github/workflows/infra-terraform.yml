@@ -25,10 +25,10 @@ jobs:
       id-token: write
 
     env:
-      TF_DIR: infra/terraform/environments/prod
-      # Pass tfvars inline so no untracked tfvars file is needed in CI.
+      TF_DIR: infra/terraform
       TF_VAR_project_id: wd-tools
       TF_VAR_region: australia-southeast1
+      TF_VAR_ci_sa_email: price-insight-ci@wd-tools.iam.gserviceaccount.com
 
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +70,7 @@ jobs:
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-prod-${{ github.run_id }}
+          name: tfplan-${{ github.run_id }}
           path: |
             ${{ env.TF_DIR }}/tfplan
             ${{ env.TF_DIR }}/tfplan.txt
