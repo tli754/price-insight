@@ -36,11 +36,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          # WIF provider — same pool used by deploy.yml.
-          # Value: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          # Dedicated Terraform service account (may differ from app CI SA).
-          service_account: ${{ secrets.GCP_TERRAFORM_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: terraform-ci@wd-tools.iam.gserviceaccount.com
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
