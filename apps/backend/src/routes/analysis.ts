@@ -51,7 +51,7 @@ const competitorRoutes: FastifyPluginAsync = async (fastify) => {
     return { items };
   });
 
-  fastify.post("/products/:id/competitors/search", async (request) => {
+  fastify.post("/products/:id/competitors/search", async (request, reply) => {
     const params = request.params as { id: string };
     const id = parseProductId(params.id);
 
@@ -60,8 +60,22 @@ const competitorRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(404, "PRODUCT_NOT_FOUND", "Product not found.");
     }
 
-    const results = await fastify.competitorAnalysisService.searchAndSuggest(product);
-    return { competitors: results };
+    if (!product.title) {
+      reply.code(202);
+      return { submitted: 0 };
+    }
+
+    const pingbackUrl =
+      `${fastify.env.WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping` +
+      `?secret=${fastify.env.DATAFORSEO_WEBHOOK_SECRET}&id=$id&tag=$tag`;
+
+    const submitted = await fastify.dataForSeoService.postShoppingTasks(
+      [{ id: product.id, title: product.title }],
+      pingbackUrl
+    );
+
+    reply.code(202);
+    return { submitted };
   });
 
   fastify.patch("/products/:id/competitors/:competitorId", async (request) => {

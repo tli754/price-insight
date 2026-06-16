@@ -112,7 +112,7 @@ const sorted = computed(() => {
 
 // ── Pagination ────────────────────────────────────────────────────────────────
 
-const page = ref(1)
+const page = ref(typeof route.query.page === 'string' ? Math.max(1, parseInt(route.query.page) || 1) : 1)
 const pageSizeStr = ref('20')
 const pageSize = computed(() => Number(pageSizeStr.value))
 
@@ -123,6 +123,9 @@ const pageSizeOptions = [
   { label: '100 per page', value: '100' },
 ]
 
+watch(page, (val) => {
+  router.replace({ query: { ...route.query, page: val > 1 ? String(val) : undefined } })
+})
 watch(pageSizeStr, () => { page.value = 1 })
 watch(search, () => { page.value = 1 })
 

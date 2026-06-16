@@ -15,6 +15,7 @@ import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
 import queueRoutes from "../../routes/queue.js";
 import reportRoutes from "../../routes/reports.js";
+import shopifyWebhookRoutes from "../../routes/shopify-webhook.js";
 import shopifyRoutes from "../../routes/shopify.js";
 import webhookRoutes from "../../routes/webhook.js";
 
@@ -35,7 +36,7 @@ export const fakeEnv = {
   SHOPIFY_PRODUCTS_URL: undefined,
   SHOPIFY_ORDERS_URL: undefined,
   SHOPIFY_CLIENT_ID: undefined,
-  SHOPIFY_CLIENT_SECRET: undefined,
+  SHOPIFY_CLIENT_SECRET: "fake-shopify-secret",
   SERPAPI_LOCATION: "New Zealand",
   SERPAPI_GL: "nz",
   SERPAPI_HL: "en",
@@ -114,7 +115,8 @@ export function makeShopifyService() {
 
 export function makeShopifyGraphQLService() {
   return {
-    fetchOrders: vi.fn().mockResolvedValue([])
+    fetchOrders: vi.fn().mockResolvedValue([]),
+    fetchOrderById: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -129,6 +131,7 @@ export function makeOrderSyncQueue() {
 
 export function makeOrderRepository() {
   return {
+    getShopifyOrderUpdatedAt: vi.fn().mockResolvedValue(null),
     getLastSyncedAt: vi.fn().mockResolvedValue(null),
     importOrders: vi.fn().mockResolvedValue(0),
     upsertMappedOrder: vi.fn().mockResolvedValue({ skipped: false }),
@@ -227,6 +230,7 @@ export async function buildTestApp(
   await app.register(analysisRoutes, { prefix: "/api" });
   await app.register(reportRoutes, { prefix: "/api" });
   await app.register(webhookRoutes);
+  await app.register(shopifyWebhookRoutes);
 
   await app.ready();
 

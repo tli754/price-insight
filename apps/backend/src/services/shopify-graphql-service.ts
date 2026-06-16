@@ -1,5 +1,39 @@
 import { AppError } from "../lib/app-error.js";
 
+const ORDER_BY_ID_QUERY = `
+  query GetOrder($id: ID!) {
+    order(id: $id) {
+      id
+      name
+      email
+      createdAt
+      updatedAt
+      processedAt
+      cancelledAt
+      displayFinancialStatus
+      displayFulfillmentStatus
+      currencyCode
+      tags
+      sourceName
+      subtotalPriceSet      { shopMoney { amount currencyCode } }
+      totalDiscountsSet     { shopMoney { amount currencyCode } }
+      totalShippingPriceSet { shopMoney { amount currencyCode } }
+      totalTaxSet           { shopMoney { amount currencyCode } }
+      totalPriceSet         { shopMoney { amount currencyCode } }
+      lineItems(first: 50) {
+        pageInfo { hasNextPage }
+        nodes {
+          id title sku vendor quantity variantTitle
+          variant { id }
+          product { id }
+          originalUnitPriceSet { shopMoney { amount currencyCode } }
+          discountedTotalSet   { shopMoney { amount currencyCode } }
+        }
+      }
+    }
+  }
+`;
+
 const ORDERS_QUERY = `
   query GetOrders($cursor: String, $query: String) {
     orders(first: 100, after: $cursor, query: $query, sortKey: UPDATED_AT) {
@@ -106,6 +140,18 @@ type ThrottleStatus = {
   restoreRate: number;
 };
 
+type SingleOrderGraphQLResponse = {
+  data?: {
+    order?: (Omit<ShopifyGQLOrder, "lineItems"> & {
+      lineItems: {
+        pageInfo: { hasNextPage: boolean };
+        nodes: ShopifyGQLLineItem[];
+      };
+    }) | null;
+  };
+  errors?: Array<{ message: string }>;
+};
+
 type GraphQLResponse = {
   data?: {
     orders?: {
@@ -208,6 +254,39 @@ export class ShopifyGraphQLService {
         await sleep(waitMs);
       }
     } while (cursor);
+  }
+
+  /**
+   * Fetches a single order by its GID. Returns null when not found.
+   */
+  async fetchOrderById(accessToken: string, gid: string): Promise<ShopifyGQLOrder | null> {
+    const res = await fetch(this.graphqlUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken,
+      },
+      body: JSON.stringify({ query: ORDER_BY_ID_QUERY, variables: { id: gid } }),
+    });
+
+    if (!res.ok) {
+      throw new AppError(502, "SHOPIFY_GRAPHQL_FAILED", `Shopify GraphQL request failed: ${res.status}`);
+    }
+
+    const json = (await res.json()) as SingleOrderGraphQLResponse;
+
+    if (json.errors?.length) {
+      throw new AppError(502, "SHOPIFY_GRAPHQL_ERROR", `Shopify GraphQL error: ${json.errors[0].message}`);
+    }
+
+    const order = json.data?.order;
+    if (!order) return null;
+
+    if (order.lineItems.pageInfo.hasNextPage) {
+      console.warn(`[shopify-graphql] Order ${order.name} (${order.id}) has >50 line items — only first 50 were fetched.`);
+    }
+
+    return { ...order, lineItems: { nodes: order.lineItems.nodes } };
   }
 
   /**
