@@ -7,8 +7,6 @@ locals {
     "backend-mysql-database",
     "backend-openai-api-key",
     "backend-openai-model",
-    "backend-jina-api-key",
-    "backend-serpapi-api-key",
     "backend-dataforseo-login",
     "backend-dataforseo-password",
     "backend-shopify-token-url",
