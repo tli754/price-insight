@@ -23,12 +23,7 @@ export type SyncWebhookOrderJobData = {
   shopifyUpdatedAt: string;
 };
 
-export type DiscoverOrdersJobData = {
-  type: "discover-orders";
-  source: "scheduled_2am";
-};
-
-export type OrderSyncJobData = SyncOrderJobData | SyncWebhookOrderJobData | DiscoverOrdersJobData;
+export type OrderSyncJobData = SyncOrderJobData | SyncWebhookOrderJobData;
 
 export const ORDER_SYNC_QUEUE = "shopify-order-sync";
 

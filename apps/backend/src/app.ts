@@ -64,14 +64,16 @@ export async function buildApp(env: AppEnv) {
   const orderSyncQueue = createOrderSyncQueue(redis);
   const orderSyncWorker = createOrderSyncWorker(
     orderRepository,
-    orderSyncQueue,
     shopifyService,
     shopifyGraphQLService,
     redis
   );
 
+  let cronTask: import("node-cron").ScheduledTask | null = null;
   if (shopifyService && shopifyGraphQLService) {
-    await setupScheduler(orderSyncQueue);
+    // Remove stale BullMQ repeatable from prior deployments before starting the direct cron.
+    await orderSyncQueue.removeRepeatable("scheduled-discovery", { pattern: "0 14 * * *" });
+    cronTask = setupScheduler(orderSyncQueue, shopifyService, shopifyGraphQLService);
   }
 
   app.decorate("env", env);
@@ -116,6 +118,7 @@ export async function buildApp(env: AppEnv) {
   });
 
   app.addHook("onClose", async () => {
+    cronTask?.stop();
     await orderSyncWorker.close();
     await orderSyncQueue.close();
     await redis.quit();
