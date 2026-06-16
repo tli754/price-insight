@@ -50,8 +50,8 @@ resource "google_secret_manager_secret" "backend" {
 #   echo -n "real-value" | gcloud secrets versions add <secret-id> --data-file=-
 # The lifecycle block ensures Terraform never overwrites your manual updates.
 resource "google_secret_manager_secret_version" "backend" {
-  for_each    = google_secret_manager_secret.backend
-  secret      = each.value.id
+  for_each    = toset(local.backend_secrets)
+  secret      = google_secret_manager_secret.backend[each.key].id
   secret_data = "placeholder"
 
   lifecycle {
@@ -74,8 +74,8 @@ resource "google_secret_manager_secret" "frontend" {
 }
 
 resource "google_secret_manager_secret_version" "frontend" {
-  for_each    = google_secret_manager_secret.frontend
-  secret      = each.value.id
+  for_each    = toset(local.frontend_secrets)
+  secret      = google_secret_manager_secret.frontend[each.key].id
   secret_data = "placeholder"
 
   lifecycle {
@@ -98,8 +98,8 @@ resource "google_secret_manager_secret" "gateway" {
 }
 
 resource "google_secret_manager_secret_version" "gateway" {
-  for_each    = google_secret_manager_secret.gateway
-  secret      = each.value.id
+  for_each    = toset(local.gateway_secrets)
+  secret      = google_secret_manager_secret.gateway[each.key].id
   secret_data = "placeholder"
 
   lifecycle {
