@@ -1,3 +1,6 @@
+import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
+import jwt from "@fastify/jwt";
 import Fastify from "fastify";
 import OpenAI from "openai";
 
@@ -6,6 +9,7 @@ import { createRedisConnection } from "./config/redis.js";
 import { createDatabase } from "./db/index.js";
 import { AppError } from "./lib/app-error.js";
 import analysisRoutes from "./routes/analysis.js";
+import authRoutes from "./routes/auth.js";
 import healthRoutes from "./routes/health.js";
 import ordersRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
@@ -77,6 +81,15 @@ export async function buildApp(env: AppEnv) {
   }
 
   app.decorate("env", env);
+
+  await app.register(cors, {
+    origin: env.APP_URL,
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+  });
+  await app.register(cookie);
+  await app.register(jwt, { secret: env.SESSION_SECRET });
+
   app.decorate("productRepository", productRepository);
   app.decorate("competitorRepository", competitorRepository);
   app.decorate("competitorAnalysisService", competitorAnalysisService);
@@ -125,6 +138,7 @@ export async function buildApp(env: AppEnv) {
     await pool.end();
   });
 
+  await app.register(authRoutes);
   await app.register(healthRoutes, { prefix: "/api" });
   await app.register(productRoutes, { prefix: "/api" });
   await app.register(ordersRoutes, { prefix: "/api" });

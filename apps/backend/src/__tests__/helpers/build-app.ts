@@ -5,11 +5,15 @@
  * No real connections are opened. Call `app.close()` in afterEach/afterAll.
  */
 
+import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
+import jwt from "@fastify/jwt";
 import Fastify from "fastify";
 import { vi } from "vitest";
 
 import { AppError } from "../../lib/app-error.js";
 import analysisRoutes from "../../routes/analysis.js";
+import authRoutes from "../../routes/auth.js";
 import healthRoutes from "../../routes/health.js";
 import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
@@ -23,6 +27,9 @@ import webhookRoutes from "../../routes/webhook.js";
 export const fakeEnv = {
   NODE_ENV: "test" as const,
   PORT: 4000,
+  APP_URL: "http://localhost:3000",
+  SESSION_SECRET: "test-session-secret-at-least-32-characters",
+  DEV_AUTH_PASSWORD: "test-password",
   MYSQL_HOST: "localhost",
   MYSQL_PORT: 3306,
   MYSQL_USER: "test",
@@ -194,7 +201,17 @@ export async function buildTestApp(
 
   const app = Fastify({ logger: false });
 
-  app.decorate("env", { ...fakeEnv, ...envOverrides } as typeof fakeEnv);
+  const resolvedEnv = { ...fakeEnv, ...envOverrides } as typeof fakeEnv;
+  app.decorate("env", resolvedEnv);
+
+  await app.register(cors, {
+    origin: resolvedEnv.APP_URL,
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+  });
+  await app.register(cookie);
+  await app.register(jwt, { secret: resolvedEnv.SESSION_SECRET });
+
   app.decorate("productRepository", mocks.productRepository as any);
   app.decorate("competitorRepository", mocks.competitorRepository as any);
   app.decorate("competitorAnalysisService", mocks.competitorAnalysisService as any);
@@ -222,6 +239,7 @@ export async function buildTestApp(
     });
   });
 
+  await app.register(authRoutes);
   await app.register(healthRoutes, { prefix: "/api" });
   await app.register(productRoutes, { prefix: "/api" });
   await app.register(ordersRoutes, { prefix: "/api" });
