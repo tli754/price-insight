@@ -17,6 +17,9 @@ locals {
     "backend-own-store-name",
     "backend-session-secret",
     "backend-dev-auth-password",
+    "backend-jina-api-key",
+    "backend-serpapi-api-key",
+    "backend-dataforseo-webhook-secret",
   ]
 
   frontend_secrets = [
