@@ -15,6 +15,8 @@ locals {
     "backend-shopify-client-id",
     "backend-shopify-client-secret",
     "backend-own-store-name",
+    "backend-session-secret",
+    "backend-dev-auth-password",
   ]
 
   frontend_secrets = [
