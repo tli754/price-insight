@@ -1,4 +1,4 @@
-const gatewayUrl = process.env.NUXT_GATEWAY_URL ?? "http://localhost:4001"
+const backendUrl = process.env.NUXT_BACKEND_URL ?? "http://localhost:4000"
 
 export default defineNuxtConfig({
   compatibilityDate: "2026-05-02",
@@ -6,8 +6,8 @@ export default defineNuxtConfig({
   routeRules: {
     "/": { redirect: "/products" },
     "/api/health": {},
-    "/api/**": { proxy: `${gatewayUrl}/api/**` },
-    "/auth/**": { proxy: `${gatewayUrl}/auth/**` },
+    "/api/**": { proxy: `${backendUrl}/api/**` },
+    "/auth/**": { proxy: `${backendUrl}/auth/**` },
   },
   icon: {
     localApiEndpoint: "/_nuxt_icon",
