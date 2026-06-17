@@ -93,7 +93,9 @@ jobs:
             backend-mysql-host backend-own-store-name \
             backend-shopify-client-id backend-shopify-client-secret \
             backend-shopify-orders-url backend-shopify-products-url \
-            backend-shopify-token-url; do
+            backend-shopify-token-url backend-session-secret \
+            backend-dev-auth-password backend-jina-api-key \
+            backend-serpapi-api-key backend-dataforseo-webhook-secret; do
             import_secret backend "$key"
           done
 
