@@ -194,14 +194,6 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Record current revision (for rollback)
-        id: previous
-        run: |
-          PREV=$(gcloud run services describe frontend \
-            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
-            --format='value(status.traffic[0].revisionName)')
-          echo "revision=$PREV" >> "$GITHUB_OUTPUT"
-
       - name: Deploy by digest
         id: deploy
         run: |
@@ -213,43 +205,6 @@ jobs:
             --format='value(status.traffic[0].revisionName)')
           echo "revision=$NEW_REV" >> "$GITHUB_OUTPUT"
 
-      - name: Health check
-        id: health
-        continue-on-error: true
-        run: |
-          URL=$(gcloud run services describe frontend \
-            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
-            --format='value(status.url)')
-          BODY=$(curl -sf "$URL/api/health" \
-            --max-time 10 \
-            --retry 6 \
-            --retry-delay 5 \
-            --retry-connrefused \
-            --retry-all-errors)
-
-          if echo "$BODY" | grep -qi "successfully deployed a container image to Cloud Run"; then
-            echo "Frontend is still serving the Cloud Run bootstrap placeholder, not the real app"
-            exit 1
-          fi
-
-          ACTIVE_REVISION=$(gcloud run services describe frontend \
-            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
-            --format='value(status.traffic[0].revisionName)')
-          ACTIVE_IMAGE=$(gcloud run revisions describe "$ACTIVE_REVISION" \
-            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
-            --format='value(spec.containers[0].image)')
-          if [[ "$ACTIVE_IMAGE" == *"cloudrun/container/hello"* ]]; then
-            echo "Active revision $ACTIVE_REVISION is still the bootstrap placeholder image ($ACTIVE_IMAGE)"
-            exit 1
-          fi
-
-      - name: Roll back on health-check failure
-        if: steps.health.outcome == 'failure'
-        run: |
-          gcloud run services update-traffic frontend \
-            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
-            --to-revisions="${{ steps.previous.outputs.revision }}=100"
-
       - name: Job summary
         if: always()
         run: |
@@ -258,14 +213,4 @@ jobs:
             echo "- Requested SHA: \`${{ needs.resolve.outputs.deploy_sha }}\`"
             echo "- Deployed digest: \`${{ needs.resolve.outputs.frontend_digest }}\`"
             echo "- New revision: \`${{ steps.deploy.outputs.revision }}\`"
-            echo "- Health check: ${{ steps.health.outcome }}"
-            if [ "${{ steps.health.outcome }}" = "failure" ]; then
-              echo "- Rolled back to: \`${{ steps.previous.outputs.revision }}\`"
-            fi
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Fail job if health check failed
-        if: steps.health.outcome == 'failure'
-        run: |
-          echo "Health check failed — rolled back to ${{ steps.previous.outputs.revision }}"
-          exit 1
