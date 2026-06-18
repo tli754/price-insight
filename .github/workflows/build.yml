@@ -26,6 +26,7 @@ concurrency:
 env:
   GAR_REGION: australia-southeast1
   GAR_REPO: price-insight
+  RUN_REGION: australia-southeast1
   PROJECT_ID: wd-tools
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
@@ -109,6 +110,14 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.GAR_REGION }}-docker.pkg.dev --quiet
 
+      - name: Resolve backend URL (build-time proxy target)
+        id: backend_url
+        run: |
+          URL=$(gcloud run services describe backend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
       - name: Build and push frontend image (SHA-tagged, immutable)
         id: build
         uses: docker/build-push-action@v5
@@ -121,6 +130,8 @@ jobs:
             ${{ env.FRONTEND_IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:latest
           cache-to: type=inline
+          build-args: |
+            NUXT_BACKEND_URL=${{ steps.backend_url.outputs.url }}
 
       - name: Job summary
         run: |
