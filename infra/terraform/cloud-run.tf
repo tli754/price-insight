@@ -83,6 +83,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       template[0].containers[0].image,
       client,
       client_version,
+      traffic,
     ]
   }
 
@@ -181,6 +182,7 @@ resource "google_cloud_run_v2_service" "backend" {
       template[0].containers[0].image,
       client,
       client_version,
+      traffic,
     ]
   }
 
@@ -277,6 +279,7 @@ resource "google_cloud_run_v2_service" "order_worker" {
       template[0].containers[0].image,
       client,
       client_version,
+      traffic,
     ]
   }
 
