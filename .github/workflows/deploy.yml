@@ -136,7 +136,12 @@ jobs:
           URL=$(gcloud run services describe backend \
             --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
             --format='value(status.url)')
-          curl -sf "$URL/api/health" --max-time 10
+          curl -sf "$URL/api/health" \
+            --max-time 10 \
+            --retry 6 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            --retry-all-errors
 
       - name: Roll back on health-check failure
         if: steps.health.outcome == 'failure'
@@ -215,7 +220,12 @@ jobs:
           URL=$(gcloud run services describe frontend \
             --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
             --format='value(status.url)')
-          curl -sf "$URL/api/health" --max-time 10
+          curl -sf "$URL/api/health" \
+            --max-time 10 \
+            --retry 6 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            --retry-all-errors
 
       - name: Roll back on health-check failure
         if: steps.health.outcome == 'failure'
