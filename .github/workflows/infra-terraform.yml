@@ -12,6 +12,10 @@ on:
           - plan
           - apply
 
+concurrency:
+  group: terraform-production
+  cancel-in-progress: false
+
 jobs:
   terraform:
     name: Terraform ${{ inputs.action }} (prod)

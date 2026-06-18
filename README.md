@@ -236,8 +236,6 @@ pnpm db:studio
 | `REDIS_PASSWORD` | ⚠️ | Redis password (required in production) |
 | `REDIS_DB` | | Redis database index (default `0`) |
 | `REDIS_TTL_SECONDS` | | Default cache TTL in seconds |
-| `JINA_API_KEY` | ✅ | Jina Reader API key |
-| `SERPAPI_API_KEY` | ✅ | SerpAPI key |
 | `OPENAI_API_KEY` | ✅ | OpenAI API key |
 | `OPENAI_MODEL` | | OpenAI model name (default `gpt-4.1-mini`) |
 | `SHOPIFY_TOKEN_URL` | ✅ | Shopify OAuth token endpoint |

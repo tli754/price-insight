@@ -11,8 +11,6 @@ const envSchema = z.object({
   MYSQL_USER: z.string().min(1),
   MYSQL_PASSWORD: z.string().default(""),
   MYSQL_DATABASE: z.string().min(1),
-  JINA_API_KEY: z.string().min(1),
-  SERPAPI_API_KEY: z.string().min(1),
   DATAFORSEO_LOGIN: z.string().min(1),
   DATAFORSEO_PASSWORD: z.string().min(1),
   DATAFORSEO_WEBHOOK_SECRET: z.string().min(1),

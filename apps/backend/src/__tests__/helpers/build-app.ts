@@ -35,8 +35,6 @@ export const fakeEnv = {
   MYSQL_USER: "test",
   MYSQL_PASSWORD: "",
   MYSQL_DATABASE: "test",
-  JINA_API_KEY: "fake",
-  SERPAPI_API_KEY: "fake",
   OPENAI_API_KEY: "fake",
   OPENAI_MODEL: "gpt-4.1-mini",
   SHOPIFY_TOKEN_URL: undefined,

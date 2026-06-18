@@ -5,15 +5,27 @@ import type { AppEnv } from "../config/env.js";
 import * as schema from "./schema.js";
 
 export function createDatabase(env: AppEnv) {
-  const pool = mysql.createPool({
-    host: env.MYSQL_HOST,
-    port: env.MYSQL_PORT,
-    user: env.MYSQL_USER,
-    password: env.MYSQL_PASSWORD,
-    database: env.MYSQL_DATABASE,
-    connectionLimit: 10,
-    ssl: { rejectUnauthorized: false }
-  });
+  const isSocket = env.MYSQL_HOST.startsWith("/cloudsql/");
+
+  const pool = mysql.createPool(
+    isSocket
+      ? {
+          socketPath: env.MYSQL_HOST,
+          user: env.MYSQL_USER,
+          password: env.MYSQL_PASSWORD,
+          database: env.MYSQL_DATABASE,
+          connectionLimit: 10
+        }
+      : {
+          host: env.MYSQL_HOST,
+          port: env.MYSQL_PORT,
+          user: env.MYSQL_USER,
+          password: env.MYSQL_PASSWORD,
+          database: env.MYSQL_DATABASE,
+          connectionLimit: 10,
+          ssl: { rejectUnauthorized: false }
+        }
+  );
 
   const db = drizzle(pool, { schema, mode: "default" });
 
