@@ -45,7 +45,9 @@ console.log(
     : "[load-orders] Fetching ALL orders from Shopify…"
 );
 
-const redis = createRedisConnection(env);
+const redis = createRedisConnection(env, {
+  warn: (obj, msg) => console.warn("[load-orders]", msg, obj),
+});
 const queue = createOrderSyncQueue(redis);
 
 const shopifyService = new ShopifyService(
