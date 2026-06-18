@@ -64,7 +64,7 @@ export async function buildApp(env: AppEnv) {
     env.OPENAI_MODEL
   );
 
-  const redis = createRedisConnection(env);
+  const redis = createRedisConnection(env, app.log);
   const orderSyncQueue = createOrderSyncQueue(redis);
   const orderSyncWorker = createOrderSyncWorker(
     orderRepository,
