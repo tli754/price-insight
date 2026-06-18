@@ -1,11 +1,10 @@
 name: Deploy
 
+run-name: Deploy ${{ inputs.target }} from ${{ inputs.commit_sha != '' && inputs.commit_sha || 'selected branch' }} by ${{ github.actor }}
+
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Image tag to deploy — must be the 8-char commit SHA from the Build Images run'
-        required: true
       target:
         description: 'Which service to deploy'
         required: false
@@ -15,39 +14,50 @@ on:
           - all
           - backend
           - frontend
-  workflow_call:
-    inputs:
-      image_tag:
-        description: 'Full or 8-char commit SHA'
-        required: true
-        type: string
-      target:
-        description: 'Which service to deploy'
+      commit_sha:
+        description: 'Commit SHA to deploy. Leave empty to use the latest SHA from the selected branch.'
         required: false
-        type: string
-        default: 'all'
+
+concurrency:
+  group: cloud-run-production
+  cancel-in-progress: false
 
 env:
-  GKE_PROJECT: wd-tools
-  GKE_CLUSTER: wd-tools-medium
-  GKE_ZONE: australia-southeast1-a
+  GAR_REGION: australia-southeast1
+  RUN_REGION: australia-southeast1
+  PROJECT_ID: wd-tools
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
 
 jobs:
-  deploy:
-    name: Deploy to GKE
+  resolve:
+    name: Resolve SHA and verify images
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    outputs:
+      deploy_sha: ${{ steps.sha.outputs.deploy_sha }}
+      backend_digest: ${{ steps.backend_digest.outputs.digest }}
+      frontend_digest: ${{ steps.frontend_digest.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Resolve image tag
-        run: echo "IMAGE_TAG=${INPUT_TAG:0:8}" >> $GITHUB_ENV
-        env:
-          INPUT_TAG: ${{ inputs.image_tag }}
+      - name: Resolve and validate commit SHA
+        id: sha
+        run: |
+          INPUT_SHA="${{ inputs.commit_sha }}"
+          if [ -z "$INPUT_SHA" ]; then
+            DEPLOY_SHA="$GITHUB_SHA"
+          elif DEPLOY_SHA=$(git rev-parse --verify "${INPUT_SHA}^{commit}" 2>/dev/null); then
+            :
+          else
+            echo "::error::commit_sha '$INPUT_SHA' is not a valid commit in this repository"
+            exit 1
+          fi
+          echo "deploy_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -55,107 +65,181 @@ jobs:
           workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
           service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
 
-      - name: Set up gcloud + kubectl
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: gke-gcloud-auth-plugin
 
-      - name: Get GKE credentials
-        run: |
-          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
-            --zone ${{ env.GKE_ZONE }} \
-            --project wd-tools
-
-      - name: Apply base manifests
-        run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/ --recursive
-
-      - name: Sync secrets
-        run: |
-          PROJECT=wd-tools
-
-          MYSQL_HOST=$(gcloud secrets versions access latest --secret="backend-mysql-host" --project="$PROJECT")
-          MYSQL_USER=$(gcloud secrets versions access latest --secret="backend-mysql-user" --project="$PROJECT")
-          MYSQL_PASSWORD=$(gcloud secrets versions access latest --secret="backend-mysql-password" --project="$PROJECT")
-          MYSQL_DATABASE=$(gcloud secrets versions access latest --secret="backend-mysql-database" --project="$PROJECT")
-          OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="backend-openai-api-key" --project="$PROJECT")
-          OPENAI_MODEL=$(gcloud secrets versions access latest --secret="backend-openai-model" --project="$PROJECT")
-          JINA_API_KEY=$(gcloud secrets versions access latest --secret="backend-jina-api-key" --project="$PROJECT")
-          SERPAPI_API_KEY=$(gcloud secrets versions access latest --secret="backend-serpapi-api-key" --project="$PROJECT")
-          DATAFORSEO_LOGIN=$(gcloud secrets versions access latest --secret="backend-dataforseo-login" --project="$PROJECT")
-          DATAFORSEO_PASSWORD=$(gcloud secrets versions access latest --secret="backend-dataforseo-password" --project="$PROJECT")
-          DATAFORSEO_WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret="backend-dataforseo-webhook-secret" --project="$PROJECT")
-          SHOPIFY_TOKEN_URL=$(gcloud secrets versions access latest --secret="backend-shopify-token-url" --project="$PROJECT" 2>/dev/null || echo "")
-          SHOPIFY_PRODUCTS_URL=$(gcloud secrets versions access latest --secret="backend-shopify-products-url" --project="$PROJECT" 2>/dev/null || echo "")
-          SHOPIFY_ORDERS_URL=$(gcloud secrets versions access latest --secret="backend-shopify-orders-url" --project="$PROJECT" 2>/dev/null || echo "")
-          SHOPIFY_CLIENT_ID=$(gcloud secrets versions access latest --secret="backend-shopify-client-id" --project="$PROJECT" 2>/dev/null || echo "")
-          SHOPIFY_CLIENT_SECRET=$(gcloud secrets versions access latest --secret="backend-shopify-client-secret" --project="$PROJECT" 2>/dev/null || echo "")
-          OWN_STORE_NAME=$(gcloud secrets versions access latest --secret="backend-own-store-name" --project="$PROJECT" 2>/dev/null || echo "")
-
-          kubectl create secret generic backend-secrets \
-            --namespace=price-insight \
-            --from-literal=MYSQL_HOST="$MYSQL_HOST" \
-            --from-literal=MYSQL_PORT="3306" \
-            --from-literal=MYSQL_USER="$MYSQL_USER" \
-            --from-literal=MYSQL_PASSWORD="$MYSQL_PASSWORD" \
-            --from-literal=MYSQL_DATABASE="$MYSQL_DATABASE" \
-            --from-literal=REDIS_HOST="redis" \
-            --from-literal=REDIS_PORT="6379" \
-            --from-literal=REDIS_TTL_SECONDS="86400" \
-            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
-            --from-literal=OPENAI_MODEL="$OPENAI_MODEL" \
-            --from-literal=JINA_API_KEY="$JINA_API_KEY" \
-            --from-literal=SERPAPI_API_KEY="$SERPAPI_API_KEY" \
-            --from-literal=DATAFORSEO_LOGIN="$DATAFORSEO_LOGIN" \
-            --from-literal=DATAFORSEO_PASSWORD="$DATAFORSEO_PASSWORD" \
-            --from-literal=DATAFORSEO_WEBHOOK_SECRET="$DATAFORSEO_WEBHOOK_SECRET" \
-            --from-literal=SHOPIFY_TOKEN_URL="$SHOPIFY_TOKEN_URL" \
-            --from-literal=SHOPIFY_PRODUCTS_URL="$SHOPIFY_PRODUCTS_URL" \
-            --from-literal=SHOPIFY_ORDERS_URL="$SHOPIFY_ORDERS_URL" \
-            --from-literal=SHOPIFY_CLIENT_ID="$SHOPIFY_CLIENT_ID" \
-            --from-literal=SHOPIFY_CLIENT_SECRET="$SHOPIFY_CLIENT_SECRET" \
-            --from-literal=OWN_STORE_NAME="$OWN_STORE_NAME" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          NUXT_SESSION_PASSWORD=$(gcloud secrets versions access latest --secret="frontend-nuxt-session-password" --project="$PROJECT")
-          NUXT_DEV_AUTH_PASSWORD=$(gcloud secrets versions access latest --secret="frontend-nuxt-dev-auth-password" --project="$PROJECT")
-          NUXT_API_URL=$(gcloud secrets versions access latest --secret="frontend-nuxt-api-url" --project="$PROJECT")
-
-          kubectl create secret generic frontend-secrets \
-            --namespace=price-insight \
-            --from-literal=NUXT_SESSION_PASSWORD="$NUXT_SESSION_PASSWORD" \
-            --from-literal=NUXT_API_URL="$NUXT_API_URL" \
-            --from-literal=NUXT_DEV_AUTH_PASSWORD="$NUXT_DEV_AUTH_PASSWORD" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Run database migrations
+      - name: Verify backend image exists and resolve digest
+        id: backend_digest
         if: inputs.target == 'all' || inputs.target == 'backend'
         run: |
-          kubectl delete job db-migrate --ignore-not-found -n price-insight
+          DIGEST=$(gcloud artifacts docker images describe \
+            "${{ env.BACKEND_IMAGE }}:${{ steps.sha.outputs.deploy_sha }}" \
+            --format='value(image_summary.digest)') || {
+              echo "::error::backend image not found for SHA ${{ steps.sha.outputs.deploy_sha }} — run Build first"
+              exit 1
+            }
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
-          export BACKEND_IMAGE=${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          envsubst < .github/k8s/migration-job.yaml | kubectl apply -f -
-
-          if ! kubectl wait --for=condition=complete job/db-migrate \
-              -n price-insight --timeout=120s; then
-            echo "--- Migration logs ---"
-            kubectl logs -l job-name=db-migrate -n price-insight --tail=100
-            exit 1
-          fi
-
-      - name: Roll out backend
-        if: inputs.target == 'all' || inputs.target == 'backend'
-        run: |
-          kubectl set image deployment/backend \
-            backend=${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }} \
-            -n price-insight
-          kubectl rollout status deployment/backend -n price-insight --timeout=120s
-
-      - name: Roll out frontend
+      - name: Verify frontend image exists and resolve digest
+        id: frontend_digest
         if: inputs.target == 'all' || inputs.target == 'frontend'
         run: |
-          kubectl set image deployment/frontend \
-            frontend=${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
-            -n price-insight
-          kubectl rollout status deployment/frontend -n price-insight --timeout=120s
+          DIGEST=$(gcloud artifacts docker images describe \
+            "${{ env.FRONTEND_IMAGE }}:${{ steps.sha.outputs.deploy_sha }}" \
+            --format='value(image_summary.digest)') || {
+              echo "::error::frontend image not found for SHA ${{ steps.sha.outputs.deploy_sha }} — run Build first"
+              exit 1
+            }
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+  deploy-backend:
+    name: Deploy Backend
+    needs: resolve
+    if: inputs.target == 'all' || inputs.target == 'backend'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Record current revision (for rollback)
+        id: previous
+        run: |
+          PREV=$(gcloud run services describe backend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$PREV" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy by digest
+        id: deploy
+        run: |
+          gcloud run deploy backend \
+            --image="${{ env.BACKEND_IMAGE }}@${{ needs.resolve.outputs.backend_digest }}" \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}"
+          NEW_REV=$(gcloud run services describe backend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$NEW_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Health check
+        id: health
+        continue-on-error: true
+        run: |
+          URL=$(gcloud run services describe backend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.url)')
+          curl -sf "$URL/api/health" --max-time 10
+
+      - name: Roll back on health-check failure
+        if: steps.health.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic backend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --to-revisions="${{ steps.previous.outputs.revision }}=100"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Backend deploy"
+            echo "- Requested SHA: \`${{ needs.resolve.outputs.deploy_sha }}\`"
+            echo "- Deployed digest: \`${{ needs.resolve.outputs.backend_digest }}\`"
+            echo "- New revision: \`${{ steps.deploy.outputs.revision }}\`"
+            echo "- Health check: ${{ steps.health.outcome }}"
+            if [ "${{ steps.health.outcome }}" = "failure" ]; then
+              echo "- Rolled back to: \`${{ steps.previous.outputs.revision }}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if health check failed
+        if: steps.health.outcome == 'failure'
+        run: |
+          echo "Health check failed — rolled back to ${{ steps.previous.outputs.revision }}"
+          exit 1
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: [resolve, deploy-backend]
+    if: |
+      always() &&
+      needs.resolve.result == 'success' &&
+      (
+        inputs.target == 'frontend' ||
+        (inputs.target == 'all' && needs.deploy-backend.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Record current revision (for rollback)
+        id: previous
+        run: |
+          PREV=$(gcloud run services describe frontend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$PREV" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy by digest
+        id: deploy
+        run: |
+          gcloud run deploy frontend \
+            --image="${{ env.FRONTEND_IMAGE }}@${{ needs.resolve.outputs.frontend_digest }}" \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}"
+          NEW_REV=$(gcloud run services describe frontend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$NEW_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Health check
+        id: health
+        continue-on-error: true
+        run: |
+          URL=$(gcloud run services describe frontend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.url)')
+          curl -sf "$URL/api/health" --max-time 10
+
+      - name: Roll back on health-check failure
+        if: steps.health.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic frontend \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --to-revisions="${{ steps.previous.outputs.revision }}=100"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Frontend deploy"
+            echo "- Requested SHA: \`${{ needs.resolve.outputs.deploy_sha }}\`"
+            echo "- Deployed digest: \`${{ needs.resolve.outputs.frontend_digest }}\`"
+            echo "- New revision: \`${{ steps.deploy.outputs.revision }}\`"
+            echo "- Health check: ${{ steps.health.outcome }}"
+            if [ "${{ steps.health.outcome }}" = "failure" ]; then
+              echo "- Rolled back to: \`${{ steps.previous.outputs.revision }}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if health check failed
+        if: steps.health.outcome == 'failure'
+        run: |
+          echo "Health check failed — rolled back to ${{ steps.previous.outputs.revision }}"
+          exit 1
