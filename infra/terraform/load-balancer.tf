@@ -93,6 +93,10 @@ resource "google_compute_managed_ssl_certificate" "default" {
   managed {
     domains = [var.domain, var.apex_domain]
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_compute_target_https_proxy" "default" {

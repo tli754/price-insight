@@ -76,6 +76,26 @@ resource "google_secret_manager_secret_iam_member" "frontend_runtime_secrets" {
   member    = "serviceAccount:${google_service_account.frontend_runtime.email}"
 }
 
+# The Artifact Registry repo predates Terraform (created out-of-band, like the
+# Cloud SQL instance) — referenced as a data source rather than managed here.
+# Cloud Run's services.patch API validates image-pull access for the *calling*
+# identity on every update, even when the image itself isn't changing, so
+# terraform-ci needs read access or any in-place update to frontend/backend/
+# order-worker fails with a 403.
+data "google_artifact_registry_repository" "price_insight" {
+  project       = var.project_id
+  location      = var.region
+  repository_id = "price-insight"
+}
+
+resource "google_artifact_registry_repository_iam_member" "terraform_ci_artifact_reader" {
+  project    = data.google_artifact_registry_repository.price_insight.project
+  location   = data.google_artifact_registry_repository.price_insight.location
+  repository = data.google_artifact_registry_repository.price_insight.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${var.ci_sa_email}"
+}
+
 # --- Cloud Tasks / Cloud Scheduler OIDC caller identity ---------------------
 #
 # Shared identity Cloud Tasks and Cloud Scheduler both attach as the OIDC
