@@ -97,6 +97,6 @@ See `prompts/README.md` for the recommended full flow.
 
 Copy `.env.example` in each app before starting:
 
-**Backend** (`/apps/backend/.env`) requires: MySQL connection, Redis connection, `OPENAI_API_KEY`, `OPENAI_MODEL`. Optional: `JINA_API_KEY` (higher rate limits), `SERPAPI_API_KEY`.
+**Backend** (`/apps/backend/.env`) requires: MySQL connection, Redis connection, `OPENAI_API_KEY`, `OPENAI_MODEL`.
 
 **Frontend** (`/apps/frontend/.env`) requires: `NUXT_SESSION_PASSWORD` (32+ char string), `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_OAUTH_GOOGLE_CLIENT_SECRET`. Google OAuth callback URL: `http://localhost:3000/auth/google`.
