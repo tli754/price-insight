@@ -15,7 +15,6 @@ on:
           - all
           - backend
           - frontend
-          - gateway
   workflow_call:
     inputs:
       image_tag:
@@ -34,7 +33,6 @@ env:
   GKE_ZONE: australia-southeast1-a
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
-  GATEWAY_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-gateway
 
 jobs:
   deploy:
@@ -131,15 +129,6 @@ jobs:
             --from-literal=NUXT_DEV_AUTH_PASSWORD="$NUXT_DEV_AUTH_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          GATEWAY_SESSION_SECRET=$(gcloud secrets versions access latest --secret="gateway-session-secret" --project="$PROJECT")
-          GATEWAY_DEV_AUTH_PASSWORD=$(gcloud secrets versions access latest --secret="gateway-dev-auth-password" --project="$PROJECT")
-
-          kubectl create secret generic gateway-secrets \
-            --namespace=price-insight \
-            --from-literal=SESSION_SECRET="$GATEWAY_SESSION_SECRET" \
-            --from-literal=DEV_AUTH_PASSWORD="$GATEWAY_DEV_AUTH_PASSWORD" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
       - name: Run database migrations
         if: inputs.target == 'all' || inputs.target == 'backend'
         run: |
@@ -170,11 +159,3 @@ jobs:
             frontend=${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
             -n price-insight
           kubectl rollout status deployment/frontend -n price-insight --timeout=120s
-
-      - name: Roll out gateway
-        if: inputs.target == 'all' || inputs.target == 'gateway'
-        run: |
-          kubectl set image deployment/gateway \
-            gateway=${{ env.GATEWAY_IMAGE }}:${{ env.IMAGE_TAG }} \
-            -n price-insight
-          kubectl rollout status deployment/gateway -n price-insight --timeout=120s

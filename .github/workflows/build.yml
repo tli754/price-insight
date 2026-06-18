@@ -16,7 +16,6 @@ on:
           - all
           - backend
           - frontend
-          - gateway
 
 env:
   GAR_REGION: australia-southeast1
@@ -24,7 +23,6 @@ env:
   GAR_REPO: price-insight
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
-  GATEWAY_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-gateway
 
 jobs:
   build-backend:
@@ -93,42 +91,9 @@ jobs:
           cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:latest
           cache-to: type=inline
 
-  build-gateway:
-    name: Build Gateway
-    if: inputs.target == 'all' || inputs.target == 'gateway'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA::8}" >> $GITHUB_ENV
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
-          service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker australia-southeast1-docker.pkg.dev --quiet
-      - name: Build and push gateway image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/gateway/Dockerfile
-          push: true
-          tags: |
-            ${{ env.GATEWAY_IMAGE }}:${{ env.SHORT_SHA }}
-            ${{ env.GATEWAY_IMAGE }}:latest
-          cache-from: type=registry,ref=${{ env.GATEWAY_IMAGE }}:latest
-          cache-to: type=inline
-
   call-deploy:
     name: Deploy
-    needs: [build-backend, build-frontend, build-gateway]
+    needs: [build-backend, build-frontend]
     if: ${{ !failure() && !cancelled() }}
     permissions:
       contents: read
