@@ -20,6 +20,12 @@ variable "domain" {
   default     = "www.qweyha520.bar"
 }
 
+variable "apex_domain" {
+  description = "Bare domain that redirects to var.domain (the canonical www host)"
+  type        = string
+  default     = "qweyha520.bar"
+}
+
 variable "cloud_sql_connection_name" {
   description = "Cloud SQL instance connection name (project:region:instance), attached to Cloud Run via the built-in connector"
   type        = string

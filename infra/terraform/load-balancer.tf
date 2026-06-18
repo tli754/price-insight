@@ -59,6 +59,11 @@ resource "google_compute_url_map" "https" {
     path_matcher = "paths"
   }
 
+  host_rule {
+    hosts        = [var.apex_domain]
+    path_matcher = "apex-redirect"
+  }
+
   path_matcher {
     name            = "paths"
     default_service = google_compute_backend_service.frontend.id
@@ -68,6 +73,17 @@ resource "google_compute_url_map" "https" {
       service = google_compute_backend_service.backend.id
     }
   }
+
+  path_matcher {
+    name = "apex-redirect"
+
+    default_url_redirect {
+      host_redirect          = var.domain
+      https_redirect         = true
+      strip_query            = false
+      redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+    }
+  }
 }
 
 resource "google_compute_managed_ssl_certificate" "default" {
@@ -75,7 +91,7 @@ resource "google_compute_managed_ssl_certificate" "default" {
   project = var.project_id
 
   managed {
-    domains = [var.domain]
+    domains = [var.domain, var.apex_domain]
   }
 }
 
