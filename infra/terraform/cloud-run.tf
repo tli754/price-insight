@@ -240,6 +240,7 @@ resource "google_cloud_run_v2_service" "order_worker" {
           cpu    = "1"
           memory = "256Mi"
         }
+        cpu_idle = true
       }
 
       volume_mounts {
