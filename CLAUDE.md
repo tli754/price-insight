@@ -42,7 +42,6 @@ pnpm --filter @price-insight/backend dev          # Start Fastify dev server wit
 pnpm --filter @price-insight/backend build        # TypeScript compilation
 pnpm --filter @price-insight/backend start        # Run compiled dist/server.js
 pnpm --filter @price-insight/backend db:generate  # Generate Drizzle migrations
-pnpm --filter @price-insight/backend db:push      # Apply migrations to database
 pnpm --filter @price-insight/backend db:studio    # Open Drizzle Studio for DB inspection
 ```
 
@@ -82,7 +81,7 @@ A TypeScript Fastify 5 API server. The extraction pipeline is the core concern:
 Database is MySQL + Drizzle ORM. The `products` table has a unique index on source URL hash to prevent duplicates. Schema is in `apps/backend/src/db/schema.ts`.
 
 ### Frontend (`/apps/frontend`)
-Nuxt 4 + Vue 3 + `@nuxt/ui` (Tailwind CSS v4). Authentication is Google OAuth via `nuxt-auth-utils`. The `auth` middleware protects all routes except `/login`. The OAuth callback handler lives in `apps/frontend/server/routes/auth/google.get.ts`. The backend API is a separate process — the frontend calls it directly (CORS allowed via `APP_URL` env var on the backend).
+Nuxt 4 + Vue 3 + `@nuxt/ui` (Tailwind CSS v4). No Google OAuth at this stage — authentication is a single shared password: the backend's `POST /auth/login` (`apps/backend/src/routes/auth.ts`) checks it against `DEV_AUTH_PASSWORD` and issues a JWT in an httpOnly `pi-session` cookie. The `auth.global` middleware (`apps/frontend/app/middleware/auth.global.ts`) protects all routes except `/login` by calling `/auth/session`, which Nuxt's `routeRules` proxies to the backend (`/auth/**` → `NUXT_BACKEND_URL`). The backend API is a separate process — the frontend calls it directly (CORS allowed via `APP_URL` env var on the backend).
 
 ### Prompts (`/prompts`)
 Five markdown files drive the LLM extraction:
@@ -99,4 +98,4 @@ Copy `.env.example` in each app before starting:
 
 **Backend** (`/apps/backend/.env`) requires: MySQL connection, Redis connection, `OPENAI_API_KEY`, `OPENAI_MODEL`.
 
-**Frontend** (`/apps/frontend/.env`) requires: `NUXT_SESSION_PASSWORD` (32+ char string), `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_OAUTH_GOOGLE_CLIENT_SECRET`. Google OAuth callback URL: `http://localhost:3000/auth/google`.
+**Frontend** (`/apps/frontend/.env`) requires: `NUXT_BACKEND_URL` (backend origin, proxied for `/api/**` and `/auth/**` route rules; defaults to `http://localhost:4000`).
