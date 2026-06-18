@@ -75,9 +75,19 @@ export async function buildApp(env: AppEnv) {
 
   let cronTask: import("node-cron").ScheduledTask | null = null;
   if (shopifyService && shopifyGraphQLService) {
-    // Remove stale BullMQ repeatable from prior deployments before starting the direct cron.
-    await orderSyncQueue.removeRepeatable("scheduled-discovery", { pattern: "0 14 * * *" });
-    cronTask = setupScheduler(orderSyncQueue, shopifyService, shopifyGraphQLService);
+    try {
+      // Remove stale BullMQ repeatable from prior deployments before starting the direct cron.
+      // Bounded by a timeout — ioredis is configured with maxRetriesPerRequest: null (required by
+      // BullMQ), so this call hangs forever instead of rejecting when Redis is unreachable, which
+      // would otherwise stop the app from ever reaching app.listen().
+      await Promise.race([
+        orderSyncQueue.removeRepeatable("scheduled-discovery", { pattern: "0 14 * * *" }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Redis startup timeout")), 5000))
+      ]);
+      cronTask = setupScheduler(orderSyncQueue, shopifyService, shopifyGraphQLService);
+    } catch (err) {
+      app.log.warn({ err }, "Redis unavailable at startup — order-sync queue/cron disabled");
+    }
   }
 
   app.decorate("env", env);
