@@ -95,12 +95,12 @@ resource "google_service_account" "invoker" {
 
 resource "google_service_account_iam_member" "cloudtasks_agent_token_creator" {
   service_account_id = google_service_account.invoker.name
-  role                = "roles/iam.serviceAccountTokenCreator"
-  member              = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"
 }
 
 resource "google_service_account_iam_member" "scheduler_agent_token_creator" {
   service_account_id = google_service_account.invoker.name
-  role                = "roles/iam.serviceAccountTokenCreator"
-  member              = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
 }
