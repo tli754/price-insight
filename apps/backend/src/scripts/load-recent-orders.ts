@@ -1,7 +1,8 @@
 /**
- * Load orders from Shopify into the database directly (bypassing Cloud Tasks).
- * Safe to run multiple times — upsertMappedOrder skips orders that haven't
- * changed (staleness check on shopify_updated_at).
+ * Load orders from Shopify by enqueueing one Cloud Task per order — same
+ * path as the "Sync Orders" button (source: "manual"). order-worker does
+ * the actual upsert; this script needs no direct DB/Cloud SQL access, just
+ * Cloud Tasks API access.
  *
  * Usage:
  *   cd apps/backend && npx tsx src/scripts/load-recent-orders.ts
@@ -14,9 +15,8 @@
 import "dotenv/config";
 
 import { loadEnv } from "../config/env.js";
-import { createDatabase } from "../db/index.js";
-import { mapGraphQLOrder } from "../lib/order-mapper.js";
-import { OrderRepository } from "../services/order-repository.js";
+import { CloudTasksOrderSyncClient } from "../services/cloud-tasks-client.js";
+import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
 import { ShopifyGraphQLService } from "../services/shopify-graphql-service.js";
 import { ShopifyService } from "../services/shopify-service.js";
 
@@ -29,6 +29,17 @@ if (
   !env.SHOPIFY_CLIENT_SECRET
 ) {
   console.error("[load-orders] Shopify credentials are not configured. Check your .env file.");
+  process.exit(1);
+}
+
+if (
+  !env.CLOUD_TASKS_PROJECT ||
+  !env.CLOUD_TASKS_LOCATION ||
+  !env.CLOUD_TASKS_QUEUE ||
+  !env.ORDER_WORKER_URL ||
+  !env.INTERNAL_OIDC_SERVICE_ACCOUNT
+) {
+  console.error("[load-orders] Cloud Tasks is not configured. Check your .env file.");
   process.exit(1);
 }
 
@@ -45,8 +56,12 @@ console.log(
     : "[load-orders] Fetching ALL orders from Shopify…"
 );
 
-const { db, pool } = createDatabase(env);
-const orderRepository = new OrderRepository(db);
+const cloudTasksClient = new CloudTasksOrderSyncClient(
+  env.CLOUD_TASKS_PROJECT,
+  env.CLOUD_TASKS_LOCATION,
+  env.CLOUD_TASKS_QUEUE,
+  env.INTERNAL_OIDC_SERVICE_ACCOUNT
+);
 
 const shopifyService = new ShopifyService(
   env.SHOPIFY_TOKEN_URL,
@@ -60,7 +75,7 @@ const graphqlService = new ShopifyGraphQLService(env.SHOPIFY_PRODUCTS_URL);
 try {
   const accessToken = await shopifyService.getAccessToken();
 
-  let totalUpserted = 0;
+  let totalEnqueued = 0;
   let pageNum = 0;
 
   for await (const page of graphqlService.streamOrders(accessToken, filter)) {
@@ -69,22 +84,27 @@ try {
     if (page.length === 0) continue;
 
     for (const order of page) {
-      const mapped = mapGraphQLOrder(order);
-      await orderRepository.upsertMappedOrder(mapped);
-      totalUpserted++;
+      const payload: ScheduledSyncOrderPayload = {
+        type: "sync-order",
+        source: "manual",
+        shopifyOrderId: order.id,
+        orderName: order.name,
+        shopifyUpdatedAt: order.updatedAt,
+        shopifyOrder: order,
+      };
+      await cloudTasksClient.enqueueSyncOrder(env.ORDER_WORKER_URL, payload);
+      totalEnqueued++;
     }
 
-    console.log(`[load-orders] Page ${pageNum}: upserted ${page.length} orders (total: ${totalUpserted})…`);
+    console.log(`[load-orders] Page ${pageNum}: enqueued ${page.length} orders (total: ${totalEnqueued})…`);
   }
 
-  if (totalUpserted === 0) {
-    console.log("[load-orders] Nothing to upsert.");
+  if (totalEnqueued === 0) {
+    console.log("[load-orders] Nothing to enqueue.");
   } else {
-    console.log(`[load-orders] Done. ${totalUpserted} orders processed.`);
+    console.log(`[load-orders] Done. ${totalEnqueued} orders enqueued. order-worker will skip unchanged orders.`);
   }
 } catch (err) {
   console.error("[load-orders] Failed:", err);
   process.exit(1);
-} finally {
-  await pool.end();
 }
