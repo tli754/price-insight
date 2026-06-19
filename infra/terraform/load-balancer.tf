@@ -87,7 +87,7 @@ resource "google_compute_url_map" "https" {
 }
 
 resource "google_compute_managed_ssl_certificate" "default" {
-  name    = "price-insight-cert"
+  name    = "price-insight-cert-v2"
   project = var.project_id
 
   managed {
