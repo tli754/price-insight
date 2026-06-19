@@ -24,8 +24,7 @@ resource "google_secret_manager_secret_iam_member" "ci_gateway" {
 
 # Lets price-insight-ci run `gcloud run deploy` for routine image releases
 # (split deployment ownership — Terraform owns shape, CI owns images).
-# Scoped per-service, not project-wide, and deliberately excludes
-# order-worker until PR 4 decides its deploy path.
+# Scoped per-service, not project-wide.
 resource "google_cloud_run_v2_service_iam_member" "ci_frontend_deployer" {
   project  = var.project_id
   location = google_cloud_run_v2_service.frontend.location
@@ -38,6 +37,14 @@ resource "google_cloud_run_v2_service_iam_member" "ci_backend_deployer" {
   project  = var.project_id
   location = google_cloud_run_v2_service.backend.location
   name     = google_cloud_run_v2_service.backend.name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${var.ci_sa_email}"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "ci_order_worker_deployer" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.order_worker.location
+  name     = google_cloud_run_v2_service.order_worker.name
   role     = "roles/run.developer"
   member   = "serviceAccount:${var.ci_sa_email}"
 }
