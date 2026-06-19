@@ -229,9 +229,13 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public" {
 # wiring, matching this service's least-privilege secret scope below.
 #
 # command/args aren't set in this resource — they're applied by CI's
-# `gcloud run deploy --command --args` alongside the real image, and ignored
-# here (see lifecycle.ignore_changes), so the bootstrap placeholder's own
-# entrypoint is what gets health-checked on the first `terraform apply`.
+# `gcloud run deploy --command --args` alongside the real image, normally
+# ignored here (see lifecycle.ignore_changes) so the bootstrap placeholder's
+# own entrypoint is what gets health-checked on the first `terraform apply`.
+#
+# RECOVERY IN PROGRESS: command/args are temporarily NOT in ignore_changes
+# (see lifecycle block below) to clear a broken override stuck on the live
+# revision. Restore them to ignore_changes once this apply confirms healthy.
 
 resource "google_cloud_run_v2_service" "order_worker" {
   name                = "order-worker"
@@ -319,10 +323,16 @@ resource "google_cloud_run_v2_service" "order_worker" {
   }
 
   lifecycle {
+    # command/args temporarily NOT ignored — see comment above the resource.
+    # One-time recovery: the live revision still carries the broken
+    # node/dist-order-worker-server.js override from before the bootstrap-
+    # image fix, and ignore_changes was preserving it. Letting Terraform see
+    # this diff lets it clear the override back to the bootstrap image's own
+    # entrypoint. Re-add both paths to ignore_changes once this apply
+    # succeeds and the revision is healthy — do not leave this out long-term,
+    # or a later `terraform apply` will revert CI's real command/args.
     ignore_changes = [
       template[0].containers[0].image,
-      template[0].containers[0].command,
-      template[0].containers[0].args,
       client,
       client_version,
       traffic,
