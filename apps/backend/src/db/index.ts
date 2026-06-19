@@ -1,10 +1,17 @@
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 
-import type { AppEnv } from "../config/env.js";
 import * as schema from "./schema.js";
 
-export function createDatabase(env: AppEnv) {
+export type DbConnectionEnv = {
+  MYSQL_HOST: string;
+  MYSQL_PORT: number;
+  MYSQL_USER: string;
+  MYSQL_PASSWORD: string;
+  MYSQL_DATABASE: string;
+};
+
+export function createDatabase(env: DbConnectionEnv) {
   const isSocket = env.MYSQL_HOST.startsWith("/cloudsql/");
 
   const pool = mysql.createPool(

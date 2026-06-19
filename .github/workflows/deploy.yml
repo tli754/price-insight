@@ -214,3 +214,46 @@ jobs:
             echo "- Deployed digest: \`${{ needs.resolve.outputs.frontend_digest }}\`"
             echo "- New revision: \`${{ steps.deploy.outputs.revision }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-order-worker:
+    name: Deploy Order Worker
+    needs: [resolve, deploy-backend]
+    if: |
+      always() &&
+      needs.resolve.result == 'success' &&
+      needs.deploy-backend.result == 'success' &&
+      (inputs.target == 'all' || inputs.target == 'backend')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy by digest
+        id: deploy
+        run: |
+          gcloud run deploy order-worker \
+            --image="${{ env.BACKEND_IMAGE }}@${{ needs.resolve.outputs.backend_digest }}" \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}"
+          NEW_REV=$(gcloud run services describe order-worker \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$NEW_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Order-worker deploy"
+            echo "- Requested SHA: \`${{ needs.resolve.outputs.deploy_sha }}\`"
+            echo "- Deployed digest (same image as backend): \`${{ needs.resolve.outputs.backend_digest }}\`"
+            echo "- New revision: \`${{ steps.deploy.outputs.revision }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

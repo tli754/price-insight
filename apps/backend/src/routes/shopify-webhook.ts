@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
+import type { WebhookSyncOrderPayload } from "../lib/sync-order-payload.js";
 import { verifyShopifyHmac } from "../lib/shopify-hmac.js";
-import type { SyncWebhookOrderJobData } from "../services/order-sync-queue.js";
 
 const SUPPORTED_TOPICS = new Set([
   "orders/create",
@@ -45,16 +45,16 @@ const shopifyWebhookRoutes: FastifyPluginAsync = async (fastify) => {
 
     const shopDomain = request.headers["x-shopify-shop-domain"];
 
-    let payload: Record<string, unknown>;
+    let body: Record<string, unknown>;
     try {
-      payload = JSON.parse(rawBody.toString("utf8")) as Record<string, unknown>;
+      body = JSON.parse(rawBody.toString("utf8")) as Record<string, unknown>;
     } catch {
       return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Invalid JSON body." } });
     }
 
-    const shopifyOrderId = payload["admin_graphql_api_id"];
-    const orderName = payload["name"];
-    const shopifyUpdatedAt = payload["updated_at"];
+    const shopifyOrderId = body["admin_graphql_api_id"];
+    const orderName = body["name"];
+    const shopifyUpdatedAt = body["updated_at"];
 
     if (typeof shopifyOrderId !== "string" || !shopifyOrderId) {
       return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Missing admin_graphql_api_id." } });
@@ -66,9 +66,11 @@ const shopifyWebhookRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Missing updated_at." } });
     }
 
-    const queue = fastify.orderSyncQueue;
+    if (!fastify.cloudTasksClient) {
+      return reply.status(503).send({ error: { code: "SERVICE_UNAVAILABLE", message: "Cloud Tasks is not configured." } });
+    }
 
-    const jobData: SyncWebhookOrderJobData = {
+    const payload: WebhookSyncOrderPayload = {
       type: "sync-order",
       source: "webhook",
       webhookId,
@@ -80,10 +82,10 @@ const shopifyWebhookRoutes: FastifyPluginAsync = async (fastify) => {
     };
 
     try {
-      await queue.add("sync-order", jobData, { jobId: webhookId });
+      await fastify.cloudTasksClient.enqueueSyncOrder(fastify.env.ORDER_WORKER_URL!, payload);
     } catch (err) {
-      request.log.error(err, "Failed to enqueue webhook order job");
-      return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to enqueue job." } });
+      request.log.error(err, "Failed to enqueue webhook order task");
+      return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to enqueue task." } });
     }
 
     return reply.status(200).send({ ok: true });

@@ -17,7 +17,6 @@ import authRoutes from "../../routes/auth.js";
 import healthRoutes from "../../routes/health.js";
 import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
-import queueRoutes from "../../routes/queue.js";
 import reportRoutes from "../../routes/reports.js";
 import shopifyWebhookRoutes from "../../routes/shopify-webhook.js";
 import shopifyRoutes from "../../routes/shopify.js";
@@ -51,10 +50,11 @@ export const fakeEnv = {
   DATAFORSEO_PASSWORD: "fake",
   DATAFORSEO_WEBHOOK_SECRET: "fake-webhook-secret",
   WEBHOOK_HOST: "https://www.qweyha520.bar",
-  REDIS_HOST: "127.0.0.1",
-  REDIS_PORT: 6379,
-  REDIS_PASSWORD: "",
-  REDIS_DB: 0,
+  CLOUD_TASKS_PROJECT: undefined,
+  CLOUD_TASKS_LOCATION: undefined,
+  CLOUD_TASKS_QUEUE: undefined,
+  ORDER_WORKER_URL: undefined,
+  INTERNAL_OIDC_SERVICE_ACCOUNT: undefined,
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -125,12 +125,9 @@ export function makeShopifyGraphQLService() {
   };
 }
 
-export function makeOrderSyncQueue() {
+export function makeCloudTasksClient() {
   return {
-    add: vi.fn().mockResolvedValue(undefined),
-    close: vi.fn().mockResolvedValue(undefined),
-    getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 }),
-    getJobs: vi.fn().mockResolvedValue([]),
+    enqueueSyncOrder: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -175,7 +172,7 @@ export type TestMocks = {
   orderRepository: ReturnType<typeof makeOrderRepository>;
   shopifyService: ReturnType<typeof makeShopifyService> | null;
   shopifyGraphQLService: ReturnType<typeof makeShopifyGraphQLService> | null;
-  orderSyncQueue: ReturnType<typeof makeOrderSyncQueue> | null;
+  cloudTasksClient: ReturnType<typeof makeCloudTasksClient> | null;
   aiReportRepository: ReturnType<typeof makeAiReportRepository>;
   aiReportService: ReturnType<typeof makeAiReportService>;
 };
@@ -192,7 +189,7 @@ export async function buildTestApp(
     orderRepository: overrides.orderRepository ?? makeOrderRepository(),
     shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null,
     shopifyGraphQLService: "shopifyGraphQLService" in overrides ? overrides.shopifyGraphQLService ?? null : null,
-    orderSyncQueue: "orderSyncQueue" in overrides ? (overrides.orderSyncQueue as ReturnType<typeof makeOrderSyncQueue> | null) : makeOrderSyncQueue(),
+    cloudTasksClient: "cloudTasksClient" in overrides ? (overrides.cloudTasksClient as ReturnType<typeof makeCloudTasksClient> | null) : makeCloudTasksClient(),
     aiReportRepository: overrides.aiReportRepository ?? makeAiReportRepository(),
     aiReportService: overrides.aiReportService ?? makeAiReportService(),
   };
@@ -217,7 +214,7 @@ export async function buildTestApp(
   app.decorate("orderRepository", mocks.orderRepository as any);
   app.decorate("shopifyService", mocks.shopifyService as any);
   app.decorate("shopifyGraphQLService", mocks.shopifyGraphQLService as any);
-  app.decorate("orderSyncQueue", mocks.orderSyncQueue as any);
+  app.decorate("cloudTasksClient", mocks.cloudTasksClient as any);
   app.decorate("aiReportRepository", mocks.aiReportRepository as any);
   app.decorate("aiReportService", mocks.aiReportService as any);
 
@@ -242,7 +239,6 @@ export async function buildTestApp(
   await app.register(productRoutes, { prefix: "/api" });
   await app.register(ordersRoutes, { prefix: "/api" });
   await app.register(shopifyRoutes, { prefix: "/api" });
-  await app.register(queueRoutes, { prefix: "/api" });
   await app.register(analysisRoutes, { prefix: "/api" });
   await app.register(reportRoutes, { prefix: "/api" });
   await app.register(webhookRoutes);

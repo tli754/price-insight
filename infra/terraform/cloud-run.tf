@@ -161,6 +161,26 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "MYSQL_PORT"
         value = "3306"
       }
+      env {
+        name  = "CLOUD_TASKS_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "CLOUD_TASKS_LOCATION"
+        value = var.region
+      }
+      env {
+        name  = "CLOUD_TASKS_QUEUE"
+        value = google_cloud_tasks_queue.order_sync.name
+      }
+      env {
+        name  = "ORDER_WORKER_URL"
+        value = google_cloud_run_v2_service.order_worker.uri
+      }
+      env {
+        name  = "INTERNAL_OIDC_SERVICE_ACCOUNT"
+        value = google_service_account.invoker.email
+      }
 
       dynamic "env" {
         for_each = local.backend_secret_env
@@ -203,10 +223,10 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public" {
 
 # --- order-worker (private — IAM-gated, not in the load balancer) ----------
 #
-# Env vars here are provisional: order-worker's code/packaging is an open
-# PR 4 decision (new apps/order-worker package vs. the same backend image
-# running a different entrypoint). Only the secret *access* scope (least
-# privilege — Cloud SQL + Shopify/DB secrets only) is final.
+# PR 4 decision: reuses the backend image, but overrides command/args to run
+# dist/order-worker-server.js — a separate, narrower entrypoint that only
+# registers /internal/* routes and skips OpenAI/DataForSEO/auth/session
+# wiring, matching this service's least-privilege secret scope below.
 
 resource "google_cloud_run_v2_service" "order_worker" {
   name                = "order-worker"
@@ -231,7 +251,9 @@ resource "google_cloud_run_v2_service" "order_worker" {
     }
 
     containers {
-      image = var.bootstrap_image
+      image   = var.bootstrap_image
+      command = ["node"]
+      args    = ["dist/order-worker-server.js"]
 
       ports {
         container_port = 8080
@@ -257,6 +279,22 @@ resource "google_cloud_run_v2_service" "order_worker" {
       env {
         name  = "MYSQL_PORT"
         value = "3306"
+      }
+      env {
+        name  = "CLOUD_TASKS_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "CLOUD_TASKS_LOCATION"
+        value = var.region
+      }
+      env {
+        name  = "CLOUD_TASKS_QUEUE"
+        value = google_cloud_tasks_queue.order_sync.name
+      }
+      env {
+        name  = "INTERNAL_OIDC_SERVICE_ACCOUNT"
+        value = google_service_account.invoker.email
       }
 
       dynamic "env" {

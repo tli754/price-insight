@@ -29,6 +29,26 @@ resource "google_cloud_tasks_queue" "order_sync" {
   depends_on = [google_project_service.cloudtasks]
 }
 
+# Both backend (webhook/manual sync) and order-worker (scheduled-discovery
+# fan-out) create tasks on this queue — enqueuer access only, not the
+# OIDC-minting permission (that's serviceAccountTokenCreator on the invoker
+# SA, already scoped to Cloud Tasks/Scheduler's own Google-managed agents).
+resource "google_cloud_tasks_queue_iam_member" "backend_enqueuer" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_tasks_queue.order_sync.name
+  role     = "roles/cloudtasks.enqueuer"
+  member   = "serviceAccount:${data.google_service_account.backend_runtime.email}"
+}
+
+resource "google_cloud_tasks_queue_iam_member" "order_worker_enqueuer" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_tasks_queue.order_sync.name
+  role     = "roles/cloudtasks.enqueuer"
+  member   = "serviceAccount:${google_service_account.order_worker_runtime.email}"
+}
+
 # Replaces the in-process node-cron 2am schedule (incompatible with Cloud
 # Run's scale-to-zero — see plan-17062026-4-cloud-tasks-queue.md).
 resource "google_cloud_scheduler_job" "scheduled_order_discovery" {

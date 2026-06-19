@@ -28,10 +28,11 @@ const envSchema = z.object({
   SERPAPI_GOOGLE_DOMAIN: z.string().default("google.co.nz"),
   SERPAPI_NUM_RESULTS: z.coerce.number().int().min(1).max(100).default(40),
   OWN_STORE_NAME: z.string().optional(),
-  REDIS_HOST: z.string().default("127.0.0.1"),
-  REDIS_PORT: z.coerce.number().int().positive().default(6379),
-  REDIS_PASSWORD: z.string().default(""),
-  REDIS_DB: z.coerce.number().int().min(0).default(0),
+  CLOUD_TASKS_PROJECT: z.string().min(1).optional(),
+  CLOUD_TASKS_LOCATION: z.string().min(1).optional(),
+  CLOUD_TASKS_QUEUE: z.string().min(1).optional(),
+  ORDER_WORKER_URL: z.string().url().optional(),
+  INTERNAL_OIDC_SERVICE_ACCOUNT: z.string().min(1).optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

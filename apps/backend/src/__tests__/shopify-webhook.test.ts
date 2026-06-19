@@ -73,7 +73,7 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(401);
-    expect(mocks.orderSyncQueue?.add).not.toHaveBeenCalled();
+    expect(mocks.cloudTasksClient?.enqueueSyncOrder).not.toHaveBeenCalled();
   });
 
   it("returns 401 when HMAC is invalid", async () => {
@@ -84,7 +84,7 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(401);
-    expect(mocks.orderSyncQueue?.add).not.toHaveBeenCalled();
+    expect(mocks.cloudTasksClient?.enqueueSyncOrder).not.toHaveBeenCalled();
   });
 
   // ── Topic filtering ───────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(200);
-    expect(mocks.orderSyncQueue?.add).not.toHaveBeenCalled();
+    expect(mocks.cloudTasksClient?.enqueueSyncOrder).not.toHaveBeenCalled();
   });
 
   it.each(["orders/create", "orders/updated", "orders/paid", "orders/cancelled", "refunds/create"])(
@@ -110,7 +110,7 @@ describe("POST /webhooks/shopify/orders", () => {
         payload: defaultBody,
       });
       expect(res.statusCode).toBe(200);
-      expect(mocks.orderSyncQueue?.add).toHaveBeenCalledOnce();
+      expect(mocks.cloudTasksClient?.enqueueSyncOrder).toHaveBeenCalledOnce();
     }
   );
 
@@ -160,7 +160,7 @@ describe("POST /webhooks/shopify/orders", () => {
 
   // ── Happy path ────────────────────────────────────────────────────────────
 
-  it("returns 200 and enqueues job with correct data", async () => {
+  it("returns 200 and enqueues a Cloud Task with correct payload", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/shopify/orders",
@@ -168,10 +168,9 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(200);
-    expect(mocks.orderSyncQueue?.add).toHaveBeenCalledOnce();
+    expect(mocks.cloudTasksClient?.enqueueSyncOrder).toHaveBeenCalledOnce();
 
-    const [name, data, opts] = mocks.orderSyncQueue!.add.mock.calls[0] as [string, Record<string, unknown>, { jobId: string }];
-    expect(name).toBe("sync-order");
+    const [, data] = mocks.cloudTasksClient!.enqueueSyncOrder.mock.calls[0] as [string, Record<string, unknown>];
     expect(data.type).toBe("sync-order");
     expect(data.source).toBe("webhook");
     expect(data.webhookId).toBe(WEBHOOK_ID);
@@ -181,13 +180,26 @@ describe("POST /webhooks/shopify/orders", () => {
     expect(data.orderName).toBe(ORDER_NAME);
     expect(data.shopifyUpdatedAt).toBe(UPDATED_AT);
     expect(data).not.toHaveProperty("shopifyOrder");
-    expect(opts.jobId).toBe(WEBHOOK_ID);
   });
 
-  // ── Queue failure ─────────────────────────────────────────────────────────
+  // ── Cloud Tasks not configured ──────────────────────────────────────────
 
-  it("returns 500 when queue enqueue fails", async () => {
-    mocks.orderSyncQueue!.add.mockRejectedValue(new Error("Redis connection refused"));
+  it("returns 503 when Cloud Tasks is not configured", async () => {
+    const { app: noTasksApp } = await buildTestApp({ cloudTasksClient: null });
+    const res = await noTasksApp.inject({
+      method: "POST",
+      url: "/webhooks/shopify/orders",
+      headers: makeHeaders(),
+      payload: defaultBody,
+    });
+    await noTasksApp.close();
+    expect(res.statusCode).toBe(503);
+  });
+
+  // ── Cloud Tasks enqueue failure ───────────────────────────────────────────
+
+  it("returns 500 when Cloud Tasks enqueue fails", async () => {
+    mocks.cloudTasksClient!.enqueueSyncOrder.mockRejectedValue(new Error("Cloud Tasks unavailable"));
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/shopify/orders",
@@ -195,19 +207,6 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(500);
-  });
-
-  // ── Idempotency (BullMQ jobId dedupe) ────────────────────────────────────
-
-  it("uses webhookId as BullMQ jobId for deduplication", async () => {
-    await app.inject({
-      method: "POST",
-      url: "/webhooks/shopify/orders",
-      headers: makeHeaders(),
-      payload: defaultBody,
-    });
-    const [, , opts] = mocks.orderSyncQueue!.add.mock.calls[0] as [string, Record<string, unknown>, { jobId: string }];
-    expect(opts.jobId).toBe(WEBHOOK_ID);
   });
 
   // ── No user session required ──────────────────────────────────────────────

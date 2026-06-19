@@ -1,7 +1,7 @@
 /**
- * Load orders from Shopify into the database via the BullMQ queue.
- * Safe to run multiple times — the worker skips orders that haven't changed
- * (staleness check on shopify_updated_at).
+ * Load orders from Shopify into the database directly (bypassing Cloud Tasks).
+ * Safe to run multiple times — upsertMappedOrder skips orders that haven't
+ * changed (staleness check on shopify_updated_at).
  *
  * Usage:
  *   cd apps/backend && npx tsx src/scripts/load-recent-orders.ts
@@ -14,9 +14,9 @@
 import "dotenv/config";
 
 import { loadEnv } from "../config/env.js";
-import { createRedisConnection } from "../config/redis.js";
-import { createOrderSyncQueue } from "../services/order-sync-queue.js";
-import type { SyncOrderJobData } from "../services/order-sync-queue.js";
+import { createDatabase } from "../db/index.js";
+import { mapGraphQLOrder } from "../lib/order-mapper.js";
+import { OrderRepository } from "../services/order-repository.js";
 import { ShopifyGraphQLService } from "../services/shopify-graphql-service.js";
 import { ShopifyService } from "../services/shopify-service.js";
 
@@ -45,10 +45,8 @@ console.log(
     : "[load-orders] Fetching ALL orders from Shopify…"
 );
 
-const redis = createRedisConnection(env, {
-  warn: (obj, msg) => console.warn("[load-orders]", msg, obj),
-});
-const queue = createOrderSyncQueue(redis);
+const { db, pool } = createDatabase(env);
+const orderRepository = new OrderRepository(db);
 
 const shopifyService = new ShopifyService(
   env.SHOPIFY_TOKEN_URL,
@@ -62,7 +60,7 @@ const graphqlService = new ShopifyGraphQLService(env.SHOPIFY_PRODUCTS_URL);
 try {
   const accessToken = await shopifyService.getAccessToken();
 
-  let totalEnqueued = 0;
+  let totalUpserted = 0;
   let pageNum = 0;
 
   for await (const page of graphqlService.streamOrders(accessToken, filter)) {
@@ -70,33 +68,23 @@ try {
 
     if (page.length === 0) continue;
 
-    const jobs = page.map((order) => ({
-      name: "sync-order" as const,
-      data: {
-        type: "sync-order",
-        source: "manual",
-        shopifyOrderId: order.id,
-        orderName: order.name,
-        shopifyUpdatedAt: order.updatedAt,
-        shopifyOrder: order,
-      } satisfies SyncOrderJobData,
-    }));
+    for (const order of page) {
+      const mapped = mapGraphQLOrder(order);
+      await orderRepository.upsertMappedOrder(mapped);
+      totalUpserted++;
+    }
 
-    await queue.addBulk(jobs);
-    totalEnqueued += jobs.length;
-
-    console.log(`[load-orders] Page ${pageNum}: enqueued ${jobs.length} orders (total: ${totalEnqueued})…`);
+    console.log(`[load-orders] Page ${pageNum}: upserted ${page.length} orders (total: ${totalUpserted})…`);
   }
 
-  if (totalEnqueued === 0) {
-    console.log("[load-orders] Nothing to enqueue.");
+  if (totalUpserted === 0) {
+    console.log("[load-orders] Nothing to upsert.");
   } else {
-    console.log(`[load-orders] Done. ${totalEnqueued} jobs enqueued. Worker will skip unchanged orders.`);
+    console.log(`[load-orders] Done. ${totalUpserted} orders processed.`);
   }
 } catch (err) {
   console.error("[load-orders] Failed:", err);
   process.exit(1);
 } finally {
-  await queue.close();
-  await redis.quit();
+  await pool.end();
 }
