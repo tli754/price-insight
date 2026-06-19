@@ -41,10 +41,14 @@ resource "google_cloud_run_v2_service_iam_member" "ci_backend_deployer" {
   member   = "serviceAccount:${var.ci_sa_email}"
 }
 
+# Literal location/name (not a reference to google_cloud_run_v2_service.order_worker)
+# so this binding has no Terraform dependency edge on that resource and can apply
+# even while order-worker's own update is failing its health check — breaking the
+# deploy/IAM chicken-and-egg (order-worker needs this grant to ever become healthy).
 resource "google_cloud_run_v2_service_iam_member" "ci_order_worker_deployer" {
   project  = var.project_id
-  location = google_cloud_run_v2_service.order_worker.location
-  name     = google_cloud_run_v2_service.order_worker.name
+  location = var.region
+  name     = "order-worker"
   role     = "roles/run.developer"
   member   = "serviceAccount:${var.ci_sa_email}"
 }
