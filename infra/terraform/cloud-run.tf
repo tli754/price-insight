@@ -227,6 +227,11 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public" {
 # dist/order-worker-server.js — a separate, narrower entrypoint that only
 # registers /internal/* routes and skips OpenAI/DataForSEO/auth/session
 # wiring, matching this service's least-privilege secret scope below.
+#
+# command/args aren't set in this resource — they're applied by CI's
+# `gcloud run deploy --command --args` alongside the real image, and ignored
+# here (see lifecycle.ignore_changes), so the bootstrap placeholder's own
+# entrypoint is what gets health-checked on the first `terraform apply`.
 
 resource "google_cloud_run_v2_service" "order_worker" {
   name                = "order-worker"
@@ -251,9 +256,10 @@ resource "google_cloud_run_v2_service" "order_worker" {
     }
 
     containers {
-      image   = var.bootstrap_image
-      command = ["node"]
-      args    = ["dist/order-worker-server.js"]
+      # command/args are deliberately omitted here — see ignore_changes below.
+      # CI's `gcloud run deploy` sets them alongside the real image so the
+      # bootstrap placeholder's own entrypoint is what gets health-checked.
+      image = var.bootstrap_image
 
       ports {
         container_port = 8080
@@ -315,6 +321,8 @@ resource "google_cloud_run_v2_service" "order_worker" {
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].containers[0].command,
+      template[0].containers[0].args,
       client,
       client_version,
       traffic,

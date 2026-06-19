@@ -242,6 +242,8 @@ jobs:
         run: |
           gcloud run deploy order-worker \
             --image="${{ env.BACKEND_IMAGE }}@${{ needs.resolve.outputs.backend_digest }}" \
+            --command=node \
+            --args=dist/order-worker-server.js \
             --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}"
           NEW_REV=$(gcloud run services describe order-worker \
             --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
