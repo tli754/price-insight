@@ -1,0 +1,199 @@
+name: Terraform Plan (PR)
+
+# Automatic, read-only. Runs plan only — apply stays manual via the
+# Infrastructure workflow, gated behind the `prod` environment's required
+# reviewer. This job intentionally has no `environment:` so it can run
+# without a manual approval click; it must never gain apply or state-write
+# steps (e.g. `terraform import`) for that reason.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'infra/terraform/**'
+
+concurrency:
+  group: terraform-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Terraform plan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    env:
+      TF_DIR: infra/terraform
+      TF_VAR_project_id: wd-tools
+      TF_VAR_region: australia-southeast1
+      TF_VAR_ci_sa_email: price-insight-ci@wd-tools.iam.gserviceaccount.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: terraform-ci@wd-tools.iam.gserviceaccount.com
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~> 1.6'
+
+      - name: Terraform fmt check
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform plan -out=tfplan -lock-timeout=60s
+
+      - name: Export plan output
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform show -no-color tfplan > tfplan.txt
+          terraform show -json tfplan > tfplan.json
+
+      - name: Upload plan artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-pr${{ github.event.pull_request.number }}-${{ github.run_id }}
+          path: |
+            ${{ env.TF_DIR }}/tfplan
+            ${{ env.TF_DIR }}/tfplan.txt
+            ${{ env.TF_DIR }}/tfplan.json
+          retention-days: 7
+
+      - name: Comment plan summary on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const tfDir = process.env.TF_DIR;
+
+            const MARKER = '<!-- terraform-plan-bot -->';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            let body;
+            const jsonPath = path.join(tfDir, 'tfplan.json');
+            const txtPath = path.join(tfDir, 'tfplan.txt');
+
+            if (!fs.existsSync(jsonPath) || !fs.existsSync(txtPath)) {
+              body = `${MARKER}\n## Terraform Plan — \`infra/terraform\`\n\n` +
+                `Plan did not complete (fmt/init/validate/plan failed before producing output). ` +
+                `See the [workflow run](${runUrl}) for details.`;
+            } else {
+              const plan = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+              const planText = fs.readFileSync(txtPath, 'utf8');
+              const changes = plan.resource_changes || [];
+
+              const RISKY_TYPES = new Set([
+                'google_cloud_run_v2_service',
+                'google_cloud_run_v2_service_iam_member',
+                'google_service_account',
+                'google_service_account_iam_member',
+                'google_secret_manager_secret',
+                'google_secret_manager_secret_version',
+                'google_secret_manager_secret_iam_member',
+                'google_project_iam_member',
+                'google_cloud_tasks_queue',
+                'google_cloud_scheduler_job',
+              ]);
+              const RISKY_PREFIXES = ['google_compute_', 'google_dns_', 'google_certificate_manager_'];
+              const isRiskyType = (t) => RISKY_TYPES.has(t) || RISKY_PREFIXES.some((p) => t.startsWith(p));
+
+              const active = changes.filter((c) => !c.change.actions.includes('no-op') && !c.change.actions.includes('read'));
+              const destructive = active.filter((c) => c.change.actions.includes('delete'));
+              const risky = active.filter((c) => isRiskyType(c.type) && !destructive.includes(c));
+
+              const cloudRunTemplateChanged = active.some((c) => {
+                if (c.type !== 'google_cloud_run_v2_service') return false;
+                const before = c.change.before || {};
+                const after = c.change.after || {};
+                const beforeContainer = (before.template && before.template[0] && before.template[0].containers && before.template[0].containers[0]) || {};
+                const afterContainer = (after.template && after.template[0] && after.template[0].containers && after.template[0].containers[0]) || {};
+                const fields = ['image', 'command', 'args', 'env'];
+                const fieldsChanged = fields.some((f) => JSON.stringify(beforeContainer[f]) !== JSON.stringify(afterContainer[f]));
+                const saChanged = (before.template && before.template[0] && before.template[0].service_account) !==
+                  (after.template && after.template[0] && after.template[0].service_account);
+                return fieldsChanged || saChanged;
+              });
+
+              const fmtList = (list) => list.map((c) => `- \`${c.address}\` (${c.change.actions.join(' -> ')})`).join('\n');
+
+              let sections = [];
+              if (destructive.length > 0) {
+                sections.push(`### \u{1F534} Destructive changes detected\n${fmtList(destructive)}`);
+              }
+              if (risky.length > 0) {
+                sections.push(`### ⚠️ Risky resource changes\n${fmtList(risky)}`);
+              }
+              if (cloudRunTemplateChanged) {
+                sections.push(
+                  '### Cloud Run template changed — apply-after-validation checklist\n' +
+                  '- [ ] Confirm the new revision reaches Ready status.\n' +
+                  '- [ ] Review Cloud Run revision logs.\n' +
+                  '- [ ] Confirm the deployed image digest is expected.\n' +
+                  '- [ ] Confirm container command and args are expected.\n' +
+                  '- [ ] Confirm the service listens on PORT correctly.\n' +
+                  '- [ ] Run the relevant health endpoint or smoke test.\n' +
+                  '- [ ] Confirm no unexpected traffic cutover or rollback occurred.'
+                );
+              }
+              if (sections.length === 0) {
+                sections.push('No risky or destructive resource changes detected.');
+              }
+
+              const MAX_PLAN_CHARS = 60000;
+              let truncatedNote = '';
+              let displayPlan = planText;
+              if (displayPlan.length > MAX_PLAN_CHARS) {
+                displayPlan = displayPlan.slice(0, MAX_PLAN_CHARS);
+                truncatedNote = `\n\n_Plan output truncated — see the [full plan artifact](${runUrl}) for the rest._`;
+              }
+
+              body = `${MARKER}\n## Terraform Plan — \`infra/terraform\`\n\n` +
+                `${sections.join('\n\n')}\n\n` +
+                `<details><summary>Full plan output</summary>\n\n` +
+                '```\n' + displayPlan + '\n```' + truncatedNote + '\n</details>\n\n' +
+                `[Workflow run](${runUrl})`;
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
