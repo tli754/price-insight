@@ -14,6 +14,7 @@ on:
           - all
           - backend
           - frontend
+          - order-worker
       commit_sha:
         description: 'Commit SHA to deploy. Leave empty to use the latest SHA from the selected branch.'
         required: false
@@ -70,7 +71,7 @@ jobs:
 
       - name: Verify backend image exists and resolve digest
         id: backend_digest
-        if: inputs.target == 'all' || inputs.target == 'backend'
+        if: inputs.target == 'all' || inputs.target == 'backend' || inputs.target == 'order-worker'
         run: |
           DIGEST=$(gcloud artifacts docker images describe \
             "${{ env.BACKEND_IMAGE }}:${{ steps.sha.outputs.deploy_sha }}" \
@@ -221,8 +222,8 @@ jobs:
     if: |
       always() &&
       needs.resolve.result == 'success' &&
-      needs.deploy-backend.result == 'success' &&
-      (inputs.target == 'all' || inputs.target == 'backend')
+      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped') &&
+      (inputs.target == 'all' || inputs.target == 'backend' || inputs.target == 'order-worker')
     runs-on: ubuntu-latest
     permissions:
       contents: read
