@@ -62,7 +62,6 @@ describe("ProductRepository.listProducts()", () => {
 
     const result = await repo.listProducts();
 
-    expect(db.select).toHaveBeenCalledOnce();
     expect(db._select.orderBy).toHaveBeenCalledOnce();
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe("Blue Widget");

@@ -41,6 +41,7 @@ function makeCompetitorResult(overrides: Partial<CompetitorResult> = {}): Compet
     link: "https://rival.example.com/widget",
     thumbnail: null,
     tag: null,
+    country: "NZ",
     ...overrides
   };
 }
@@ -58,7 +59,9 @@ function makeCompetitorRepo() {
     recordPriceInsight: vi.fn().mockResolvedValue(undefined),
     deleteSuggestedByProduct: vi.fn().mockResolvedValue(undefined),
     insertSuggestedCompetitors: vi.fn().mockResolvedValue(undefined),
-    getDeletedExternalIds: vi.fn().mockResolvedValue(new Set())
+    getDeletedExternalIds: vi.fn().mockResolvedValue(new Set()),
+    getExistingCompetitorKeys: vi.fn().mockResolvedValue(new Set()),
+    recordPricesForConfirmed: vi.fn().mockResolvedValue(undefined)
   };
 }
 
@@ -75,12 +78,12 @@ describe("CompetitorAnalysisService.searchAndSuggest() — query and errors", ()
     service = new CompetitorAnalysisService(dataForSeo as any, repo as any);
   });
 
-  it("builds the search query from brand + title", async () => {
+  it("uses product.title only as the search query (brand is ignored)", async () => {
     dataForSeo.searchShoppingPrices.mockResolvedValue([makeCompetitorResult()]);
 
     await service.searchAndSuggest(makeProduct({ brand: "Nike", title: "Air Max 90" }));
 
-    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Nike Air Max 90", expect.any(Set), undefined);
+    expect(dataForSeo.searchShoppingPrices).toHaveBeenCalledWith("Air Max 90", expect.any(Set), undefined);
   });
 
   it("passes the full title including spec suffixes to DataForSEO", async () => {

@@ -69,17 +69,17 @@ const SECRET = "fake-webhook-secret";
 
 function shoppingUrl(overrides: Record<string, string> = {}): string {
   const p = new URLSearchParams({ secret: SECRET, id: "task-1", tag: "1", ...overrides });
-  return `/webhook/dataforseo/pingback/shopping?${p}`;
+  return `/webhooks/dataforseo/pingback/shopping?${p}`;
 }
 
 function infoUrl(overrides: Record<string, string> = {}): string {
   const p = new URLSearchParams({ secret: SECRET, id: "task-1", tag: "1", ...overrides });
-  return `/webhook/dataforseo/pingback/product_info?${p}`;
+  return `/webhooks/dataforseo/pingback/product_info?${p}`;
 }
 
 // ── Shopping pingback ─────────────────────────────────────────────────────────
 
-describe("GET /webhook/dataforseo/pingback/shopping", () => {
+describe("GET /webhooks/dataforseo/pingback/shopping", () => {
   let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
   let mocks: Awaited<ReturnType<typeof buildTestApp>>["mocks"];
 
@@ -98,7 +98,7 @@ describe("GET /webhook/dataforseo/pingback/shopping", () => {
   it("returns 401 when secret is missing", async () => {
     const res = await app.inject({
       method: "GET",
-      url: "/webhook/dataforseo/pingback/shopping?id=task-1&tag=1"
+      url: "/webhooks/dataforseo/pingback/shopping?id=task-1&tag=1"
     });
     expect(res.statusCode).toBe(401);
   });
@@ -198,7 +198,7 @@ describe("GET /webhook/dataforseo/pingback/shopping", () => {
     await app.inject({ method: "GET", url: shoppingUrl() });
 
     const callbackUrl: string = mocks.dataForSeoService.postProductInfoTasks.mock.calls[0][2];
-    expect(callbackUrl).toContain("/webhook/dataforseo/pingback/product_info");
+    expect(callbackUrl).toContain("/webhooks/dataforseo/pingback/product_info");
     expect(callbackUrl).toContain(`secret=${SECRET}`);
     expect(callbackUrl).toContain("id=$id");
     expect(callbackUrl).toContain("tag=$tag");
@@ -215,7 +215,7 @@ describe("GET /webhook/dataforseo/pingback/shopping", () => {
 
 // ── Product info pingback ──────────────────────────────────────────────────────
 
-describe("GET /webhook/dataforseo/pingback/product_info", () => {
+describe("GET /webhooks/dataforseo/pingback/product_info", () => {
   let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
   let mocks: Awaited<ReturnType<typeof buildTestApp>>["mocks"];
 
@@ -235,7 +235,7 @@ describe("GET /webhook/dataforseo/pingback/product_info", () => {
   it("returns 401 when secret is missing", async () => {
     const res = await app.inject({
       method: "GET",
-      url: "/webhook/dataforseo/pingback/product_info?id=task-1&tag=1"
+      url: "/webhooks/dataforseo/pingback/product_info?id=task-1&tag=1"
     });
     expect(res.statusCode).toBe(401);
   });

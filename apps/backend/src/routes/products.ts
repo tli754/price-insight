@@ -57,7 +57,7 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const pingbackUrl =
-      `${fastify.env.WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping` +
+      `${fastify.env.WEBHOOK_HOST}/webhooks/dataforseo/pingback/shopping` +
       `?secret=${fastify.env.DATAFORSEO_WEBHOOK_SECRET}&id=$id&tag=$tag`;
 
     const submitted = await fastify.dataForSeoService.postShoppingTasks(withTitle, pingbackUrl);

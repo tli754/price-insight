@@ -425,7 +425,7 @@ describe("POST /api/products/:id/competitors/search", () => {
     expect(response.json().submitted).toBe(1);
     expect(dataForSeoService.postShoppingTasks).toHaveBeenCalledWith(
       [{ id: 1, title: "Blue Widget" }],
-      expect.stringContaining("/webhook/dataforseo/pingback/shopping")
+      expect.stringContaining("/webhooks/dataforseo/pingback/shopping")
     );
   });
 

@@ -15,15 +15,29 @@ import { vi } from "vitest";
 
 // ── Sub-builders ──────────────────────────────────────────────────────────────
 
+/**
+ * .groupBy() is sometimes terminal (awaited directly — product-repository.ts's
+ * stats queries) and sometimes chained further with .orderBy()/.limit()/.offset()
+ * (order-repository.ts, competitor-repository.ts). Since from/where/leftJoin/
+ * innerJoin/groupBy all return the same builder via mockReturnThis(), making the
+ * builder itself thenable (default-resolving to []) covers the terminal case
+ * without disturbing chains that continue to the real orderBy/limit mocks below.
+ */
 export function makeSelectBuilder() {
-  return {
+  const resolved = Promise.resolve([]);
+  const builder: Record<string, unknown> = {
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
     leftJoin: vi.fn().mockReturnThis(),
+    innerJoin: vi.fn().mockReturnThis(),
     groupBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue([]),
     orderBy: vi.fn().mockResolvedValue([]),
+    then: resolved.then.bind(resolved),
+    catch: resolved.catch.bind(resolved),
+    finally: resolved.finally.bind(resolved)
   };
+  return builder;
 }
 
 /**

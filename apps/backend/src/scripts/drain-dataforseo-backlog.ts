@@ -132,7 +132,7 @@ async function drainShoppingReady(): Promise<void> {
   if (items.length === 0) return;
 
   const pingbackUrl =
-    `${env.WEBHOOK_HOST}/webhook/dataforseo/pingback/product_info` +
+    `${env.WEBHOOK_HOST}/webhooks/dataforseo/pingback/product_info` +
     `?secret=${env.DATAFORSEO_WEBHOOK_SECRET}&id=$id&tag=$tag`;
 
   let processed = 0;
@@ -179,7 +179,7 @@ async function drainShoppingReady(): Promise<void> {
 
   console.log(`[Phase 2] Done. Triggered product_info tasks for ${processed}/${items.length} shopping tasks.`);
   if (processed > 0) {
-    console.log(`          Results will arrive via webhook at: ${env.WEBHOOK_HOST}/webhook/dataforseo/pingback/product_info`);
+    console.log(`          Results will arrive via webhook at: ${env.WEBHOOK_HOST}/webhooks/dataforseo/pingback/product_info`);
   }
 }
 

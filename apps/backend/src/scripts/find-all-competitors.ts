@@ -69,7 +69,7 @@ if (activeProducts.length === 0) {
 }
 
 const pingbackUrl =
-  `${WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping` +
+  `${WEBHOOK_HOST}/webhooks/dataforseo/pingback/shopping` +
   `?secret=${env.DATAFORSEO_WEBHOOK_SECRET}&id=$id&tag=$tag`;
 
 let submitted = 0;
@@ -96,6 +96,6 @@ for (const batch of chunks(activeProducts, POST_BATCH_SIZE)) {
 }
 
 console.log(`[find-all-competitors] Done. ${submitted} / ${activeProducts.length} shopping tasks submitted.`);
-console.log(`[find-all-competitors] Pingback results will arrive at: ${WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping`);
+console.log(`[find-all-competitors] Pingback results will arrive at: ${WEBHOOK_HOST}/webhooks/dataforseo/pingback/shopping`);
 
 await pool.end();

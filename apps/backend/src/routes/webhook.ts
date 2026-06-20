@@ -23,7 +23,7 @@ function normalizeSource(source: string): string {
 }
 
 const webhookRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/webhook/dataforseo/pingback/shopping", async (request, reply) => {
+  fastify.get("/webhooks/dataforseo/pingback/shopping", async (request, reply) => {
     const query = request.query as Record<string, string>;
 
     if (!validateSecret(query.secret ?? "", fastify.env.DATAFORSEO_WEBHOOK_SECRET)) {
@@ -61,7 +61,7 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(200).send();
     }
 
-    const webhookBase = `${fastify.env.WEBHOOK_HOST}/webhook/dataforseo/pingback/product_info`;
+    const webhookBase = `${fastify.env.WEBHOOK_HOST}/webhooks/dataforseo/pingback/product_info`;
     const secret = fastify.env.DATAFORSEO_WEBHOOK_SECRET;
 
     try {
@@ -77,7 +77,7 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(200).send();
   });
 
-  fastify.get("/webhook/dataforseo/pingback/product_info", async (request, reply) => {
+  fastify.get("/webhooks/dataforseo/pingback/product_info", async (request, reply) => {
     const query = request.query as Record<string, string>;
 
     if (!validateSecret(query.secret ?? "", fastify.env.DATAFORSEO_WEBHOOK_SECRET)) {
