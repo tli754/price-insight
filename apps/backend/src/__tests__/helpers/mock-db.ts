@@ -25,7 +25,7 @@ import { vi } from "vitest";
  */
 export function makeSelectBuilder() {
   const resolved = Promise.resolve([]);
-  const builder: Record<string, unknown> = {
+  const builder = {
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
     leftJoin: vi.fn().mockReturnThis(),
