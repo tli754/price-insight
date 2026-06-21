@@ -41,7 +41,7 @@ async function syncOrders() {
   try {
     const result = await $fetch<{ jobsEnqueued: number }>(
       '/api/shopify/orders/sync',
-      { method: 'POST', body: { mode: 'today', source: 'manual' } }
+      { method: 'POST', body: { mode: 'last30days', source: 'manual' } }
     )
     toast.add({ title: 'Sync queued', description: `${result.jobsEnqueued} order(s) queued for sync.`, color: 'success' })
     await refresh()

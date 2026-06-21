@@ -42,7 +42,7 @@ describe("POST /api/shopify/orders/sync", () => {
     expect(res.json().error.code).toBe("INVALID_MODE");
   });
 
-  it("returns 400 when mode is not 'today'", async () => {
+  it("returns 400 when mode is not 'last30days'", async () => {
     ({ app } = await buildTestApp());
     const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "all" } });
     expect(res.statusCode).toBe(400);
@@ -51,7 +51,7 @@ describe("POST /api/shopify/orders/sync", () => {
 
   it("returns 503 when Shopify is not configured", async () => {
     ({ app } = await buildTestApp());
-    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "today" } });
+    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
     expect(res.statusCode).toBe(503);
     expect(res.json().error.code).toBe("SHOPIFY_NOT_CONFIGURED");
   });
@@ -60,7 +60,7 @@ describe("POST /api/shopify/orders/sync", () => {
     const shopifyService = makeShopifyService();
     const shopifyGraphQLService = makeShopifyGraphQLService();
     ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient: null }));
-    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "today" } });
+    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
     expect(res.statusCode).toBe(503);
     expect(res.json().error.code).toBe("QUEUE_NOT_CONFIGURED");
   });
@@ -72,14 +72,14 @@ describe("POST /api/shopify/orders/sync", () => {
     shopifyGraphQLService.fetchOrders.mockResolvedValue([makeGQLOrder(), makeGQLOrder({ id: "gid://shopify/Order/1000001052", name: "#WD1052" })]);
     ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
 
-    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "today", source: "manual" } });
+    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days", source: "manual" } });
 
     expect(res.statusCode).toBe(202);
     const body = res.json();
     expect(body.status).toBe("queued");
     expect(body.ordersDiscovered).toBe(2);
     expect(body.jobsEnqueued).toBe(2);
-    expect(body.mode).toBe("today");
+    expect(body.mode).toBe("last30days");
     expect(body.source).toBe("manual");
   });
 
@@ -90,7 +90,7 @@ describe("POST /api/shopify/orders/sync", () => {
     shopifyGraphQLService.fetchOrders.mockResolvedValue([makeGQLOrder()]);
     ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
 
-    await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "today" } });
+    await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
 
     expect(cloudTasksClient.enqueueSyncOrder).toHaveBeenCalledTimes(1);
     const [, payload] = cloudTasksClient.enqueueSyncOrder.mock.calls[0];
@@ -107,7 +107,7 @@ describe("POST /api/shopify/orders/sync", () => {
     shopifyGraphQLService.fetchOrders.mockResolvedValue([order]);
     ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
 
-    await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "today" } });
+    await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
 
     const payload = cloudTasksClient.enqueueSyncOrder.mock.calls[0][1];
     expect(payload.shopifyOrder).toEqual(order);
@@ -115,14 +115,14 @@ describe("POST /api/shopify/orders/sync", () => {
     expect(payload.orderName).toBe(order.name);
   });
 
-  it("returns 202 with 0 orders when none found today", async () => {
+  it("returns 202 with 0 orders when none found", async () => {
     const shopifyService = makeShopifyService();
     const shopifyGraphQLService = makeShopifyGraphQLService();
     const cloudTasksClient = makeCloudTasksClient();
     shopifyGraphQLService.fetchOrders.mockResolvedValue([]);
     ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
 
-    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "today" } });
+    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
 
     expect(res.statusCode).toBe(202);
     expect(res.json().ordersDiscovered).toBe(0);

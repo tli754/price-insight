@@ -1,15 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { AppError } from "../lib/app-error.js";
-import { getTodayNZRange } from "../lib/nz-date-range.js";
+import { getLast30Days } from "../lib/nz-date-range.js";
 import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
 
 const shopifyRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/shopify/orders/sync", async (request, reply) => {
     const body = request.body as { mode?: string; source?: string } | null;
 
-    if (!body || body.mode !== "today") {
-      throw new AppError(400, "INVALID_MODE", 'Request body must include mode: "today".');
+    if (!body || body.mode !== "last30days") {
+      throw new AppError(400, "INVALID_MODE", 'Request body must include mode: "last30days".');
     }
 
     if (!fastify.shopifyService) {
@@ -22,8 +22,8 @@ const shopifyRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(503, "QUEUE_NOT_CONFIGURED", "Order sync queue is not available.");
     }
 
-    const { from, to } = getTodayNZRange();
-    const filter = `updated_at:>=${from.toISOString()} updated_at:<=${to.toISOString()}`;
+    const since = getLast30Days();
+    const filter = `updated_at:>=${since.toISOString()}`;
 
     const accessToken = await fastify.shopifyService.getAccessToken();
     const orders = await fastify.shopifyGraphQLService.fetchOrders(accessToken, filter);
@@ -44,10 +44,10 @@ const shopifyRoutes: FastifyPluginAsync = async (fastify) => {
     return {
       status: "queued",
       source: "manual",
-      mode: "today",
+      mode: "last30days",
       ordersDiscovered: orders.length,
       jobsEnqueued: orders.length,
-      message: "Today's Shopify orders have been queued for sync.",
+      message: "Shopify orders from the last 30 days have been queued for sync.",
     };
   });
 };
