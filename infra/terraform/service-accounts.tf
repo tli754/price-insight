@@ -115,3 +115,20 @@ resource "google_service_account_iam_member" "scheduler_agent_token_creator" {
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
 }
+
+# Distinct from the two grants above: those let the Cloud Tasks/Scheduler
+# *agents* mint a token as the invoker SA when they dispatch a task. This lets
+# backend and order-worker themselves set invoker as the oidcToken.serviceAccountEmail
+# when they call tasks.create() (CloudTasksOrderSyncClient.enqueueSyncOrder) —
+# without it, createTask fails with PERMISSION_DENIED on iam.serviceAccounts.actAs.
+resource "google_service_account_iam_member" "backend_actas_invoker" {
+  service_account_id = google_service_account.invoker.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${data.google_service_account.backend_runtime.email}"
+}
+
+resource "google_service_account_iam_member" "order_worker_actas_invoker" {
+  service_account_id = google_service_account.invoker.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.order_worker_runtime.email}"
+}

@@ -30,9 +30,10 @@ resource "google_cloud_tasks_queue" "order_sync" {
 }
 
 # Both backend (webhook/manual sync) and order-worker (scheduled-discovery
-# fan-out) create tasks on this queue — enqueuer access only, not the
-# OIDC-minting permission (that's serviceAccountTokenCreator on the invoker
-# SA, already scoped to Cloud Tasks/Scheduler's own Google-managed agents).
+# fan-out) create tasks on this queue. This grants enqueuer access only;
+# actAs-ing the invoker SA onto each created task's oidcToken is granted
+# separately in service-accounts.tf (backend_actas_invoker /
+# order_worker_actas_invoker).
 resource "google_cloud_tasks_queue_iam_member" "backend_enqueuer" {
   project  = var.project_id
   location = var.region
