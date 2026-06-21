@@ -1,6 +1,8 @@
 name: Infrastructure
 
 # Manual-only trigger. Run plan first; apply requires explicit action input.
+# "all" runs plan and apply in the same run, same as "apply" — kept as a
+# separate, explicit option rather than replacing "apply".
 on:
   workflow_dispatch:
     inputs:
@@ -11,6 +13,7 @@ on:
         options:
           - plan
           - apply
+          - all
 
 concurrency:
   group: terraform-production
@@ -129,6 +132,6 @@ jobs:
           retention-days: 7
 
       - name: Terraform apply
-        if: inputs.action == 'apply'
+        if: inputs.action == 'apply' || inputs.action == 'all'
         working-directory: ${{ env.TF_DIR }}
         run: terraform apply tfplan
