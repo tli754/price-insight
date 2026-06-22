@@ -422,7 +422,7 @@ function matchTypeColor(matchType: string) {
                     v-if="c.thumbnail"
                     :src="c.thumbnail"
                     :alt="c.title"
-                    class="h-[60px] w-[60px] rounded object-cover"
+                    class="h-[60px] w-auto rounded"
                   />
                   <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
                 </td>
