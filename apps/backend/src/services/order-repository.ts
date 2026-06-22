@@ -1,4 +1,4 @@
-import { and, count as sqlCount, desc, eq, inArray, isNotNull, like, max, or, sql, sum as sqlSum } from "drizzle-orm";
+import { and, count as sqlCount, desc, eq, inArray, isNotNull, isNull, like, max, or, sql, sum as sqlSum } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import {
@@ -553,37 +553,39 @@ export class OrderRepository {
     const [summaryRows, monthlyRows, itemRows, [{ itemsTotal }]] = await Promise.all([
       this.db
         .select({
-          totalQty: sql<string>`SUM(${orderItems.quantity})`,
-          totalRevenue: sql<string>`SUM(${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0))`,
+          totalQty: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
+          totalRevenue: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0))`,
           avgUnitPrice: sql<string>`AVG(${orderItems.unitPrice})`,
           orderCount: sql<string>`COUNT(DISTINCT ${orders.id})`,
           lastSoldAt: max(orders.processedAt),
-          sold7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN ${orderItems.quantity} ELSE 0 END)`,
-          sold30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN ${orderItems.quantity} ELSE 0 END)`,
-          sold90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN ${orderItems.quantity} ELSE 0 END)`,
-          revenue7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN ${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
-          revenue30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN ${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
-          revenue90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN ${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          sold7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+          sold30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+          sold90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+          revenue7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          revenue30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          revenue90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
         })
         .from(orderItems)
         .innerJoin(orders, eq(orderItems.orderId, orders.id))
         .where(and(
           eq(orderItems.productId, productId),
           isNotNull(orders.processedAt),
+          isNull(orders.cancelledAt),
           sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
         )),
 
       this.db
         .select({
           month: sql<string>`DATE_FORMAT(${orders.processedAt}, '%Y-%m')`,
-          qty: sql<string>`SUM(${orderItems.quantity})`,
-          revenue: sql<string>`SUM(${orderItems.quantity} * IFNULL(${orderItems.unitPrice}, 0))`,
+          qty: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
+          revenue: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0))`,
         })
         .from(orderItems)
         .innerJoin(orders, eq(orderItems.orderId, orders.id))
         .where(and(
           eq(orderItems.productId, productId),
           isNotNull(orders.processedAt),
+          isNull(orders.cancelledAt),
           sql`${orders.processedAt} >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`,
           sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
         ))
@@ -600,7 +602,7 @@ export class OrderRepository {
           financialStatus: orders.financialStatus,
           fulfillmentStatus: orders.fulfillmentStatus,
           currency: orders.currency,
-          qty: orderItems.quantity,
+          qty: sql<number>`IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity})`,
           unitPrice: orderItems.unitPrice,
         })
         .from(orderItems)
@@ -608,6 +610,7 @@ export class OrderRepository {
         .leftJoin(customers, eq(orders.customerId, customers.id))
         .where(and(
           eq(orderItems.productId, productId),
+          isNull(orders.cancelledAt),
           sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
         ))
         .orderBy(desc(orders.processedAt))
@@ -620,6 +623,7 @@ export class OrderRepository {
         .innerJoin(orders, eq(orderItems.orderId, orders.id))
         .where(and(
           eq(orderItems.productId, productId),
+          isNull(orders.cancelledAt),
           sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
         )),
     ]);
@@ -653,9 +657,9 @@ export class OrderRepository {
         financialStatus: r.financialStatus,
         fulfillmentStatus: r.fulfillmentStatus,
         currency: r.currency,
-        qty: r.qty,
+        qty: Number(r.qty),
         unitPrice: r.unitPrice,
-        lineTotal: r.qty * (r.unitPrice ?? 0),
+        lineTotal: Number(r.qty) * (r.unitPrice ?? 0),
       })),
       total: Number(itemsTotal ?? 0),
     };

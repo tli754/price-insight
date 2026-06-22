@@ -171,23 +171,8 @@ function fmtSales(qty: number | undefined, rev: number | undefined): string {
   return `${qty} ($${Math.round(rev ?? 0).toLocaleString()})`
 }
 
-function inventoryAlert(p: ProductRow): { text: string; color: 'error' | 'warning' | 'success' | 'neutral' } | null {
-  if (p.inventoryQuantity == null) return null
-  if (p.inventoryQuantity === 0) return { text: 'Out of stock', color: 'error' }
-  if (!p.sold90d) return { text: 'No recent sales', color: 'neutral' }
-
-  const dailyRate90 = p.sold90d / 90
-  const dailyRate30 = (p.sold30d ?? 0) / 30
-  const dailyRate7 = (p.sold7d ?? 0) / 7
-  const estimatedDailySalesRate = (p.sold30d ?? 0) < 3
-    ? dailyRate90
-    : dailyRate7 * 0.50 + dailyRate30 * 0.35 + dailyRate90 * 0.15
-
-  const daysOfCover = Math.floor(p.inventoryQuantity / estimatedDailySalesRate)
-  if (daysOfCover > 90) return { text: '90+ days stock remaining', color: 'success' }
-  if (daysOfCover <= 15) return { text: `Critical — about ${daysOfCover} days left`, color: 'error' }
-  if (daysOfCover <= 30) return { text: `Low stock — about ${daysOfCover} days left`, color: 'warning' }
-  return { text: `About ${daysOfCover} days stock remaining`, color: 'success' }
+function inventoryAlert(p: ProductRow) {
+  return calcInventoryAlert(p.inventoryQuantity, p.sold7d, p.sold30d, p.sold90d)
 }
 
 onMounted(() => {

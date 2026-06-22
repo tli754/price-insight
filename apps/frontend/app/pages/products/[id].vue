@@ -109,11 +109,31 @@ const chartPrices = computed(() =>
     .map(c => c.extractedPrice)
     .filter((p): p is number => p != null)
 )
-const chartLabels = computed(() =>
-  confirmedCompetitors.value
-    .filter(c => c.extractedPrice != null)
-    .map(c => c.title)
-)
+
+// Decision Summary
+const tabItems = [
+  { label: 'Overview', value: 'overview', slot: 'overview' },
+  { label: 'Competition', value: 'competition', slot: 'competition' },
+  { label: 'Sales', value: 'sales', slot: 'sales' },
+  { label: 'AI Insights', value: 'ai', slot: 'ai' },
+  { label: 'Product Details', value: 'details', slot: 'details' }
+]
+
+const marketMedian = computed(() => median(chartPrices.value))
+
+const closestCompetitor = computed(() => {
+  const ourPrice = product.value?.price != null ? Number(product.value.price) : null
+  if (ourPrice == null) return null
+  let best: { title: string; diff: number } | null = null
+  for (const c of confirmedCompetitors.value) {
+    if (c.extractedPrice == null) continue
+    const diff = ourPrice - c.extractedPrice
+    if (!best || Math.abs(diff) < Math.abs(best.diff)) {
+      best = { title: c.title, diff }
+    }
+  }
+  return best
+})
 
 function statusColor(status: string) {
   if (status === 'active') return 'success' as const
@@ -302,7 +322,23 @@ function matchTypeColor(matchType: string) {
         </div>
       </div>
 
-      <!-- Competitors — full width, at top -->
+      <UTabs :items="tabItems" default-value="overview" class="mb-6">
+        <template #overview>
+          <ProductDecisionSummary
+            :product="product"
+            :sales-summary="salesData?.summary ?? null"
+            :market-median="marketMedian"
+            :confirmed-count="confirmedCompetitors.length"
+            :total-competitors="displayCompetitors.length"
+            :closest-competitor="closestCompetitor"
+            :pricing="aiReport?.output?.pricing ?? null"
+            :sales-trend="aiReport?.output?.salesTrend ?? null"
+            :has-ai-report="!!aiReport"
+          />
+        </template>
+
+        <template #competition>
+      <!-- Competitors -->
       <UCard class="mb-6">
         <template #header>
           <span>Competitor Products</span>
@@ -461,23 +497,15 @@ function matchTypeColor(matchType: string) {
           </table>
         </div>
 
-        <!-- Price charts (confirmed only) -->
-        <div v-if="chartPrices.length >= 2" class="mt-4 grid grid-cols-2 gap-4">
-          <div>
-            <p class="mb-1 text-xs font-medium text-toned">Scatter Plot</p>
-            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
-              <PriceScatterChart :prices="chartPrices" :labels="chartLabels" :our-price="product.price" />
-            </div>
-          </div>
-          <div>
-            <p class="mb-1 text-xs font-medium text-toned">Price Distribution</p>
-            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
-              <PriceBoxChart :prices="chartPrices" :our-price="product.price" />
-            </div>
-          </div>
+        <!-- Price position (confirmed only) -->
+        <div v-if="chartPrices.length >= 1" class="mt-4 rounded-lg border border-default/50 bg-default/5 p-4">
+          <p class="mb-1 text-xs font-medium text-toned">Price Position</p>
+          <PricePositionBar :prices="chartPrices" :our-price="product.price" :currency="product.currency" />
         </div>
       </UCard>
+        </template>
 
+        <template #ai>
       <!-- AI Insights -->
       <UCard class="mb-6">
         <template #header>
@@ -633,7 +661,9 @@ function matchTypeColor(matchType: string) {
 
         </div>
       </UCard>
+        </template>
 
+        <template #sales>
       <!-- Sales History -->
       <UCard class="mb-6">
         <template #header>Sales History</template>
@@ -761,7 +791,9 @@ function matchTypeColor(matchType: string) {
 
         <div v-else class="py-6 text-center text-sm text-toned">No sales data available.</div>
       </UCard>
+        </template>
 
+        <template #details>
       <!-- Product info grid -->
       <div class="grid gap-6 lg:grid-cols-2">
         <!-- Left: image gallery -->
@@ -852,6 +884,8 @@ function matchTypeColor(matchType: string) {
         <div v-if="product.description" class="prose prose-sm max-w-none text-sm text-highlighted" v-html="product.description" />
         <p v-else class="text-sm text-toned">No description available.</p>
       </UCard>
+        </template>
+      </UTabs>
     </template>
   </div>
 </template>
