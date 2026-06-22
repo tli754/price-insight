@@ -12,6 +12,7 @@ import Fastify from "fastify";
 import { vi } from "vitest";
 
 import { AppError } from "../../lib/app-error.js";
+import { requireSession } from "../../lib/require-session.js";
 import analysisRoutes from "../../routes/analysis.js";
 import authRoutes from "../../routes/auth.js";
 import healthRoutes from "../../routes/health.js";
@@ -179,7 +180,8 @@ export type TestMocks = {
 
 export async function buildTestApp(
   overrides: Partial<TestMocks> = {},
-  envOverrides: Partial<typeof fakeEnv & { OWN_STORE_NAME?: string }> = {}
+  envOverrides: Partial<typeof fakeEnv & { OWN_STORE_NAME?: string }> = {},
+  opts: { protectAuth?: boolean } = {}
 ) {
   const mocks: TestMocks = {
     productRepository: overrides.productRepository ?? makeProductRepository(),
@@ -236,15 +238,22 @@ export async function buildTestApp(
 
   await app.register(authRoutes);
   await app.register(healthRoutes, { prefix: "/api" });
-  await app.register(productRoutes, { prefix: "/api" });
-  await app.register(ordersRoutes, { prefix: "/api" });
-  await app.register(shopifyRoutes, { prefix: "/api" });
-  await app.register(analysisRoutes, { prefix: "/api" });
-  await app.register(reportRoutes, { prefix: "/api" });
+
+  await app.register(async (protectedApi) => {
+    if (opts.protectAuth) {
+      protectedApi.addHook("preHandler", requireSession(protectedApi));
+    }
+    await protectedApi.register(productRoutes, { prefix: "/api" });
+    await protectedApi.register(ordersRoutes, { prefix: "/api" });
+    await protectedApi.register(shopifyRoutes, { prefix: "/api" });
+    await protectedApi.register(analysisRoutes, { prefix: "/api" });
+    await protectedApi.register(reportRoutes, { prefix: "/api" });
+  });
+
   await app.register(webhookRoutes);
   await app.register(shopifyWebhookRoutes);
 
   await app.ready();
 
-  return { app, mocks };
+  return { app, mocks, validSessionCookie: app.jwt.sign({ user: { id: "dev", email: "dev@local", name: "Dev User" } }) };
 }
