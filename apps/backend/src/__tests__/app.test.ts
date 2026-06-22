@@ -47,16 +47,27 @@ describe("buildApp()", () => {
   it("registers product routes (GET /api/products responds)", async () => {
     mockDb._select.orderBy.mockResolvedValueOnce([]);
     const app = await buildApp(fakeEnv);
-    const response = await app.inject({ method: "GET", url: "/api/products" });
+    const cookies = { "pi-session": app.jwt.sign({ user: { id: "dev", email: "dev@local", name: "Dev User" } }) };
+    const response = await app.inject({ method: "GET", url: "/api/products", cookies });
     await app.close();
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ items: [] });
   });
 
+  it("rejects protected routes without a session cookie", async () => {
+    const app = await buildApp(fakeEnv);
+    const response = await app.inject({ method: "GET", url: "/api/products" });
+    await app.close();
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: { code: "UNAUTHORIZED" } });
+  });
+
   it("error handler formats AppError with the correct HTTP status and code", async () => {
     const app = await buildApp(fakeEnv);
-    const response = await app.inject({ method: "GET", url: "/api/products/abc" });
+    const cookies = { "pi-session": app.jwt.sign({ user: { id: "dev", email: "dev@local", name: "Dev User" } }) };
+    const response = await app.inject({ method: "GET", url: "/api/products/abc", cookies });
     await app.close();
 
     expect(response.statusCode).toBe(400);
@@ -65,10 +76,12 @@ describe("buildApp()", () => {
 
   it("error handler formats Zod failures as 400 VALIDATION_ERROR", async () => {
     const app = await buildApp(fakeEnv);
+    const cookies = { "pi-session": app.jwt.sign({ user: { id: "dev", email: "dev@local", name: "Dev User" } }) };
     const response = await app.inject({
       method: "POST",
       url: "/api/products/import",
-      payload: { products: "not-an-array" }
+      payload: { products: "not-an-array" },
+      cookies
     });
     await app.close();
 
@@ -79,7 +92,8 @@ describe("buildApp()", () => {
   it("error handler returns 500 INTERNAL_SERVER_ERROR for unexpected throws", async () => {
     mockDb._select.orderBy.mockRejectedValueOnce(new Error("DB connection lost"));
     const app = await buildApp(fakeEnv);
-    const response = await app.inject({ method: "GET", url: "/api/products" });
+    const cookies = { "pi-session": app.jwt.sign({ user: { id: "dev", email: "dev@local", name: "Dev User" } }) };
+    const response = await app.inject({ method: "GET", url: "/api/products", cookies });
     await app.close();
 
     expect(response.statusCode).toBe(500);

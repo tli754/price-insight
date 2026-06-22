@@ -7,6 +7,7 @@ import OpenAI from "openai";
 import type { AppEnv } from "./config/env.js";
 import { createDatabase } from "./db/index.js";
 import { AppError } from "./lib/app-error.js";
+import { requireSession } from "./lib/require-session.js";
 import analysisRoutes from "./routes/analysis.js";
 import authRoutes from "./routes/auth.js";
 import healthRoutes from "./routes/health.js";
@@ -126,11 +127,16 @@ export async function buildApp(env: AppEnv) {
 
   await app.register(authRoutes);
   await app.register(healthRoutes, { prefix: "/api" });
-  await app.register(productRoutes, { prefix: "/api" });
-  await app.register(ordersRoutes, { prefix: "/api" });
-  await app.register(shopifyRoutes, { prefix: "/api" });
-  await app.register(analysisRoutes, { prefix: "/api" });
-  await app.register(reportRoutes, { prefix: "/api" });
+
+  await app.register(async (protectedApi) => {
+    protectedApi.addHook("preHandler", requireSession(protectedApi));
+    await protectedApi.register(productRoutes, { prefix: "/api" });
+    await protectedApi.register(ordersRoutes, { prefix: "/api" });
+    await protectedApi.register(shopifyRoutes, { prefix: "/api" });
+    await protectedApi.register(analysisRoutes, { prefix: "/api" });
+    await protectedApi.register(reportRoutes, { prefix: "/api" });
+  });
+
   await app.register(webhookRoutes);
   await app.register(shopifyWebhookRoutes);
 
