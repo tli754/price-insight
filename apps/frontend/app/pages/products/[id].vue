@@ -141,12 +141,6 @@ function statusColor(status: string) {
   return 'neutral' as const
 }
 
-function formatPrice(extracted: number | null, raw: string | null, currency: string | null) {
-  if (raw) return raw
-  if (extracted == null) return '—'
-  return [currency, extracted].filter(Boolean).join(' ')
-}
-
 function financialColor(status: string | null) {
   if (status === 'paid') return 'success' as const
   if (status === 'refunded' || status === 'voided') return 'error' as const
@@ -458,7 +452,7 @@ function matchTypeColor(matchType: string) {
                 <td class="break-words px-3 py-2 text-toned">{{ c.shippingRaw || '—' }}</td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
                   <span class="font-medium text-highlighted">
-                    {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
+                    {{ formatCurrencyRaw(c.extractedPrice, c.rawPrice, c.currency) }}
                   </span>
                   <span v-if="c.extractedOldPrice" class="ml-1 text-xs text-toned line-through">
                     {{ c.currency }} {{ Number(c.extractedOldPrice).toFixed(2) }}
