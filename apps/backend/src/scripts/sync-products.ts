@@ -4,7 +4,7 @@
  * Usage (dev):
  *   cd apps/backend && npx tsx src/scripts/sync-products.ts
  *
- * Usage (production / GKE):
+ * Usage (production / Cloud Run):
  *   node dist/scripts/sync-products.js
  */
 

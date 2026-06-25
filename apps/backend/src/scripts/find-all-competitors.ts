@@ -8,11 +8,8 @@
  * Usage (dev):
  *   cd apps/backend && npx tsx src/scripts/find-all-competitors.ts
  *
- * Usage (production / GKE):
+ * Usage (production / Cloud Run):
  *   node dist/scripts/find-all-competitors.js
- *
- * GKE one-off:
- *   kubectl create job find-competitors-manual --from=cronjob/find-all-competitors
  */
 
 import "dotenv/config";
