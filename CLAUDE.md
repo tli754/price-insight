@@ -61,41 +61,29 @@ price-insight/
 ├── apps/
 │   ├── backend/    # @price-insight/backend — Fastify API
 │   └── frontend/   # @price-insight/frontend — Nuxt 4
-├── packages/
-│   └── core/       # @price-insight/core — CLI tools
-└── prompts/        # LLM prompt templates (shared)
+└── packages/
+    └── core/       # @price-insight/core — CLI tools
 ```
 
 ### Core (`/packages/core`)
 A pure JavaScript, JSON-in/JSON-out price analysis library. `analyzePrice(payload)` in `src/core.js` is the single entry point — it normalizes input, computes statistical position (percentile, average, median) against `reference_prices`, and returns a recommendation with optional margin analysis when `cost` is provided. Exports two CLI bins (`price-insight`, `price-insight-extract`). `tool_call.json` documents the schema for LLM function-calling hosts.
 
 ### Backend (`/apps/backend`)
-A TypeScript Fastify 5 API server. The extraction pipeline is the core concern:
+A TypeScript Fastify 5 API server. Three pipelines feed the `products` table and its related data:
 
-1. `POST /api/products/extract` receives a URL
-2. **ExtractorService** checks Redis (24h TTL) → calls **JinaReaderService** (`https://r.jina.ai/{url}`) on cache miss → sends content to **OpenAIExtractorService** → stores in MySQL via **ProductRepository**
-3. OpenAI uses the Responses API with `json_schema` structured output, loaded from `/prompts/`
-4. On parse failure, a single retry with `prompts/extractor-repair.md` is attempted
-5. Returns HTTP 201 on new extraction, 200 on cached result
+1. **Product import** — `POST /api/products/sync` (or `/products/import`) pulls products from Shopify via `ShopifyService` and upserts them through `ProductRepository`. There is no URL-scraping/extraction step; products come directly from Shopify's API.
+2. **Competitor discovery** — `POST /api/products/find-competitors` (and `CompetitorAnalysisService.searchAndSuggest`) submit search/product-lookup tasks to `DataForSeoService`. Results land asynchronously via the DataForSEO pingback webhooks in `apps/backend/src/routes/webhook.ts`, filtered by `apps/backend/src/lib/competitor-filter.ts` (NZ/AU + price-range match) and persisted via `CompetitorRepository`.
+3. **AI reports** — `POST /api/products/:id/reports/ai` (`AiReportService`) builds a payload from the product, its saved competitors, and sales history, then calls OpenAI's `chat.completions.parse` with a Zod response schema (`zodResponseFormat`). The system prompt is an inline string constant in `ai-report-service.ts` — there is no `/prompts` directory; that legacy Jina-Reader + markdown-prompt extraction pipeline was removed as dead code.
 
 Database is MySQL + Drizzle ORM. The `products` table has a unique index on source URL hash to prevent duplicates. Schema is in `apps/backend/src/db/schema.ts`.
 
 ### Frontend (`/apps/frontend`)
 Nuxt 4 + Vue 3 + `@nuxt/ui` (Tailwind CSS v4). No Google OAuth at this stage — authentication is a single shared password: the backend's `POST /auth/login` (`apps/backend/src/routes/auth.ts`) checks it against `DEV_AUTH_PASSWORD` and issues a JWT in an httpOnly `pi-session` cookie. The `auth.global` middleware (`apps/frontend/app/middleware/auth.global.ts`) protects all routes except `/login` by calling `/auth/session`, which Nuxt's `routeRules` proxies to the backend (`/auth/**` → `NUXT_BACKEND_URL`). The backend API is a separate process — the frontend calls it directly (CORS allowed via `APP_URL` env var on the backend).
 
-### Prompts (`/prompts`)
-Five markdown files drive the LLM extraction:
-- `extractor-system.md` + `extractor-user.md` — system/user prompt pair (user prompt uses `{{SOURCE_URL}}` and `{{READER_CONTENT}}` placeholders)
-- `extractor.md` — extraction contract (fields, rules, JSON format)
-- `extractor-validation.md` — optional secondary validation
-- `extractor-repair.md` — fallback to repair malformed JSON (one retry)
-
-See `prompts/README.md` for the recommended full flow.
-
 ## Environment Setup
 
 Copy `.env.example` in each app before starting:
 
-**Backend** (`/apps/backend/.env`) requires: MySQL connection, Redis connection, `OPENAI_API_KEY`, `OPENAI_MODEL`.
+**Backend** (`/apps/backend/.env`) requires: MySQL connection, `DATAFORSEO_LOGIN`/`DATAFORSEO_PASSWORD`/`DATAFORSEO_WEBHOOK_SECRET`, `OPENAI_API_KEY`, `OPENAI_MODEL`. Shopify credentials (`SHOPIFY_CLIENT_ID`/`SHOPIFY_CLIENT_SECRET`/etc.) are optional but required for product sync and webhooks. There is no Redis dependency.
 
 **Frontend** (`/apps/frontend/.env`) requires: `NUXT_BACKEND_URL` (backend origin, proxied for `/api/**` and `/auth/**` route rules; defaults to `http://localhost:4000`).
