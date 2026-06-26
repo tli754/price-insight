@@ -32,8 +32,9 @@ resource "google_compute_region_network_endpoint_group" "backend" {
 # Serverless NEG backends — no health check resource; Cloud Run manages its
 # own health and a health check is neither required nor supported here.
 resource "google_compute_backend_service" "frontend" {
-  name    = "frontend-backend"
-  project = var.project_id
+  name            = "frontend-backend"
+  project         = var.project_id
+  security_policy = google_compute_security_policy.frontend_cloudflare_only.id
 
   backend {
     group = google_compute_region_network_endpoint_group.frontend.id
