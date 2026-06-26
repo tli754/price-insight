@@ -46,7 +46,7 @@ resource "google_cloud_run_v2_service" "frontend" {
   name                = "frontend"
   project             = var.project_id
   location            = var.region
-  ingress             = "INGRESS_TRAFFIC_ALL"
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   deletion_protection = false
 
   template {
