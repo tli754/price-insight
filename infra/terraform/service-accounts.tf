@@ -76,6 +76,13 @@ resource "google_secret_manager_secret_iam_member" "frontend_runtime_secrets" {
   member    = "serviceAccount:${google_service_account.frontend_runtime.email}"
 }
 
+# terraform-ci needs roles/compute.securityAdmin at the project level to create
+# and attach Cloud Armor security policies. terraform-ci lacks
+# getIamPolicy/setIamPolicy on the project, so this grant is applied out-of-band:
+#   gcloud projects add-iam-policy-binding wd-tools \
+#     --member="serviceAccount:terraform-ci@wd-tools.iam.gserviceaccount.com" \
+#     --role="roles/compute.securityAdmin"
+
 # terraform-ci needs roles/artifactregistry.reader on the price-insight repo —
 # Cloud Run's services.patch API validates image-pull access for the *calling*
 # identity on every update, even when the image itself isn't changing, so any
