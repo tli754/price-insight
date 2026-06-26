@@ -1,5 +1,6 @@
 import type { CompetitorProductRow, ProductRow } from "../db/schema.js";
 import { AppError } from "../lib/app-error.js";
+import { filterByCountryAndPriceRange, mapToCompetitorProductInput, normalizeSourceForDisplay } from "../lib/competitor-filter.js";
 import { analyzePrice } from "../lib/price-analysis.js";
 import { CompetitorRepository } from "./competitor-repository.js";
 import type { CompetitorResult } from "./dataforseo-service.js";
@@ -23,15 +24,7 @@ export class CompetitorAnalysisService {
     console.info(`[searchAndSuggest] product=${product.id} keyword="${query}" deletedIds=${deletedExternalIds.size}`);
     const raw = await this.dataForSeo.searchShoppingPrices(query, deletedExternalIds, this.ownStoreName);
 
-    const results = raw.filter((r) => {
-      if (r.country !== "NZ" && r.country !== "AU") return false;
-      if (product.price != null) {
-        const lo = Number(product.price) / 2;
-        const hi = Number(product.price) * 2;
-        if (r.extractedPrice < lo || r.extractedPrice > hi) return false;
-      }
-      return true;
-    });
+    const results = filterByCountryAndPriceRange(raw, product.price != null ? Number(product.price) : null);
 
     console.info(`[searchAndSuggest] product=${product.id} raw=${raw.length} filtered=${results.length}`);
 
@@ -39,25 +32,7 @@ export class CompetitorAnalysisService {
       throw new AppError(502, "NO_COMPETITOR_RESULTS", "No competitor results found for this product.");
     }
 
-    const rows = results.map((r) => ({
-      competitorId: null,
-      title: r.title,
-      externalId: r.externalId,
-      productLink: r.link,
-      source: normalizeSource(r.source),
-      currency: r.currency,
-      thumbnail: r.thumbnail,
-      tag: r.tag,
-      googlePosition: r.googlePosition ?? null,
-      rawPrice: r.rawPrice,
-      extractedPrice: r.extractedPrice,
-      country: r.country ?? null,
-      rating: r.rating ?? null,
-      reviewCount: r.reviewCount ?? null,
-      shippingRaw: r.shippingRaw ?? null,
-      shippingExtracted: r.shippingExtracted ?? null,
-      extractedOldPrice: r.extractedOldPrice ?? null
-    }));
+    const rows = results.map((r) => mapToCompetitorProductInput(r));
 
     const existingKeys = await this.competitorRepository.getExistingCompetitorKeys(product.id);
     const newRows = rows.filter((r) => !existingKeys.has(`${r.externalId}:${r.source}`));
@@ -72,7 +47,7 @@ export class CompetitorAnalysisService {
   }
 
   async saveCompetitors(product: ProductRow, selected: CompetitorResult[]): Promise<CompetitorProductRow[]> {
-    const uniqueSources = [...new Set(selected.map((r) => normalizeSource(r.source)))];
+    const uniqueSources = [...new Set(selected.map((r) => normalizeSourceForDisplay(r.source)))];
     const competitorMap = new Map<string, number>();
 
     for (const source of uniqueSources) {
@@ -80,25 +55,7 @@ export class CompetitorAnalysisService {
       competitorMap.set(source, comp.id);
     }
 
-    const rows = selected.map((r) => ({
-      competitorId: competitorMap.get(normalizeSource(r.source)) ?? 0,
-      title: r.title,
-      externalId: r.externalId,
-      productLink: r.link,
-      source: normalizeSource(r.source),
-      currency: r.currency,
-      thumbnail: r.thumbnail,
-      tag: r.tag,
-      googlePosition: r.googlePosition ?? null,
-      rawPrice: r.rawPrice,
-      extractedPrice: r.extractedPrice,
-      country: r.country ?? null,
-      rating: r.rating ?? null,
-      reviewCount: r.reviewCount ?? null,
-      shippingRaw: r.shippingRaw ?? null,
-      shippingExtracted: r.shippingExtracted ?? null,
-      extractedOldPrice: r.extractedOldPrice ?? null
-    }));
+    const rows = selected.map((r) => mapToCompetitorProductInput(r, competitorMap.get(normalizeSourceForDisplay(r.source)) ?? 0));
 
     const saved = await this.competitorRepository.replaceCompetitorProducts(product.id, rows);
 
@@ -114,9 +71,4 @@ export class CompetitorAnalysisService {
 
     return saved;
   }
-}
-
-function normalizeSource(source: string): string {
-  const trimmed = source.trim();
-  return trimmed.length > 0 ? trimmed : "Unknown";
 }

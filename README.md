@@ -157,7 +157,6 @@ price-insight/
 │   ├── ingress/          # Ingress rules
 │   └── namespace/        # Namespace definition
 ├── terraform/            # GCP IAM, Secret Manager, Artifact Registry, GKE config
-├── prompts/              # AI extractor prompt files (prompt-as-code)
 ├── .github/
 │   ├── workflows/
 │   │   ├── build.yml         # Build & push Docker images to GAR
@@ -338,7 +337,7 @@ main branch
 
 ### AI Prompts
 
-Extractor prompts are version-controlled in `prompts/` and treated as code — changes go through PR review like any other file.
+There is no standalone `prompts/` directory — the legacy Jina-Reader + markdown-prompt URL extraction pipeline was removed as dead code. The current AI report system prompt is an inline string constant in `apps/backend/src/services/ai-report-service.ts`, still version-controlled and reviewed like any other source file.
 
 ---
 
@@ -399,7 +398,7 @@ australia-southeast1-docker.pkg.dev/wd-tools/price-insight/frontend:<tag>
 | **Package boundaries** | Shared logic lives in `packages/core/`. Apps import from packages — not each other. |
 | **Testing expectations** | Unit tests for core logic; integration tests for API routes. CI fails on test failures. |
 | **CI validation** | Lint, type-check, and tests run on every PR via GitHub Actions. |
-| **Prompt as code** | AI extractor prompts in `prompts/` are versioned and reviewed like source code. |
+| **Prompt as code** | The AI report system prompt is an inline constant in `ai-report-service.ts`, versioned and reviewed like source code. |
 | **Secrets hygiene** | No secrets in code or CI environment variables. All production secrets live in Google Secret Manager. |
 | **Expand-and-contract** | All DB migrations are safe to deploy without downtime. |
 
@@ -412,7 +411,6 @@ australia-southeast1-docker.pkg.dev/wd-tools/price-insight/frontend:<tag>
 | Architecture overview | `docs/architecture.md` *(planned)* |
 | Deployment runbook | `docs/deployment.md` *(planned)* |
 | AI workflow guide | `docs/ai-workflow.md` *(planned)* |
-| Extractor prompt contract | `prompts/extractor.md` |
 | Tool schema reference | `tool_call.json` |
 | AI task files | `.ai/tasks/` |
 

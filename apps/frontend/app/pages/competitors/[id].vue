@@ -48,15 +48,6 @@ const sourceColor = (source: string) => {
   return map[source] ?? 'neutral'
 }
 
-const formatPrice = (price: number | null, currency: string): string => {
-  if (price == null) return '—'
-  return new Intl.NumberFormat('en-NZ', {
-    style: 'currency',
-    currency: currency || 'NZD',
-    minimumFractionDigits: 2
-  }).format(price)
-}
-
 const formatDateTime = (iso: string | null): string => {
   if (!iso) return '—'
   const d = new Date(iso)
@@ -137,7 +128,7 @@ const formatDateTime = (iso: string | null): string => {
 
         <template #currentPrice-cell="{ row }">
           <span class="font-medium text-gray-900">
-            {{ formatPrice(row.original.currentPrice, row.original.currency) }}
+            {{ formatCurrencyDisplay(row.original.currentPrice, row.original.currency) }}
           </span>
         </template>
 

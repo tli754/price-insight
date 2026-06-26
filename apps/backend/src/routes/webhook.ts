@@ -1,8 +1,8 @@
 import { timingSafeEqual } from "crypto";
 import type { FastifyPluginAsync } from "fastify";
 
+import { filterByCountryAndPriceRange, mapToCompetitorProductInput, normalizeSourceForCompare } from "../lib/competitor-filter.js";
 import type { DfsProductInfoGetResponse, DfsShoppingGetResponse } from "../services/dataforseo-service.js";
-import type { CompetitorProductInput } from "../services/competitor-repository.js";
 
 const LANGUAGE_CODE = "en";
 const LOCATION_CODE = 2554;
@@ -16,10 +16,6 @@ function validateSecret(incoming: string, expected: string): boolean {
   } catch {
     return false;
   }
-}
-
-function normalizeSource(source: string): string {
-  return source.trim().toLowerCase();
 }
 
 const webhookRoutes: FastifyPluginAsync = async (fastify) => {
@@ -109,41 +105,17 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
     const stub = { productId: "", seller: "", title: "", price: 0, currency: "NZD", oldPrice: null, thumbnail: null, rating: null, reviewCount: null, tag: null, googlePosition: null };
     const results = fastify.dataForSeoService.fetchProductInfoResults(data, stub);
 
-    const ownStore = fastify.env.OWN_STORE_NAME ? normalizeSource(fastify.env.OWN_STORE_NAME) : null;
+    const ownStore = fastify.env.OWN_STORE_NAME ? normalizeSourceForCompare(fastify.env.OWN_STORE_NAME) : null;
     const productPrice = product.price != null ? Number(product.price) : null;
 
-    const toSave = results.filter((r) => {
-      if (r.country !== "NZ" && r.country !== "AU") return false;
-      if (productPrice != null) {
-        if (r.extractedPrice < productPrice / 2 || r.extractedPrice > productPrice * 2) return false;
-      }
-      if (ownStore && normalizeSource(r.source) === ownStore) return false;
-      return true;
-    });
+    const filtered = filterByCountryAndPriceRange(results, productPrice);
+    const toSave = ownStore ? filtered.filter((r) => normalizeSourceForCompare(r.source) !== ownStore) : filtered;
 
     if (toSave.length === 0) {
       return reply.status(200).send();
     }
 
-    const rows: CompetitorProductInput[] = toSave.map((r) => ({
-      competitorId: null,
-      title: r.title,
-      externalId: r.externalId,
-      productLink: r.link,
-      source: r.source.trim() || "Unknown",
-      currency: r.currency,
-      thumbnail: r.thumbnail,
-      tag: r.tag ?? null,
-      googlePosition: r.googlePosition ?? null,
-      rawPrice: r.rawPrice,
-      extractedPrice: r.extractedPrice,
-      country: r.country ?? null,
-      rating: r.rating ?? null,
-      reviewCount: r.reviewCount ?? null,
-      shippingRaw: r.shippingRaw ?? null,
-      shippingExtracted: r.shippingExtracted ?? null,
-      extractedOldPrice: r.extractedOldPrice ?? null
-    }));
+    const rows = toSave.map((r) => mapToCompetitorProductInput(r));
 
     await Promise.all(rows.map((row) =>
       fastify.competitorRepository.upsertSuggestedCompetitor(productId, row)
