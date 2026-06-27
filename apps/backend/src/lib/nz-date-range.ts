@@ -34,6 +34,11 @@ export function getLast36Hours(now = new Date()): Date {
   return new Date(now.getTime() - 36 * 60 * 60 * 1000);
 }
 
+/** Returns a Date 7 days before now. */
+export function getLast7Days(now = new Date()): Date {
+  return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+}
+
 /** Returns a Date 30 days before now. */
 export function getLast30Days(now = new Date()): Date {
   return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);

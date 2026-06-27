@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { AppError } from "../lib/app-error.js";
-import { getTodayNZRange } from "../lib/nz-date-range.js";
+import { getLast7Days } from "../lib/nz-date-range.js";
 import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
 
 const ordersRoutes: FastifyPluginAsync = async (fastify) => {
@@ -13,8 +13,7 @@ const ordersRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(503, "QUEUE_NOT_CONFIGURED", "Order sync queue is not available.");
     }
 
-    const { from, to } = getTodayNZRange();
-    const filter = `updated_at:>=${from.toISOString()} updated_at:<=${to.toISOString()}`;
+    const filter = `updated_at:>=${getLast7Days().toISOString()}`;
     const accessToken = await fastify.shopifyService.getAccessToken();
     const orders = await fastify.shopifyGraphQLService.fetchOrders(accessToken, filter);
 

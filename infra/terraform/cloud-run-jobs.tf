@@ -17,6 +17,7 @@ resource "google_cloud_run_v2_job" "backend_script_runner" {
     template {
       service_account = data.google_service_account.backend_runtime.email
       max_retries     = 0
+      timeout         = "1800s"
 
       volumes {
         name = "cloudsql"
