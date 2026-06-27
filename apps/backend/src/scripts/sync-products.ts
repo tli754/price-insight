@@ -37,11 +37,14 @@ try {
   const accessToken = await shopifyService.getAccessToken();
   console.log(`[sync-products] Access token obtained.`);
 
-  const products = await shopifyService.fetchAllProducts(accessToken);
-  console.log(`[sync-products] Fetched ${products.length} products from Shopify.`);
-
-  const synced = await productRepository.importProducts(products);
-  console.log(`[sync-products] Done. ${synced} products upserted.`);
+  let synced = 0;
+  let pageNum = 0;
+  for await (const page of shopifyService.streamProducts(accessToken)) {
+    pageNum++;
+    console.log(`[sync-products] Page ${pageNum}: ${page.length} products, upserting…`);
+    synced += await productRepository.importProducts(page);
+  }
+  console.log(`[sync-products] Done. ${synced} products upserted across ${pageNum} page(s).`);
 } catch (err) {
   console.error("[sync-products] Failed:", err);
   process.exit(1);

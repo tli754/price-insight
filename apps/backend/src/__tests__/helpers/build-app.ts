@@ -114,7 +114,7 @@ export function makeCompetitorAnalysisService() {
 export function makeShopifyService() {
   return {
     getAccessToken: vi.fn().mockResolvedValue("fake-access-token"),
-    fetchAllProducts: vi.fn().mockResolvedValue([]),
+    streamProducts: vi.fn().mockImplementation(async function* () {}),
     fetchOrders: vi.fn().mockResolvedValue([])
   };
 }
