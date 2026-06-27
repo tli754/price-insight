@@ -4,9 +4,6 @@ import type { FastifyPluginAsync } from "fastify";
 import { filterByCountryAndPriceRange, mapToCompetitorProductInput, normalizeSourceForCompare } from "../lib/competitor-filter.js";
 import type { DfsProductInfoGetResponse, DfsShoppingGetResponse } from "../services/dataforseo-service.js";
 
-const LANGUAGE_CODE = "en";
-const LOCATION_CODE = 2554;
-
 function validateSecret(incoming: string, expected: string): boolean {
   try {
     const a = Buffer.from(incoming);
@@ -34,6 +31,14 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(200).send();
     }
 
+    if (fastify.cloudTasksCompetitorClient) {
+      await fastify.cloudTasksCompetitorClient.enqueue({ type: "process-shopping-pingback", taskId, productId });
+      return reply.status(200).send();
+    }
+
+    // Inline fallback: Cloud Tasks not configured (local dev)
+    request.log.warn({ taskId, productId }, "dataforseo/shopping pingback: cloudTasksCompetitorClient not configured — processing inline");
+
     let data: DfsShoppingGetResponse;
     try {
       data = await fastify.dataForSeoService.fetchShoppingTaskResult(taskId);
@@ -43,19 +48,14 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const candidates = fastify.dataForSeoService.parseShoppingCandidates(data, fastify.env.OWN_STORE_NAME);
-
-    if (candidates.length === 0) {
-      return reply.status(200).send();
-    }
+    if (candidates.length === 0) return reply.status(200).send();
 
     const deletedIds = await fastify.competitorRepository.getDeletedExternalIds(productId);
     const filtered = deletedIds.size
       ? candidates.filter((c) => !deletedIds.has(c.productId))
       : candidates;
 
-    if (filtered.length === 0) {
-      return reply.status(200).send();
-    }
+    if (filtered.length === 0) return reply.status(200).send();
 
     const webhookBase = `${fastify.env.WEBHOOK_HOST}/webhooks/dataforseo/pingback/product_info`;
     const secret = fastify.env.DATAFORSEO_WEBHOOK_SECRET;
@@ -88,6 +88,14 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(200).send();
     }
 
+    if (fastify.cloudTasksCompetitorClient) {
+      await fastify.cloudTasksCompetitorClient.enqueue({ type: "process-product-info-pingback", taskId, productId });
+      return reply.status(200).send();
+    }
+
+    // Inline fallback: Cloud Tasks not configured (local dev)
+    request.log.warn({ taskId, productId }, "dataforseo/product_info pingback: cloudTasksCompetitorClient not configured — processing inline");
+
     const product = await fastify.productRepository.getProductById(productId);
     if (!product) {
       request.log.warn({ productId }, "dataforseo/product_info pingback: product not found");
@@ -102,29 +110,30 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(200).send();
     }
 
-    const stub = { productId: "", seller: "", title: "", price: 0, currency: "NZD", oldPrice: null, thumbnail: null, rating: null, reviewCount: null, tag: null, googlePosition: null };
+    const stub = {
+      productId: "", seller: "", title: "", price: 0, currency: "NZD",
+      oldPrice: null, thumbnail: null, rating: null, reviewCount: null, tag: null, googlePosition: null,
+    };
     const results = fastify.dataForSeoService.fetchProductInfoResults(data, stub);
 
     const ownStore = fastify.env.OWN_STORE_NAME ? normalizeSourceForCompare(fastify.env.OWN_STORE_NAME) : null;
     const productPrice = product.price != null ? Number(product.price) : null;
 
-    const filtered = filterByCountryAndPriceRange(results, productPrice);
-    const toSave = ownStore ? filtered.filter((r) => normalizeSourceForCompare(r.source) !== ownStore) : filtered;
+    const filteredResults = filterByCountryAndPriceRange(results, productPrice);
+    const toSave = ownStore
+      ? filteredResults.filter((r) => normalizeSourceForCompare(r.source) !== ownStore)
+      : filteredResults;
 
-    if (toSave.length === 0) {
-      return reply.status(200).send();
-    }
+    if (toSave.length === 0) return reply.status(200).send();
 
     const rows = toSave.map((r) => mapToCompetitorProductInput(r));
 
     await Promise.all(rows.map((row) =>
       fastify.competitorRepository.upsertSuggestedCompetitor(productId, row)
     ));
-
     await fastify.competitorRepository.recordPricesForConfirmed(productId, rows);
 
     request.log.info({ productId, saved: rows.length }, "dataforseo/product_info pingback: upserted suggested competitors");
-
     return reply.status(200).send();
   });
 };
