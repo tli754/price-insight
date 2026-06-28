@@ -1,8 +1,34 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 import type { CompetitorResult, ShoppingCandidate } from "../services/dataforseo-service.js";
 import type { ProductRow } from "../db/schema.js";
 import { buildTestApp } from "./helpers/build-app.js";
+
+// ── OIDC mock ─────────────────────────────────────────────────────────────────
+
+const EXPECTED_SA = "price-insight-invoker@wd-tools.iam.gserviceaccount.com";
+
+const { mockVerifyIdToken } = vi.hoisted(() => ({ mockVerifyIdToken: vi.fn() }));
+
+vi.mock("google-auth-library", () => ({
+  OAuth2Client: class {
+    verifyIdToken(...args: unknown[]) {
+      return mockVerifyIdToken(...args);
+    }
+  },
+}));
+
+function validToken() {
+  mockVerifyIdToken.mockResolvedValue({
+    getPayload: () => ({ email: EXPECTED_SA, email_verified: true }),
+  });
+}
+
+function invalidToken() {
+  mockVerifyIdToken.mockRejectedValue(new Error("Invalid token signature"));
+}
+
+const AUTH = { Authorization: `Bearer valid-token` };
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -19,7 +45,7 @@ function makeCandidate(overrides: Partial<ShoppingCandidate> = {}): ShoppingCand
     reviewCount: null,
     tag: null,
     googlePosition: null,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -36,7 +62,7 @@ function makeResult(overrides: Partial<CompetitorResult> = {}): CompetitorResult
     country: "NZ",
     thumbnail: null,
     tag: null,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -59,131 +85,73 @@ function makeProduct(overrides: Partial<ProductRow> = {}): ProductRow {
     inventoryQuantity: 10,
     createdAt: new Date(),
     updatedAt: new Date(),
-    ...overrides
+    ...overrides,
   };
 }
 
-// ── URL helpers ───────────────────────────────────────────────────────────────
+const ENV_OVERRIDES = { INTERNAL_OIDC_SERVICE_ACCOUNT: EXPECTED_SA };
 
-const SECRET = "fake-webhook-secret";
+// ── POST /internal/process-shopping-pingback ──────────────────────────────────
 
-function shoppingUrl(overrides: Record<string, string> = {}): string {
-  const p = new URLSearchParams({ secret: SECRET, id: "task-1", tag: "1", ...overrides });
-  return `/webhooks/dataforseo/pingback/shopping?${p}`;
-}
-
-function infoUrl(overrides: Record<string, string> = {}): string {
-  const p = new URLSearchParams({ secret: SECRET, id: "task-1", tag: "1", ...overrides });
-  return `/webhooks/dataforseo/pingback/product_info?${p}`;
-}
-
-// ── Shopping pingback ─────────────────────────────────────────────────────────
-
-describe("GET /webhooks/dataforseo/pingback/shopping", () => {
+describe("POST /internal/process-shopping-pingback", () => {
   let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
   let mocks: Awaited<ReturnType<typeof buildTestApp>>["mocks"];
 
   beforeEach(async () => {
-    ({ app, mocks } = await buildTestApp());
+    ({ app, mocks } = await buildTestApp({}, ENV_OVERRIDES));
+    validToken();
   });
   afterEach(() => app.close());
 
+  const body = { taskId: "task-1", productId: 1 };
+
   // ── Auth ──────────────────────────────────────────────────────────────────
 
-  it("returns 401 when secret is wrong", async () => {
-    const res = await app.inject({ method: "GET", url: shoppingUrl({ secret: "WRONG" }) });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("returns 401 when secret is missing", async () => {
+  it("returns 401 when OIDC token is invalid", async () => {
+    invalidToken();
     const res = await app.inject({
-      method: "GET",
-      url: "/webhooks/dataforseo/pingback/shopping?id=task-1&tag=1"
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
     });
     expect(res.statusCode).toBe(401);
   });
 
-  // ── Param validation ──────────────────────────────────────────────────────
-
-  it("returns 200 and skips when taskId is missing", async () => {
-    const res = await app.inject({ method: "GET", url: shoppingUrl({ id: "" }) });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.dataForSeoService.fetchShoppingTaskResult).not.toHaveBeenCalled();
+  it("returns 401 when Authorization header is missing", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      payload: body,
+    });
+    expect(res.statusCode).toBe(401);
   });
 
-  it("returns 200 and skips when productId is not a number", async () => {
-    const res = await app.inject({ method: "GET", url: shoppingUrl({ tag: "abc" }) });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.dataForSeoService.fetchShoppingTaskResult).not.toHaveBeenCalled();
-  });
-
-  it("returns 200 and skips when productId is zero", async () => {
-    const res = await app.inject({ method: "GET", url: shoppingUrl({ tag: "0" }) });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.dataForSeoService.fetchShoppingTaskResult).not.toHaveBeenCalled();
-  });
-
-  it("returns 200 and skips when productId is negative", async () => {
-    const res = await app.inject({ method: "GET", url: shoppingUrl({ tag: "-5" }) });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.dataForSeoService.fetchShoppingTaskResult).not.toHaveBeenCalled();
-  });
-
-  // ── DataForSEO fetch ──────────────────────────────────────────────────────
-
-  it("returns 200 when task fetch throws", async () => {
-    mocks.dataForSeoService.fetchShoppingTaskResult.mockRejectedValue(new Error("network error"));
-    const res = await app.inject({ method: "GET", url: shoppingUrl() });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.dataForSeoService.postProductInfoTasks).not.toHaveBeenCalled();
-  });
-
-  it("returns 200 and skips when no candidates found", async () => {
-    mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([]);
-    const res = await app.inject({ method: "GET", url: shoppingUrl() });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.competitorRepository.getDeletedExternalIds).not.toHaveBeenCalled();
-    expect(mocks.dataForSeoService.postProductInfoTasks).not.toHaveBeenCalled();
-  });
-
-  // ── Soft-delete filter ────────────────────────────────────────────────────
-
-  it("returns 200 and skips when all candidates are soft-deleted", async () => {
-    mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([
-      makeCandidate({ productId: "deleted-prod" })
-    ]);
-    mocks.competitorRepository.getDeletedExternalIds.mockResolvedValue(new Set(["deleted-prod"]));
-
-    const res = await app.inject({ method: "GET", url: shoppingUrl() });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.dataForSeoService.postProductInfoTasks).not.toHaveBeenCalled();
-  });
-
-  it("filters out soft-deleted candidates before posting product_info tasks", async () => {
-    mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([
-      makeCandidate({ productId: "prod-1" }),
-      makeCandidate({ productId: "prod-deleted" }),
-      makeCandidate({ productId: "prod-2" })
-    ]);
-    mocks.competitorRepository.getDeletedExternalIds.mockResolvedValue(new Set(["prod-deleted"]));
-
-    await app.inject({ method: "GET", url: shoppingUrl() });
-
-    expect(mocks.dataForSeoService.postProductInfoTasks).toHaveBeenCalledWith(
-      ["prod-1", "prod-2"],
-      1,
-      expect.any(String)
-    );
+  it("returns 401 when OIDC service account is not configured", async () => {
+    await app.close();
+    ({ app, mocks } = await buildTestApp({}, {}));
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
+    });
+    expect(res.statusCode).toBe(401);
   });
 
   // ── Happy path ────────────────────────────────────────────────────────────
 
-  it("posts product_info tasks with correct productId from tag", async () => {
+  it("posts product_info tasks with correct productId", async () => {
     mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([
-      makeCandidate({ productId: "prod-42" })
+      makeCandidate({ productId: "prod-42" }),
     ]);
 
-    await app.inject({ method: "GET", url: shoppingUrl({ tag: "7" }) });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: { taskId: "task-1", productId: 7 },
+    });
 
     expect(mocks.dataForSeoService.postProductInfoTasks).toHaveBeenCalledWith(
       ["prod-42"],
@@ -192,83 +160,176 @@ describe("GET /webhooks/dataforseo/pingback/shopping", () => {
     );
   });
 
-  it("includes secret, $id and $tag placeholders in the product_info pingback URL", async () => {
+  it("includes secret and $id/$tag placeholders in the product_info pingback URL", async () => {
     mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([makeCandidate()]);
 
-    await app.inject({ method: "GET", url: shoppingUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     const callbackUrl: string = mocks.dataForSeoService.postProductInfoTasks.mock.calls[0][2];
     expect(callbackUrl).toContain("/webhooks/dataforseo/pingback/product_info");
-    expect(callbackUrl).toContain(`secret=${SECRET}`);
+    expect(callbackUrl).toContain("secret=fake-webhook-secret");
     expect(callbackUrl).toContain("id=$id");
     expect(callbackUrl).toContain("tag=$tag");
+  });
+
+  // ── DataForSEO fetch ──────────────────────────────────────────────────────
+
+  it("returns 200 when task fetch throws", async () => {
+    mocks.dataForSeoService.fetchShoppingTaskResult.mockRejectedValue(new Error("network error"));
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(mocks.dataForSeoService.postProductInfoTasks).not.toHaveBeenCalled();
+  });
+
+  it("returns 200 and skips when no candidates found", async () => {
+    mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(mocks.dataForSeoService.postProductInfoTasks).not.toHaveBeenCalled();
+  });
+
+  // ── Soft-delete filter ────────────────────────────────────────────────────
+
+  it("returns 200 and skips when all candidates are soft-deleted", async () => {
+    mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([
+      makeCandidate({ productId: "deleted-prod" }),
+    ]);
+    mocks.competitorRepository.getDeletedExternalIds.mockResolvedValue(new Set(["deleted-prod"]));
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(mocks.dataForSeoService.postProductInfoTasks).not.toHaveBeenCalled();
+  });
+
+  it("filters out soft-deleted candidates before posting product_info tasks", async () => {
+    mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([
+      makeCandidate({ productId: "prod-1" }),
+      makeCandidate({ productId: "prod-deleted" }),
+      makeCandidate({ productId: "prod-2" }),
+    ]);
+    mocks.competitorRepository.getDeletedExternalIds.mockResolvedValue(new Set(["prod-deleted"]));
+
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
+    });
+
+    expect(mocks.dataForSeoService.postProductInfoTasks).toHaveBeenCalledWith(
+      ["prod-1", "prod-2"],
+      1,
+      expect.any(String)
+    );
   });
 
   it("returns 200 even when postProductInfoTasks throws", async () => {
     mocks.dataForSeoService.parseShoppingCandidates.mockReturnValue([makeCandidate()]);
     mocks.dataForSeoService.postProductInfoTasks.mockRejectedValue(new Error("API error"));
 
-    const res = await app.inject({ method: "GET", url: shoppingUrl() });
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-shopping-pingback",
+      headers: AUTH,
+      payload: body,
+    });
     expect(res.statusCode).toBe(200);
   });
 });
 
-// ── Product info pingback ──────────────────────────────────────────────────────
+// ── POST /internal/process-product-info-pingback ──────────────────────────────
 
-describe("GET /webhooks/dataforseo/pingback/product_info", () => {
+describe("POST /internal/process-product-info-pingback", () => {
   let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
   let mocks: Awaited<ReturnType<typeof buildTestApp>>["mocks"];
 
   beforeEach(async () => {
-    ({ app, mocks } = await buildTestApp());
+    ({ app, mocks } = await buildTestApp({}, ENV_OVERRIDES));
+    validToken();
     mocks.productRepository.getProductById.mockResolvedValue(makeProduct());
   });
   afterEach(() => app.close());
 
+  const body = { taskId: "task-1", productId: 1 };
+
   // ── Auth ──────────────────────────────────────────────────────────────────
 
-  it("returns 401 when secret is wrong", async () => {
-    const res = await app.inject({ method: "GET", url: infoUrl({ secret: "WRONG" }) });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("returns 401 when secret is missing", async () => {
+  it("returns 401 when OIDC token is invalid", async () => {
+    invalidToken();
     const res = await app.inject({
-      method: "GET",
-      url: "/webhooks/dataforseo/pingback/product_info?id=task-1&tag=1"
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
     });
     expect(res.statusCode).toBe(401);
   });
 
-  // ── Param validation ──────────────────────────────────────────────────────
-
-  it("returns 200 and skips when productId is invalid", async () => {
-    const res = await app.inject({ method: "GET", url: infoUrl({ tag: "not-a-number" }) });
-    expect(res.statusCode).toBe(200);
-    expect(mocks.productRepository.getProductById).not.toHaveBeenCalled();
+  it("returns 401 when Authorization header is missing", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      payload: body,
+    });
+    expect(res.statusCode).toBe(401);
   });
+
+  // ── Guard checks ──────────────────────────────────────────────────────────
 
   it("returns 200 and skips when product is not found", async () => {
     mocks.productRepository.getProductById.mockResolvedValue(null);
-    const res = await app.inject({ method: "GET", url: infoUrl() });
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
     expect(res.statusCode).toBe(200);
     expect(mocks.dataForSeoService.fetchProductInfoTaskResult).not.toHaveBeenCalled();
   });
 
-  // ── DataForSEO fetch ──────────────────────────────────────────────────────
-
   it("returns 200 when task fetch throws", async () => {
     mocks.dataForSeoService.fetchProductInfoTaskResult.mockRejectedValue(new Error("network error"));
-    const res = await app.inject({ method: "GET", url: infoUrl() });
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
     expect(res.statusCode).toBe(200);
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).not.toHaveBeenCalled();
   });
 
   it("returns 200 and skips when all results are filtered out", async () => {
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
-      makeResult({ country: "US" })
+      makeResult({ country: "US" }),
     ]);
-    const res = await app.inject({ method: "GET", url: infoUrl() });
+    const res = await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
     expect(res.statusCode).toBe(200);
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).not.toHaveBeenCalled();
   });
@@ -280,10 +341,15 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
       makeResult({ country: "NZ", source: "NZ Shop" }),
       makeResult({ country: "AU", source: "AU Shop" }),
       makeResult({ country: "US", source: "US Shop" }),
-      makeResult({ country: null, source: "Unknown Shop" })
+      makeResult({ country: null, source: "Unknown Shop" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(2);
     const sources = mocks.competitorRepository.upsertSuggestedCompetitor.mock.calls.map(
@@ -301,10 +367,15 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
     // product price = 100, minimum = 50
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
       makeResult({ extractedPrice: 49, source: "Too Cheap" }),
-      makeResult({ extractedPrice: 50, source: "Lower Bound" })
+      makeResult({ extractedPrice: 50, source: "Lower Bound" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(1);
     const [, row] = mocks.competitorRepository.upsertSuggestedCompetitor.mock.calls[0];
@@ -315,10 +386,15 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
     // product price = 100, maximum = 200
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
       makeResult({ extractedPrice: 200, source: "Upper Bound" }),
-      makeResult({ extractedPrice: 201, source: "Too Expensive" })
+      makeResult({ extractedPrice: 201, source: "Too Expensive" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(1);
     const [, row] = mocks.competitorRepository.upsertSuggestedCompetitor.mock.calls[0];
@@ -329,10 +405,15 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
     mocks.productRepository.getProductById.mockResolvedValue(makeProduct({ price: null }));
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
       makeResult({ extractedPrice: 1, source: "Very Cheap" }),
-      makeResult({ extractedPrice: 99999, source: "Very Expensive" })
+      makeResult({ extractedPrice: 99999, source: "Very Expensive" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(2);
   });
@@ -340,32 +421,39 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
   // ── Own store filter ──────────────────────────────────────────────────────
 
   it("filters out own store by name (case-insensitive)", async () => {
-    const { app: ownApp, mocks: ownMocks } = await buildTestApp(
-      {},
-      { OWN_STORE_NAME: "White Donkey" }
-    );
-    ownMocks.productRepository.getProductById.mockResolvedValue(makeProduct());
-    ownMocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
-      makeResult({ source: "white donkey" }),   // lowercase — should be excluded
-      makeResult({ source: "WHITE DONKEY" }),   // uppercase — should be excluded
-      makeResult({ source: "Other Shop" })
+    await app.close();
+    ({ app, mocks } = await buildTestApp({}, { ...ENV_OVERRIDES, OWN_STORE_NAME: "White Donkey" }));
+    validToken();
+    mocks.productRepository.getProductById.mockResolvedValue(makeProduct());
+    mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
+      makeResult({ source: "white donkey" }),
+      makeResult({ source: "WHITE DONKEY" }),
+      makeResult({ source: "Other Shop" }),
     ]);
 
-    await ownApp.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
-    expect(ownMocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(1);
-    const [, row] = ownMocks.competitorRepository.upsertSuggestedCompetitor.mock.calls[0];
+    expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(1);
+    const [, row] = mocks.competitorRepository.upsertSuggestedCompetitor.mock.calls[0];
     expect(row.source).toBe("Other Shop");
-
-    await ownApp.close();
   });
 
   it("does not filter by store name when OWN_STORE_NAME is not set", async () => {
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
-      makeResult({ source: "Any Store" })
+      makeResult({ source: "Any Store" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(1);
   });
@@ -375,10 +463,15 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
   it("calls upsertSuggestedCompetitor with correct productId and row for each result", async () => {
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
       makeResult({ source: "Shop A", extractedPrice: 99, country: "NZ" }),
-      makeResult({ source: "Shop B", extractedPrice: 120, country: "AU" })
+      makeResult({ source: "Shop B", extractedPrice: 120, country: "AU" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl({ tag: "5" }) });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: { taskId: "task-1", productId: 5 },
+    });
 
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledTimes(2);
     expect(mocks.competitorRepository.upsertSuggestedCompetitor).toHaveBeenCalledWith(
@@ -394,26 +487,36 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
   it("calls recordPricesForConfirmed with all saved rows", async () => {
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
       makeResult({ source: "Shop A" }),
-      makeResult({ source: "Shop B", country: "AU" })
+      makeResult({ source: "Shop B", country: "AU" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl({ tag: "3" }) });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: { taskId: "task-1", productId: 3 },
+    });
 
     expect(mocks.competitorRepository.recordPricesForConfirmed).toHaveBeenCalledWith(
       3,
       expect.arrayContaining([
         expect.objectContaining({ source: "Shop A" }),
-        expect.objectContaining({ source: "Shop B" })
+        expect.objectContaining({ source: "Shop B" }),
       ])
     );
   });
 
   it("does not call recordPricesForConfirmed when all results are filtered", async () => {
     mocks.dataForSeoService.fetchProductInfoResults.mockReturnValue([
-      makeResult({ country: "US" })
+      makeResult({ country: "US" }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     expect(mocks.competitorRepository.recordPricesForConfirmed).not.toHaveBeenCalled();
   });
@@ -436,11 +539,16 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
         rating: 4.5,
         reviewCount: 100,
         shippingRaw: "Free shipping",
-        shippingExtracted: 0
-      })
+        shippingExtracted: 0,
+      }),
     ]);
 
-    await app.inject({ method: "GET", url: infoUrl() });
+    await app.inject({
+      method: "POST",
+      url: "/internal/process-product-info-pingback",
+      headers: AUTH,
+      payload: body,
+    });
 
     const [, row] = mocks.competitorRepository.upsertSuggestedCompetitor.mock.calls[0];
     expect(row).toMatchObject({
@@ -450,7 +558,7 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
       extractedPrice: 99,
       extractedOldPrice: 120,
       currency: "NZD",
-      source: "Shop A",        // trimmed
+      source: "Shop A",
       productLink: "https://shopa.co.nz/widget",
       country: "NZ",
       thumbnail: "https://img.example.com/w.jpg",
@@ -460,7 +568,7 @@ describe("GET /webhooks/dataforseo/pingback/product_info", () => {
       reviewCount: 100,
       shippingRaw: "Free shipping",
       shippingExtracted: 0,
-      competitorId: null
+      competitorId: null,
     });
   });
 });

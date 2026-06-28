@@ -15,13 +15,14 @@ import { AppError } from "../../lib/app-error.js";
 import { requireSession } from "../../lib/require-session.js";
 import analysisRoutes from "../../routes/analysis.js";
 import authRoutes from "../../routes/auth.js";
+import webhookRoutes from "../../routes/dataforseo-webhook.js";
 import healthRoutes from "../../routes/health.js";
+import internalCompetitorRoutes from "../../routes/internal-competitor.js";
 import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
 import reportRoutes from "../../routes/reports.js";
 import shopifyWebhookRoutes from "../../routes/shopify-webhook.js";
 import shopifyRoutes from "../../routes/shopify.js";
-import webhookRoutes from "../../routes/webhook.js";
 
 // ── Minimal fake env ──────────────────────────────────────────────────────────
 export const fakeEnv = {
@@ -55,7 +56,7 @@ export const fakeEnv = {
   CLOUD_TASKS_LOCATION: undefined,
   CLOUD_TASKS_QUEUE: undefined,
   ORDER_WORKER_URL: undefined,
-  INTERNAL_OIDC_SERVICE_ACCOUNT: undefined,
+  INTERNAL_OIDC_SERVICE_ACCOUNT: undefined as string | undefined,
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -114,7 +115,7 @@ export function makeCompetitorAnalysisService() {
 export function makeShopifyService() {
   return {
     getAccessToken: vi.fn().mockResolvedValue("fake-access-token"),
-    fetchAllProducts: vi.fn().mockResolvedValue([]),
+    streamProducts: vi.fn().mockImplementation(async function* () {}),
     fetchOrders: vi.fn().mockResolvedValue([])
   };
 }
@@ -129,6 +130,12 @@ export function makeShopifyGraphQLService() {
 export function makeCloudTasksClient() {
   return {
     enqueueSyncOrder: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+export function makeCloudTasksCompetitorClient() {
+  return {
+    enqueue: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -174,13 +181,14 @@ export type TestMocks = {
   shopifyService: ReturnType<typeof makeShopifyService> | null;
   shopifyGraphQLService: ReturnType<typeof makeShopifyGraphQLService> | null;
   cloudTasksClient: ReturnType<typeof makeCloudTasksClient> | null;
+  cloudTasksCompetitorClient: ReturnType<typeof makeCloudTasksCompetitorClient> | null;
   aiReportRepository: ReturnType<typeof makeAiReportRepository>;
   aiReportService: ReturnType<typeof makeAiReportService>;
 };
 
 export async function buildTestApp(
   overrides: Partial<TestMocks> = {},
-  envOverrides: Partial<typeof fakeEnv & { OWN_STORE_NAME?: string }> = {},
+  envOverrides: Partial<typeof fakeEnv & { OWN_STORE_NAME?: string; INTERNAL_OIDC_SERVICE_ACCOUNT?: string }> = {},
   opts: { protectAuth?: boolean } = {}
 ) {
   const mocks: TestMocks = {
@@ -192,6 +200,9 @@ export async function buildTestApp(
     shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null,
     shopifyGraphQLService: "shopifyGraphQLService" in overrides ? overrides.shopifyGraphQLService ?? null : null,
     cloudTasksClient: "cloudTasksClient" in overrides ? (overrides.cloudTasksClient as ReturnType<typeof makeCloudTasksClient> | null) : makeCloudTasksClient(),
+    cloudTasksCompetitorClient: "cloudTasksCompetitorClient" in overrides
+      ? (overrides.cloudTasksCompetitorClient as ReturnType<typeof makeCloudTasksCompetitorClient> | null)
+      : makeCloudTasksCompetitorClient(),
     aiReportRepository: overrides.aiReportRepository ?? makeAiReportRepository(),
     aiReportService: overrides.aiReportService ?? makeAiReportService(),
   };
@@ -217,6 +228,7 @@ export async function buildTestApp(
   app.decorate("shopifyService", mocks.shopifyService as any);
   app.decorate("shopifyGraphQLService", mocks.shopifyGraphQLService as any);
   app.decorate("cloudTasksClient", mocks.cloudTasksClient as any);
+  app.decorate("cloudTasksCompetitorClient", mocks.cloudTasksCompetitorClient as any);
   app.decorate("aiReportRepository", mocks.aiReportRepository as any);
   app.decorate("aiReportService", mocks.aiReportService as any);
 
@@ -251,6 +263,7 @@ export async function buildTestApp(
   });
 
   await app.register(webhookRoutes);
+  await app.register(internalCompetitorRoutes);
   await app.register(shopifyWebhookRoutes);
 
   await app.ready();
