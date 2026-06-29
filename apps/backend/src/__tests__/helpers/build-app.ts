@@ -56,6 +56,7 @@ export const fakeEnv = {
   CLOUD_TASKS_LOCATION: undefined,
   CLOUD_TASKS_QUEUE: undefined,
   ORDER_WORKER_URL: undefined,
+  BACKEND_CLOUD_RUN_URL: undefined as string | undefined,
   INTERNAL_OIDC_SERVICE_ACCOUNT: undefined as string | undefined,
 };
 

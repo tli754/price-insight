@@ -12,7 +12,7 @@ const internalCompetitorRoutes: FastifyPluginAsync = async (fastify) => {
     const verified = await verifyOidcToken(
       request.headers.authorization,
       fastify.env.INTERNAL_OIDC_SERVICE_ACCOUNT,
-      fastify.env.WEBHOOK_HOST
+      fastify.env.BACKEND_CLOUD_RUN_URL ?? fastify.env.WEBHOOK_HOST
     );
     if (!verified) {
       return reply.status(401).send({ error: { code: "UNAUTHORIZED", message: "Invalid or missing OIDC token." } });

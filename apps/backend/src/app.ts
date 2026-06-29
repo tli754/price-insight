@@ -74,13 +74,13 @@ export async function buildApp(env: AppEnv) {
       : null;
 
   const cloudTasksCompetitorClient =
-    env.CLOUD_TASKS_PROJECT && env.CLOUD_TASKS_LOCATION && env.CLOUD_TASKS_QUEUE && env.INTERNAL_OIDC_SERVICE_ACCOUNT
+    env.CLOUD_TASKS_PROJECT && env.CLOUD_TASKS_LOCATION && env.CLOUD_TASKS_QUEUE && env.INTERNAL_OIDC_SERVICE_ACCOUNT && env.BACKEND_CLOUD_RUN_URL
       ? new CloudTasksCompetitorClient(
           env.CLOUD_TASKS_PROJECT,
           env.CLOUD_TASKS_LOCATION,
           env.CLOUD_TASKS_QUEUE,
           env.INTERNAL_OIDC_SERVICE_ACCOUNT,
-          env.WEBHOOK_HOST
+          env.BACKEND_CLOUD_RUN_URL
         )
       : null;
 

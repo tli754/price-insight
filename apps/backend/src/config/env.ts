@@ -32,6 +32,7 @@ const envSchema = z.object({
   CLOUD_TASKS_LOCATION: z.string().min(1).optional(),
   CLOUD_TASKS_QUEUE: z.string().min(1).optional(),
   ORDER_WORKER_URL: z.string().url().optional(),
+  BACKEND_CLOUD_RUN_URL: z.string().url().optional(),
   INTERNAL_OIDC_SERVICE_ACCOUNT: z.string().min(1).optional(),
 });
 
