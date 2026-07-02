@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import Fastify from "fastify";
 import OpenAI from "openai";
+import { ZodError } from "zod";
 
 import type { AppEnv } from "./config/env.js";
 import { createDatabase } from "./db/index.js";
@@ -118,11 +119,17 @@ export async function buildApp(env: AppEnv) {
       });
     }
 
-    if (error instanceof Error && error.name === "ZodError") {
+    if (error instanceof ZodError) {
+      const message = error.issues
+        .map((issue) => {
+          const path = issue.path.join(".");
+          return path ? `${path}: ${issue.message}` : issue.message;
+        })
+        .join("; ");
       return reply.status(400).send({
         error: {
           code: "VALIDATION_ERROR",
-          message: error.message
+          message: message || "Validation failed."
         }
       });
     }

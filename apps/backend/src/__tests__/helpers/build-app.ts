@@ -10,6 +10,7 @@ import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import Fastify from "fastify";
 import { vi } from "vitest";
+import { ZodError } from "zod";
 
 import { AppError } from "../../lib/app-error.js";
 import { requireSession } from "../../lib/require-session.js";
@@ -239,9 +240,15 @@ export async function buildTestApp(
         error: { code: error.code, message: error.message }
       });
     }
-    if (error instanceof Error && error.name === "ZodError") {
+    if (error instanceof ZodError) {
+      const message = error.issues
+        .map((issue) => {
+          const path = issue.path.join(".");
+          return path ? `${path}: ${issue.message}` : issue.message;
+        })
+        .join("; ");
       return reply.status(400).send({
-        error: { code: "VALIDATION_ERROR", message: error.message }
+        error: { code: "VALIDATION_ERROR", message: message || "Validation failed." }
       });
     }
     return reply.status(500).send({

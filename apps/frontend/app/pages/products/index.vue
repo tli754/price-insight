@@ -39,7 +39,7 @@ async function findCompetitors() {
       color: 'success'
     })
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Failed to submit competitor search'
+    const msg = getApiErrorMessage(e, 'Failed to submit competitor search')
     toast.add({ title: msg, color: 'error' })
   } finally {
     findingCompetitors.value = false
@@ -53,7 +53,7 @@ async function syncProducts() {
     toast.add({ title: `${result.synced} products synced`, color: 'success' })
     await refresh()
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Shopify sync failed'
+    const msg = getApiErrorMessage(e, 'Shopify sync failed')
     toast.add({ title: msg, color: 'error' })
   } finally {
     syncing.value = false
