@@ -2,6 +2,7 @@ import type { AppEnv } from "../config/env.js";
 import type { AiReportRepository } from "../services/ai-report-repository.js";
 import type { AiReportService } from "../services/ai-report-service.js";
 import type { CloudTasksOrderSyncClient } from "../services/cloud-tasks-client.js";
+import type { CloudTasksCompetitorClient } from "../services/cloud-tasks-competitor-client.js";
 import type { CompetitorAnalysisService } from "../services/competitor-analysis-service.js";
 import type { CompetitorRepository } from "../services/competitor-repository.js";
 import type { DataForSeoService } from "../services/dataforseo-service.js";
@@ -21,6 +22,7 @@ declare module "fastify" {
     shopifyService: ShopifyService | null;
     shopifyGraphQLService: ShopifyGraphQLService | null;
     cloudTasksClient: CloudTasksOrderSyncClient | null;
+    cloudTasksCompetitorClient: CloudTasksCompetitorClient | null;
     aiReportRepository: AiReportRepository;
     aiReportService: AiReportService;
   }

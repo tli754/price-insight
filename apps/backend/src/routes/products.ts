@@ -33,8 +33,10 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(503, "SHOPIFY_NOT_CONFIGURED", "Shopify credentials are not configured.");
     }
     const accessToken = await fastify.shopifyService.getAccessToken();
-    const shopifyProducts = await fastify.shopifyService.fetchAllProducts(accessToken);
-    const synced = await fastify.productRepository.importProducts(shopifyProducts);
+    let synced = 0;
+    for await (const page of fastify.shopifyService.streamProducts(accessToken)) {
+      synced += await fastify.productRepository.importProducts(page);
+    }
     reply.code(200);
     return { synced };
   });

@@ -16,10 +16,12 @@ import productRoutes from "./routes/products.js";
 import reportRoutes from "./routes/reports.js";
 import shopifyRoutes from "./routes/shopify.js";
 import shopifyWebhookRoutes from "./routes/shopify-webhook.js";
-import webhookRoutes from "./routes/webhook.js";
+import webhookRoutes from "./routes/dataforseo-webhook.js";
+import internalCompetitorRoutes from "./routes/internal-competitor.js";
 import { AiReportRepository } from "./services/ai-report-repository.js";
 import { AiReportService } from "./services/ai-report-service.js";
 import { CloudTasksOrderSyncClient } from "./services/cloud-tasks-client.js";
+import { CloudTasksCompetitorClient } from "./services/cloud-tasks-competitor-client.js";
 import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
 import { CompetitorRepository } from "./services/competitor-repository.js";
 import { DataForSeoService } from "./services/dataforseo-service.js";
@@ -71,6 +73,17 @@ export async function buildApp(env: AppEnv) {
         )
       : null;
 
+  const cloudTasksCompetitorClient =
+    env.CLOUD_TASKS_PROJECT && env.CLOUD_TASKS_LOCATION && env.CLOUD_TASKS_QUEUE && env.INTERNAL_OIDC_SERVICE_ACCOUNT && env.BACKEND_CLOUD_RUN_URL
+      ? new CloudTasksCompetitorClient(
+          env.CLOUD_TASKS_PROJECT,
+          env.CLOUD_TASKS_LOCATION,
+          env.CLOUD_TASKS_QUEUE,
+          env.INTERNAL_OIDC_SERVICE_ACCOUNT,
+          env.BACKEND_CLOUD_RUN_URL
+        )
+      : null;
+
   app.decorate("env", env);
 
   await app.register(cors, {
@@ -89,6 +102,7 @@ export async function buildApp(env: AppEnv) {
   app.decorate("shopifyService", shopifyService);
   app.decorate("shopifyGraphQLService", shopifyGraphQLService);
   app.decorate("cloudTasksClient", cloudTasksClient);
+  app.decorate("cloudTasksCompetitorClient", cloudTasksCompetitorClient);
   app.decorate("aiReportRepository", aiReportRepository);
   app.decorate("aiReportService", aiReportService);
 
@@ -138,6 +152,7 @@ export async function buildApp(env: AppEnv) {
   });
 
   await app.register(webhookRoutes);
+  await app.register(internalCompetitorRoutes);
   await app.register(shopifyWebhookRoutes);
 
   return app;

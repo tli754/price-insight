@@ -42,9 +42,8 @@ export class ShopifyService {
     return data.access_token;
   }
 
-  async fetchAllProducts(accessToken: string): Promise<ShopifyProduct[]> {
-    const all: ShopifyProduct[] = [];
-    let url: string | null = `${this.productsUrl}?limit=100`;
+  async *streamProducts(accessToken: string): AsyncGenerator<ShopifyProduct[]> {
+    let url: string | null = `${this.productsUrl}?limit=50`;
 
     while (url) {
       const res = await fetch(url, {
@@ -54,11 +53,9 @@ export class ShopifyService {
         throw new AppError(502, "SHOPIFY_FAILED", `Shopify products fetch failed: ${res.status}`);
       }
       const data = (await res.json()) as { products: ShopifyProduct[] };
-      all.push(...data.products);
+      yield data.products;
       url = parseNextLink(res.headers.get("Link"));
     }
-
-    return all;
   }
 
   async fetchOrders(accessToken: string, updatedAtMin?: string): Promise<ShopifyOrder[]> {
