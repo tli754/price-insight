@@ -22,7 +22,6 @@ export type CompetitorResult = {
 const BASE_URL = "https://api.dataforseo.com";
 const LOCATION_CODE = 2554; // New Zealand
 const LANGUAGE_CODE = "en";
-const PRODUCT_INFO_LIMIT = 40;
 const POLL_RETRIES = 10;
 const POLL_DELAY_MS = 3000;
 
@@ -238,7 +237,7 @@ export class DataForSeoService {
     return taskId;
   }
 
-  parseShoppingCandidates(data: DfsShoppingGetResponse, ownStoreName?: string, limit = PRODUCT_INFO_LIMIT): ShoppingCandidate[] {
+  parseShoppingCandidates(data: DfsShoppingGetResponse, ownStoreName?: string): ShoppingCandidate[] {
     const items = data.tasks?.[0]?.result?.[0]?.items;
     if (!items) return [];
 
@@ -271,8 +270,6 @@ export class DataForSeoService {
         tag: item.tags?.[0] ?? null,
         googlePosition: item.rank_absolute ?? null
       });
-
-      if (candidates.length >= limit) break;
     }
 
     return candidates;
