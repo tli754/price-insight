@@ -23,6 +23,27 @@ watch(search, (val) => {
   router.replace({ query: { ...route.query, search: val || undefined } })
 })
 
+// ── Status filter ───────────────────────────────────────────────────────────
+
+// 'all' means no status filter (empty-string values are disallowed by the Select).
+const statusOptions = [
+  { label: 'All statuses', value: 'all' },
+  { label: 'Active', value: 'active' },
+  { label: 'Archived', value: 'archived' },
+  { label: 'Draft', value: 'draft' },
+]
+
+function statusFromQuery(q: unknown): string {
+  if (typeof q === 'string' && statusOptions.some(o => o.value === q)) return q
+  return 'active'
+}
+
+const statusFilter = ref(statusFromQuery(route.query.status))
+
+watch(statusFilter, (val) => {
+  router.replace({ query: { ...route.query, status: val === 'active' ? undefined : val } })
+})
+
 const syncing = ref(false)
 const findingCompetitors = ref(false)
 
@@ -39,7 +60,7 @@ async function findCompetitors() {
       color: 'success'
     })
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Failed to submit competitor search'
+    const msg = getApiErrorMessage(e, 'Failed to submit competitor search')
     toast.add({ title: msg, color: 'error' })
   } finally {
     findingCompetitors.value = false
@@ -53,7 +74,7 @@ async function syncProducts() {
     toast.add({ title: `${result.synced} products synced`, color: 'success' })
     await refresh()
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Shopify sync failed'
+    const msg = getApiErrorMessage(e, 'Shopify sync failed')
     toast.add({ title: msg, color: 'error' })
   } finally {
     syncing.value = false
@@ -66,12 +87,20 @@ const statusColor = (status: string) => {
   return 'neutral'
 }
 
+// Split the query into whitespace-separated terms; a product matches if any
+// term appears in its title or SKU (e.g. "green bean" matches "green" OR "bean").
+const searchTerms = computed(() =>
+  search.value.toLowerCase().split(/\s+/).filter(Boolean)
+)
+
 const filtered = computed(() =>
   products.value.filter(p =>
-    p.status === 'active' && (
-      !search.value ||
-      p.title?.toLowerCase().includes(search.value.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(search.value.toLowerCase())
+    (statusFilter.value === 'all' || p.status === statusFilter.value) && (
+      searchTerms.value.length === 0 ||
+      searchTerms.value.some(term =>
+        p.title?.toLowerCase().includes(term) ||
+        p.sku?.toLowerCase().includes(term)
+      )
     )
   )
 )
@@ -128,6 +157,7 @@ watch(page, (val) => {
 })
 watch(pageSizeStr, () => { page.value = 1 })
 watch(search, () => { page.value = 1 })
+watch(statusFilter, () => { page.value = 1 })
 
 const paginated = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -202,6 +232,12 @@ onUnmounted(() => {
         />
       </div>
       <div class="flex items-center gap-2">
+        <USelect
+          v-model="statusFilter"
+          :items="statusOptions"
+          icon="i-lucide-filter"
+          class="w-40"
+        />
         <UInput v-model="inputValue" placeholder="Search products..." icon="i-lucide-search" class="w-56" @keyup.enter="applySearch" />
         <UButton size="sm" icon="i-lucide-search" @click="applySearch">Search</UButton>
       </div>

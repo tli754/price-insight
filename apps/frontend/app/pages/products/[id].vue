@@ -233,7 +233,7 @@ async function generateAiReport() {
     )
     aiReportData.value = { productId: result.productId, report: result.report }
   } catch (e: unknown) {
-    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Report generation failed'
+    aiError.value = getApiErrorMessage(e, 'Report generation failed')
   } finally {
     aiGenerating.value = false
   }

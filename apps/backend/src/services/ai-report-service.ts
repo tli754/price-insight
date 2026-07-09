@@ -4,6 +4,7 @@ import type OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { ZodError } from "zod";
 
+import { AppError } from "../lib/app-error.js";
 import type { ProductAiReportRow } from "../db/schema.js";
 import { productAiReportsOutputSchema, type ProductAiReportsOutput, type ReportType } from "../types/ai-report.js";
 import type { AiReportRepository } from "./ai-report-repository.js";
@@ -38,7 +39,7 @@ export class AiReportService {
       this.orderRepository.getProductSalesHistory(productId, { page: 1, limit: 50 }),
     ]);
 
-    if (!product) throw new Error("Product not found");
+    if (!product) throw new AppError(404, "PRODUCT_NOT_FOUND", "Product not found.");
 
     const payload = this.buildPayload(product, competitors, salesHistory, reportTypes);
     const inputHash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
