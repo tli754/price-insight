@@ -17,6 +17,11 @@ export type ProductCompetitorStats = {
   confirmedCompetitorCount: number;
 };
 
+export type ProductMargin = {
+  marginAmount: number;
+  marginPercent: number;
+};
+
 export type ShopifyVariant = {
   price: string;
   compare_at_price: string | null;
@@ -26,6 +31,9 @@ export type ShopifyVariant = {
   weight: number;
   weight_unit: string;
   inventory_quantity: number;
+  inventory_item_id?: number | null;
+  // Populated best-effort by ShopifyService from InventoryItem.cost.
+  cost?: string | null;
 };
 
 export type ShopifyImage = {
@@ -49,6 +57,17 @@ export type ShopifyProduct = {
   images: ShopifyImage[];
 };
 
+/** Derive margin at read time — never stored, so it can't drift from price/cost. */
+export function computeMargin(
+  price: number | null,
+  cost: number | null
+): ProductMargin | undefined {
+  if (price == null || cost == null) return undefined;
+  const marginAmount = price - cost;
+  const marginPercent = price !== 0 ? (marginAmount / price) * 100 : 0;
+  return { marginAmount, marginPercent };
+}
+
 export class ProductRepository {
   constructor(private readonly db: Database) {}
 
@@ -69,6 +88,7 @@ export class ProductRepository {
         description: sp.body_html || null,
         thumbnail: primaryImage?.src ?? null,
         price: variant ? parseFloat(variant.price) : null,
+        cost: variant?.cost != null ? parseFloat(variant.cost) : null,
         sku: variant?.sku ?? null,
         weight: variant?.weight ?? null,
         weightUnit: variant?.weight_unit ?? null,
@@ -84,7 +104,11 @@ export class ProductRepository {
       let productId: number;
 
       if (existing) {
-        await this.db.update(products).set(productPayload).where(eq(products.id, existing.id));
+        // Don't clobber an existing cost when this sync produced none (e.g. the
+        // read_inventory scope isn't granted, so enrichment left cost null).
+        const setPayload: Partial<typeof productPayload> = { ...productPayload };
+        if (productPayload.cost == null) delete setPayload.cost;
+        await this.db.update(products).set(setPayload).where(eq(products.id, existing.id));
         productId = existing.id;
         // Remove old images and re-insert
         await this.db.delete(productImages).where(eq(productImages.productId, productId));
@@ -112,13 +136,18 @@ export class ProductRepository {
     return count;
   }
 
-  async listProducts(): Promise<(ProductRow & Partial<ProductSalesStats> & Partial<ProductCompetitorStats>)[]> {
+  async listProducts(): Promise<(ProductRow & Partial<ProductSalesStats> & Partial<ProductCompetitorStats> & Partial<ProductMargin>)[]> {
     const [productRows, salesMap, competitorMap] = await Promise.all([
       this.db.select().from(products).orderBy(desc(products.updatedAt)),
       this.getProductSalesStats(),
       this.getCompetitorPriceStats()
     ]);
-    return productRows.map(p => ({ ...p, ...salesMap.get(p.id), ...competitorMap.get(p.id) }));
+    return productRows.map(p => ({
+      ...p,
+      ...salesMap.get(p.id),
+      ...competitorMap.get(p.id),
+      ...computeMargin(p.price, p.cost)
+    }));
   }
 
   private async getCompetitorPriceStats(): Promise<Map<number, ProductCompetitorStats>> {
@@ -200,7 +229,7 @@ export class ProductRepository {
     await this.db.delete(products).where(eq(products.id, id));
   }
 
-  async getProductById(id: number): Promise<(ProductRow & { images: ProductImageRow[] }) | null> {
+  async getProductById(id: number): Promise<(ProductRow & { images: ProductImageRow[] } & Partial<ProductMargin>) | null> {
     const [product] = await this.db.select().from(products).where(eq(products.id, id)).limit(1);
     if (!product) return null;
 
@@ -210,6 +239,6 @@ export class ProductRepository {
       .where(eq(productImages.productId, id))
       .orderBy(productImages.position);
 
-    return { ...product, images };
+    return { ...product, images, ...computeMargin(product.price, product.cost) };
   }
 }

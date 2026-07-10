@@ -10,6 +10,8 @@ export const shopifyVariantSchema = z.object({
   weight: z.number(),
   weight_unit: z.string(),
   inventory_quantity: z.number(),
+  inventory_item_id: z.number().nullable().optional(),
+  cost: z.string().nullable().optional(),
   option1: z.string().nullable(),
   option2: z.string().nullable(),
   option3: z.string().nullable()

@@ -33,6 +33,7 @@ function makeProductRow() {
     brand: "Acme",
     handle: "test-product",
     price: 99.99,
+    cost: null,
     currency: "NZD",
     thumbnail: null,
     tags: null,
