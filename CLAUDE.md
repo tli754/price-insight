@@ -16,6 +16,18 @@ NEVER run `db:push` against any shared environment (staging, production).
 desynchronising schema state from migration history. Only use `db:push` locally.
 All schema changes to shared environments MUST go through `db:generate` → commit migration → deploy.
 
+**Migrations are applied at deploy time, not at container start.** Cloud Run serves
+via `node dist/server.js`, which does NOT run migrations. The `backend-migrate`
+Cloud Run Job (`infra/terraform/cloud-run-jobs.tf`) runs `dist/db/run-migrations.js`
+against Cloud SQL. Both deploy paths apply pending migrations on the new image
+BEFORE routing traffic; if a migration fails, the service is NOT deployed:
+- **CI (primary):** `.github/workflows/deploy.yml` `deploy-backend` job runs the
+  migrate Job (`gcloud run jobs execute backend-migrate --wait`) before `gcloud run deploy`.
+- **Local/manual:** `./infra/deploy-backend.sh` build+push → migrate → deploy.
+
+Do not add a new migration without deploying through one of these paths, or the
+served code will reference columns the DB does not have (e.g. the `cost` incident).
+
 ### Diagrams
 
 ALWAYS use mermaid when creating architecture diagrams in markdown do NOT create ASCII diagrams.

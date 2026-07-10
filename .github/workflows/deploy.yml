@@ -119,6 +119,18 @@ jobs:
             --format='value(status.traffic[0].revisionName)')
           echo "revision=$PREV" >> "$GITHUB_OUTPUT"
 
+      - name: Apply DB migrations
+        # Cloud Run serves via `node dist/server.js`, which does NOT run
+        # migrations. Apply pending Drizzle migrations on the new image via the
+        # backend-migrate Job BEFORE routing traffic. `execute --wait` returns
+        # non-zero on failure, which fails this step and skips the deploy below.
+        run: |
+          gcloud run jobs update backend-migrate \
+            --image="${{ env.BACKEND_IMAGE }}@${{ needs.resolve.outputs.backend_digest }}" \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}"
+          gcloud run jobs execute backend-migrate \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" --wait
+
       - name: Deploy by digest
         id: deploy
         run: |
