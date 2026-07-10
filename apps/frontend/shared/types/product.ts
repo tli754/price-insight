@@ -15,6 +15,7 @@ export interface ProductRow {
   status: string
   thumbnail: string | null
   price: number | null
+  cost: number | null
   currency: string | null
   handle: string | null
   title: string | null
@@ -37,6 +38,9 @@ export interface ProductRow {
   // Competitor price stats (confirmed competitors only)
   avgCompetitorPrice?: number
   confirmedCompetitorCount?: number
+  // Margin derived at read time from price - cost (present only when both exist)
+  marginAmount?: number
+  marginPercent?: number
   // Only present on GET /api/products/:id
   images?: ProductImage[]
 }

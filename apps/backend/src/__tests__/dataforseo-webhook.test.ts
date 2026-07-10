@@ -49,6 +49,7 @@ function makeProduct(overrides: Partial<ProductRow> = {}): ProductRow {
     brand: null,
     handle: "blue-widget",
     price: 100,
+    cost: null,
     currency: "NZD",
     thumbnail: null,
     tags: null,

@@ -18,6 +18,7 @@ function makeProductRow(overrides: Partial<ProductRow> = {}): ProductRow & { ima
     brand: "Acme",
     handle: "blue-widget",
     price: 49.99,
+    cost: null,
     currency: "NZD",
     thumbnail: null,
     tags: null,

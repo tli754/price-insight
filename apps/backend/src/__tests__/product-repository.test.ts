@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { ProductRepository } from "../services/product-repository.js";
-import type { ShopifyProduct } from "../services/product-repository.js";
+import { ProductRepository, computeMargin } from "../services/product-repository.js";
+import type { ShopifyProduct, ShopifyVariant } from "../services/product-repository.js";
 import { makeMockDb } from "./helpers/mock-db.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -40,6 +40,7 @@ const fakeProductRow = {
   brand: "Acme",
   handle: "blue-widget",
   price: 49.99,
+  cost: null,
   currency: null,
   thumbnail: null,
   tags: "widget,blue",
@@ -173,5 +174,127 @@ describe("ProductRepository.importProducts()", () => {
 
     expect(count).toBe(2);
     expect(db.insert).toHaveBeenCalledTimes(2);
+  });
+
+  function variantWith(overrides: Partial<ShopifyVariant> = {}): ShopifyVariant {
+    return {
+      price: "49.99",
+      compare_at_price: null,
+      sku: "BW-001",
+      barcode: null,
+      grams: 200,
+      weight: 0.2,
+      weight_unit: "kg",
+      inventory_quantity: 50,
+      ...overrides
+    };
+  }
+
+  it("maps variant cost into the insert payload", async () => {
+    const db = makeMockDb();
+    db._select.limit.mockResolvedValueOnce([]);
+    const repo = new ProductRepository(db as any);
+
+    await repo.importProducts([makeShopifyProduct({ variants: [variantWith({ cost: "12.50" })] })]);
+
+    const payload = db.insert.mock.results[0]!.value.values.mock.calls[0][0];
+    expect(payload.cost).toBe(12.5);
+  });
+
+  it("sets cost null when the variant has no cost", async () => {
+    const db = makeMockDb();
+    db._select.limit.mockResolvedValueOnce([]);
+    const repo = new ProductRepository(db as any);
+
+    await repo.importProducts([makeShopifyProduct()]); // default variant has no cost
+
+    const payload = db.insert.mock.results[0]!.value.values.mock.calls[0][0];
+    expect(payload.cost).toBeNull();
+  });
+
+  it("does not overwrite an existing cost on update when the variant has no cost", async () => {
+    const db = makeMockDb();
+    db._select.limit.mockResolvedValueOnce([{ id: 5 }]); // existing product
+    const repo = new ProductRepository(db as any);
+
+    await repo.importProducts([makeShopifyProduct()]); // no cost from Shopify
+
+    const setPayload = db._update.set.mock.calls[0][0];
+    expect("cost" in setPayload).toBe(false);
+  });
+
+  it("updates cost on update when the variant has a cost", async () => {
+    const db = makeMockDb();
+    db._select.limit.mockResolvedValueOnce([{ id: 5 }]);
+    const repo = new ProductRepository(db as any);
+
+    await repo.importProducts([makeShopifyProduct({ variants: [variantWith({ cost: "9.99" })] })]);
+
+    const setPayload = db._update.set.mock.calls[0][0];
+    expect(setPayload.cost).toBe(9.99);
+  });
+
+  it("clears cost on update when Shopify explicitly reports no cost", async () => {
+    const db = makeMockDb();
+    db._select.limit.mockResolvedValueOnce([{ id: 5 }]);
+    const repo = new ProductRepository(db as any);
+
+    // cost: null (as opposed to absent) means enrichment succeeded but the cost
+    // was cleared in Shopify — the column must be set back to null, not preserved.
+    await repo.importProducts([makeShopifyProduct({ variants: [variantWith({ cost: null })] })]);
+
+    const setPayload = db._update.set.mock.calls[0][0];
+    expect("cost" in setPayload).toBe(true);
+    expect(setPayload.cost).toBeNull();
+  });
+});
+
+describe("ProductRepository margin", () => {
+  it("listProducts includes computed margin from price and cost", async () => {
+    const db = makeMockDb();
+    db._select.orderBy.mockResolvedValueOnce([{ ...fakeProductRow, price: 100, cost: 60 }]);
+    const repo = new ProductRepository(db as any);
+
+    const result = await repo.listProducts();
+
+    expect(result[0].marginAmount).toBe(40);
+    expect(result[0].marginPercent).toBeCloseTo(40);
+  });
+
+  it("listProducts omits margin when cost is null", async () => {
+    const db = makeMockDb();
+    db._select.orderBy.mockResolvedValueOnce([{ ...fakeProductRow, price: 100, cost: null }]);
+    const repo = new ProductRepository(db as any);
+
+    const result = await repo.listProducts();
+
+    expect(result[0].marginAmount).toBeUndefined();
+    expect(result[0].marginPercent).toBeUndefined();
+  });
+});
+
+describe("computeMargin()", () => {
+  it("computes amount and percent for normal values", () => {
+    expect(computeMargin(100, 60)).toEqual({ marginAmount: 40, marginPercent: 40 });
+  });
+
+  it("returns negative margin when cost exceeds price", () => {
+    expect(computeMargin(50, 80)).toEqual({ marginAmount: -30, marginPercent: -60 });
+  });
+
+  it("treats zero cost as full margin", () => {
+    expect(computeMargin(100, 0)).toEqual({ marginAmount: 100, marginPercent: 100 });
+  });
+
+  it("returns undefined when price is null", () => {
+    expect(computeMargin(null, 60)).toBeUndefined();
+  });
+
+  it("returns undefined when cost is null", () => {
+    expect(computeMargin(100, null)).toBeUndefined();
+  });
+
+  it("avoids divide-by-zero when price is zero", () => {
+    expect(computeMargin(0, 0)).toEqual({ marginAmount: 0, marginPercent: 0 });
   });
 });

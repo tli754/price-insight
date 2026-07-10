@@ -13,6 +13,7 @@ function makeProductRow(overrides: Partial<ProductRow> = {}): ProductRow {
     brand: "Acme",
     handle: "test-product",
     price: 49.99,
+    cost: null,
     currency: "NZD",
     thumbnail: null,
     tags: null,

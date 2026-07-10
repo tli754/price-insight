@@ -107,7 +107,7 @@ const filtered = computed(() =>
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-type SortKey = 'title' | 'price' | 'inventoryQuantity' | 'sold7d' | 'sold30d' | 'sold90d'
+type SortKey = 'title' | 'price' | 'marginPercent' | 'inventoryQuantity' | 'sold7d' | 'sold30d' | 'sold90d'
 const sortKey = ref<SortKey | null>('sold7d')
 const sortDir = ref<'asc' | 'desc'>('desc')
 
@@ -170,6 +170,7 @@ const colWidths = reactive({
   thumbnail: 60,
   title: 400,
   price: 110,
+  margin: 130,
   inventory: 110,
   inventoryAlert: 210,
   status: 100,
@@ -199,6 +200,13 @@ function stopResize() {
 function fmtSales(qty: number | undefined, rev: number | undefined): string {
   if (!qty) return '—'
   return `${qty} ($${Math.round(rev ?? 0).toLocaleString()})`
+}
+
+function marginColor(pct: number | undefined): string {
+  if (pct == null) return ''
+  if (pct < 15) return 'text-red-500'
+  if (pct < 30) return 'text-amber-500'
+  return 'text-green-600'
 }
 
 function inventoryAlert(p: ProductRow) {
@@ -286,6 +294,7 @@ onUnmounted(() => {
               <col :style="`width: ${colWidths.thumbnail}px`" />
               <col :style="`width: ${colWidths.title}px`" />
               <col :style="`width: ${colWidths.price}px`" />
+              <col :style="`width: ${colWidths.margin}px`" />
               <col :style="`width: ${colWidths.inventory}px`" />
               <col :style="`width: ${colWidths.inventoryAlert}px`" />
               <col :style="`width: ${colWidths.status}px`" />
@@ -312,6 +321,14 @@ onUnmounted(() => {
                     Price
                   </button>
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'price')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('marginPercent')">
+                    <UIcon v-if="sortKey === 'marginPercent'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                    Margin
+                  </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'margin')" />
                 </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
                   <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('inventoryQuantity')">
@@ -386,6 +403,13 @@ onUnmounted(() => {
                 </td>
                 <td class="px-3 py-2 text-right">
                   <span v-if="p.price != null">${{ Number(p.price).toFixed(2) }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-3 py-2 text-right font-mono text-sm" :title="p.cost != null ? `Cost $${Number(p.cost).toFixed(2)}` : 'No cost set'">
+                  <template v-if="p.marginPercent != null">
+                    <span :class="marginColor(p.marginPercent)">{{ p.marginPercent.toFixed(0) }}%</span>
+                    <span class="ml-1 text-xs text-gray-400">(${{ Math.round(p.marginAmount ?? 0).toLocaleString() }})</span>
+                  </template>
                   <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="px-3 py-2 text-right">
