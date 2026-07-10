@@ -79,7 +79,9 @@ export class ShopifyService {
     }
     if (ids.length === 0) return;
 
-    const costById = new Map<number, string>();
+    // Records every returned item, including an explicit `null` cost (cost cleared
+    // in Shopify) so importers can tell that apart from "not fetched" (item absent).
+    const costById = new Map<number, string | null>();
     try {
       // Shopify caps `ids` per request; chunk conservatively.
       for (let i = 0; i < ids.length; i += 100) {
@@ -90,7 +92,7 @@ export class ShopifyService {
         if (!res.ok) return; // missing read_inventory scope or transient error — skip costs
         const data = (await res.json()) as { inventory_items?: { id: number; cost: string | null }[] };
         for (const it of data.inventory_items ?? []) {
-          if (it.cost != null) costById.set(it.id, it.cost);
+          costById.set(it.id, it.cost);
         }
       }
     } catch {
@@ -99,6 +101,8 @@ export class ShopifyService {
 
     for (const p of products) {
       for (const v of p.variants) {
+        // Leaving v.cost undefined for items the lookup didn't return signals
+        // "unavailable" downstream; a stored null here means "explicitly no cost".
         if (v.inventory_item_id != null && costById.has(v.inventory_item_id)) {
           v.cost = costById.get(v.inventory_item_id) ?? null;
         }

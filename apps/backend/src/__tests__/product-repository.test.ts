@@ -233,6 +233,20 @@ describe("ProductRepository.importProducts()", () => {
     const setPayload = db._update.set.mock.calls[0][0];
     expect(setPayload.cost).toBe(9.99);
   });
+
+  it("clears cost on update when Shopify explicitly reports no cost", async () => {
+    const db = makeMockDb();
+    db._select.limit.mockResolvedValueOnce([{ id: 5 }]);
+    const repo = new ProductRepository(db as any);
+
+    // cost: null (as opposed to absent) means enrichment succeeded but the cost
+    // was cleared in Shopify — the column must be set back to null, not preserved.
+    await repo.importProducts([makeShopifyProduct({ variants: [variantWith({ cost: null })] })]);
+
+    const setPayload = db._update.set.mock.calls[0][0];
+    expect("cost" in setPayload).toBe(true);
+    expect(setPayload.cost).toBeNull();
+  });
 });
 
 describe("ProductRepository margin", () => {

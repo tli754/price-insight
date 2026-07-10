@@ -36,6 +36,35 @@ describe("ShopifyService.streamProducts() cost enrichment", () => {
     expect(pages[0][0].variants[0].cost).toBe("4.50");
   });
 
+  it("records an explicit null cost when Shopify reports the cost as cleared", async () => {
+    const product = { id: 1, variants: [{ price: "10.00", inventory_item_id: 555 }], images: [] };
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("products.json")) return jsonResponse({ products: [product] });
+      if (url.includes("inventory_items.json")) return jsonResponse({ inventory_items: [{ id: 555, cost: null }] });
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const pages = await collect(makeService().streamProducts("tok"));
+
+    // null (recorded), not undefined — lets the importer clear a stale cost.
+    expect(pages[0][0].variants[0].cost).toBeNull();
+  });
+
+  it("leaves cost undefined when the item is absent from the inventory response", async () => {
+    const product = { id: 1, variants: [{ price: "10.00", inventory_item_id: 555 }], images: [] };
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("products.json")) return jsonResponse({ products: [product] });
+      if (url.includes("inventory_items.json")) return jsonResponse({ inventory_items: [] });
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const pages = await collect(makeService().streamProducts("tok"));
+
+    expect(pages[0][0].variants[0].cost).toBeUndefined();
+  });
+
   it("leaves cost unset when inventory fetch is forbidden (missing read_inventory scope)", async () => {
     const product = { id: 1, variants: [{ price: "10.00", inventory_item_id: 555 }], images: [] };
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {

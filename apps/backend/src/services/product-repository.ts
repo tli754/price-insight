@@ -78,6 +78,14 @@ export class ProductRepository {
       const variant = sp.variants[0];
       const primaryImage = sp.images.find((img) => img.position === 1) ?? sp.images[0];
 
+      // Three-state cost from enrichment:
+      //   undefined — cost unavailable (not fetched / scope missing) → preserve existing on update
+      //   null      — Shopify explicitly has no cost → clear the column
+      //   number    — the cost value
+      const cost = variant?.cost === undefined
+        ? undefined
+        : variant.cost === null ? null : parseFloat(variant.cost);
+
       const productPayload = {
         externalId: sp.id,
         status: sp.status,
@@ -88,7 +96,6 @@ export class ProductRepository {
         description: sp.body_html || null,
         thumbnail: primaryImage?.src ?? null,
         price: variant ? parseFloat(variant.price) : null,
-        cost: variant?.cost != null ? parseFloat(variant.cost) : null,
         sku: variant?.sku ?? null,
         weight: variant?.weight ?? null,
         weightUnit: variant?.weight_unit ?? null,
@@ -104,16 +111,18 @@ export class ProductRepository {
       let productId: number;
 
       if (existing) {
-        // Don't clobber an existing cost when this sync produced none (e.g. the
-        // read_inventory scope isn't granted, so enrichment left cost null).
-        const setPayload: Partial<typeof productPayload> = { ...productPayload };
-        if (productPayload.cost == null) delete setPayload.cost;
+        // Only touch cost when enrichment produced a definitive value: a number
+        // sets it, an explicit null clears it (cleared in Shopify), and undefined
+        // (unavailable — e.g. read_inventory not granted) leaves the column as-is.
+        const setPayload: typeof productPayload & { cost?: number | null } = { ...productPayload };
+        if (cost !== undefined) setPayload.cost = cost;
         await this.db.update(products).set(setPayload).where(eq(products.id, existing.id));
         productId = existing.id;
         // Remove old images and re-insert
         await this.db.delete(productImages).where(eq(productImages.productId, productId));
       } else {
-        const result = await this.db.insert(products).values(productPayload).$returningId();
+        // New product: no prior cost to preserve, so unavailable collapses to null.
+        const result = await this.db.insert(products).values({ ...productPayload, cost: cost ?? null }).$returningId();
         productId = Number(result[0]?.id);
         count++;
       }
