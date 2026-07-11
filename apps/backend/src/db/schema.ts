@@ -31,6 +31,7 @@ export const products = mysqlTable(
     status: varchar("status", { length: 32 }).notNull().default("draft"),
     thumbnail: text("thumbnail"),
     price: decimal("price", moneyColumn),
+    cost: decimal("cost", moneyColumn),
     currency: varchar("currency", { length: 16 }),
     handle: varchar("handle", { length: 500 }),
     title: varchar("title", { length: 500 }),

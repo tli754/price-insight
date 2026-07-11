@@ -1,7 +1,8 @@
 /**
- * Load orders from Shopify into the database via the BullMQ queue.
- * Safe to run multiple times — the worker skips orders that haven't changed
- * (staleness check on shopify_updated_at).
+ * Load orders from Shopify by enqueueing one Cloud Task per order — same
+ * path as the "Sync Orders" button (source: "manual"). order-worker does
+ * the actual upsert; this script needs no direct DB/Cloud SQL access, just
+ * Cloud Tasks API access.
  *
  * Usage:
  *   cd apps/backend && npx tsx src/scripts/load-recent-orders.ts
@@ -14,9 +15,8 @@
 import "dotenv/config";
 
 import { loadEnv } from "../config/env.js";
-import { createRedisConnection } from "../config/redis.js";
-import { createOrderSyncQueue } from "../services/order-sync-queue.js";
-import type { SyncOrderJobData } from "../services/order-sync-queue.js";
+import { CloudTasksOrderSyncClient } from "../services/cloud-tasks-client.js";
+import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
 import { ShopifyGraphQLService } from "../services/shopify-graphql-service.js";
 import { ShopifyService } from "../services/shopify-service.js";
 
@@ -29,6 +29,17 @@ if (
   !env.SHOPIFY_CLIENT_SECRET
 ) {
   console.error("[load-orders] Shopify credentials are not configured. Check your .env file.");
+  process.exit(1);
+}
+
+if (
+  !env.CLOUD_TASKS_PROJECT ||
+  !env.CLOUD_TASKS_LOCATION ||
+  !env.CLOUD_TASKS_QUEUE ||
+  !env.ORDER_WORKER_URL ||
+  !env.INTERNAL_OIDC_SERVICE_ACCOUNT
+) {
+  console.error("[load-orders] Cloud Tasks is not configured. Check your .env file.");
   process.exit(1);
 }
 
@@ -45,8 +56,12 @@ console.log(
     : "[load-orders] Fetching ALL orders from Shopify…"
 );
 
-const redis = createRedisConnection(env);
-const queue = createOrderSyncQueue(redis);
+const cloudTasksClient = new CloudTasksOrderSyncClient(
+  env.CLOUD_TASKS_PROJECT,
+  env.CLOUD_TASKS_LOCATION,
+  env.CLOUD_TASKS_QUEUE,
+  env.INTERNAL_OIDC_SERVICE_ACCOUNT
+);
 
 const shopifyService = new ShopifyService(
   env.SHOPIFY_TOKEN_URL,
@@ -68,33 +83,28 @@ try {
 
     if (page.length === 0) continue;
 
-    const jobs = page.map((order) => ({
-      name: "sync-order" as const,
-      data: {
+    for (const order of page) {
+      const payload: ScheduledSyncOrderPayload = {
         type: "sync-order",
         source: "manual",
         shopifyOrderId: order.id,
         orderName: order.name,
         shopifyUpdatedAt: order.updatedAt,
         shopifyOrder: order,
-      } satisfies SyncOrderJobData,
-    }));
+      };
+      await cloudTasksClient.enqueueSyncOrder(env.ORDER_WORKER_URL, payload);
+      totalEnqueued++;
+    }
 
-    await queue.addBulk(jobs);
-    totalEnqueued += jobs.length;
-
-    console.log(`[load-orders] Page ${pageNum}: enqueued ${jobs.length} orders (total: ${totalEnqueued})…`);
+    console.log(`[load-orders] Page ${pageNum}: enqueued ${page.length} orders (total: ${totalEnqueued})…`);
   }
 
   if (totalEnqueued === 0) {
     console.log("[load-orders] Nothing to enqueue.");
   } else {
-    console.log(`[load-orders] Done. ${totalEnqueued} jobs enqueued. Worker will skip unchanged orders.`);
+    console.log(`[load-orders] Done. ${totalEnqueued} orders enqueued. order-worker will skip unchanged orders.`);
   }
 } catch (err) {
   console.error("[load-orders] Failed:", err);
   process.exit(1);
-} finally {
-  await queue.close();
-  await redis.quit();
 }

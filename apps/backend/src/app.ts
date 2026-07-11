@@ -1,30 +1,35 @@
+import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
+import jwt from "@fastify/jwt";
 import Fastify from "fastify";
 import OpenAI from "openai";
+import { ZodError } from "zod";
 
 import type { AppEnv } from "./config/env.js";
-import { createRedisConnection } from "./config/redis.js";
 import { createDatabase } from "./db/index.js";
 import { AppError } from "./lib/app-error.js";
+import { requireSession } from "./lib/require-session.js";
 import analysisRoutes from "./routes/analysis.js";
+import authRoutes from "./routes/auth.js";
 import healthRoutes from "./routes/health.js";
 import ordersRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
-import queueRoutes from "./routes/queue.js";
 import reportRoutes from "./routes/reports.js";
 import shopifyRoutes from "./routes/shopify.js";
-import webhookRoutes from "./routes/webhook.js";
-import { setupScheduler } from "./scheduler.js";
+import shopifyWebhookRoutes from "./routes/shopify-webhook.js";
+import webhookRoutes from "./routes/dataforseo-webhook.js";
+import internalCompetitorRoutes from "./routes/internal-competitor.js";
 import { AiReportRepository } from "./services/ai-report-repository.js";
 import { AiReportService } from "./services/ai-report-service.js";
+import { CloudTasksOrderSyncClient } from "./services/cloud-tasks-client.js";
+import { CloudTasksCompetitorClient } from "./services/cloud-tasks-competitor-client.js";
 import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
 import { CompetitorRepository } from "./services/competitor-repository.js";
 import { DataForSeoService } from "./services/dataforseo-service.js";
 import { OrderRepository } from "./services/order-repository.js";
-import { createOrderSyncQueue } from "./services/order-sync-queue.js";
 import { ProductRepository } from "./services/product-repository.js";
 import { ShopifyGraphQLService } from "./services/shopify-graphql-service.js";
 import { ShopifyService } from "./services/shopify-service.js";
-import { createOrderSyncWorker } from "./workers/order-sync-worker.js";
 
 export async function buildApp(env: AppEnv) {
   const app = Fastify({
@@ -59,21 +64,37 @@ export async function buildApp(env: AppEnv) {
     env.OPENAI_MODEL
   );
 
-  const redis = createRedisConnection(env);
-  const orderSyncQueue = createOrderSyncQueue(redis);
-  const orderSyncWorker = createOrderSyncWorker(
-    orderRepository,
-    orderSyncQueue,
-    shopifyService,
-    shopifyGraphQLService,
-    redis
-  );
+  const cloudTasksClient =
+    env.CLOUD_TASKS_PROJECT && env.CLOUD_TASKS_LOCATION && env.CLOUD_TASKS_QUEUE && env.ORDER_WORKER_URL && env.INTERNAL_OIDC_SERVICE_ACCOUNT
+      ? new CloudTasksOrderSyncClient(
+          env.CLOUD_TASKS_PROJECT,
+          env.CLOUD_TASKS_LOCATION,
+          env.CLOUD_TASKS_QUEUE,
+          env.INTERNAL_OIDC_SERVICE_ACCOUNT
+        )
+      : null;
 
-  if (shopifyService && shopifyGraphQLService) {
-    await setupScheduler(orderSyncQueue);
-  }
+  const cloudTasksCompetitorClient =
+    env.CLOUD_TASKS_PROJECT && env.CLOUD_TASKS_LOCATION && env.CLOUD_TASKS_QUEUE && env.INTERNAL_OIDC_SERVICE_ACCOUNT && env.BACKEND_CLOUD_RUN_URL
+      ? new CloudTasksCompetitorClient(
+          env.CLOUD_TASKS_PROJECT,
+          env.CLOUD_TASKS_LOCATION,
+          env.CLOUD_TASKS_QUEUE,
+          env.INTERNAL_OIDC_SERVICE_ACCOUNT,
+          env.BACKEND_CLOUD_RUN_URL
+        )
+      : null;
 
   app.decorate("env", env);
+
+  await app.register(cors, {
+    origin: env.APP_URL,
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+  });
+  await app.register(cookie);
+  await app.register(jwt, { secret: env.SESSION_SECRET });
+
   app.decorate("productRepository", productRepository);
   app.decorate("competitorRepository", competitorRepository);
   app.decorate("competitorAnalysisService", competitorAnalysisService);
@@ -81,7 +102,8 @@ export async function buildApp(env: AppEnv) {
   app.decorate("orderRepository", orderRepository);
   app.decorate("shopifyService", shopifyService);
   app.decorate("shopifyGraphQLService", shopifyGraphQLService);
-  app.decorate("orderSyncQueue", orderSyncQueue);
+  app.decorate("cloudTasksClient", cloudTasksClient);
+  app.decorate("cloudTasksCompetitorClient", cloudTasksCompetitorClient);
   app.decorate("aiReportRepository", aiReportRepository);
   app.decorate("aiReportService", aiReportService);
 
@@ -97,11 +119,17 @@ export async function buildApp(env: AppEnv) {
       });
     }
 
-    if (error instanceof Error && error.name === "ZodError") {
+    if (error instanceof ZodError) {
+      const message = error.issues
+        .map((issue) => {
+          const path = issue.path.join(".");
+          return path ? `${path}: ${issue.message}` : issue.message;
+        })
+        .join("; ");
       return reply.status(400).send({
         error: {
           code: "VALIDATION_ERROR",
-          message: error.message
+          message: message || "Validation failed."
         }
       });
     }
@@ -115,20 +143,24 @@ export async function buildApp(env: AppEnv) {
   });
 
   app.addHook("onClose", async () => {
-    await orderSyncWorker.close();
-    await orderSyncQueue.close();
-    await redis.quit();
     await pool.end();
   });
 
+  await app.register(authRoutes);
   await app.register(healthRoutes, { prefix: "/api" });
-  await app.register(productRoutes, { prefix: "/api" });
-  await app.register(ordersRoutes, { prefix: "/api" });
-  await app.register(shopifyRoutes, { prefix: "/api" });
-  await app.register(queueRoutes, { prefix: "/api" });
-  await app.register(analysisRoutes, { prefix: "/api" });
-  await app.register(reportRoutes, { prefix: "/api" });
+
+  await app.register(async (protectedApi) => {
+    protectedApi.addHook("preHandler", requireSession(protectedApi));
+    await protectedApi.register(productRoutes, { prefix: "/api" });
+    await protectedApi.register(ordersRoutes, { prefix: "/api" });
+    await protectedApi.register(shopifyRoutes, { prefix: "/api" });
+    await protectedApi.register(analysisRoutes, { prefix: "/api" });
+    await protectedApi.register(reportRoutes, { prefix: "/api" });
+  });
+
   await app.register(webhookRoutes);
+  await app.register(internalCompetitorRoutes);
+  await app.register(shopifyWebhookRoutes);
 
   return app;
 }

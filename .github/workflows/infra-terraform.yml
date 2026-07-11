@@ -1,0 +1,137 @@
+name: Infrastructure
+
+# Manual-only trigger. Run plan first; apply requires explicit action input.
+# "all" runs plan and apply in the same run, same as "apply" — kept as a
+# separate, explicit option rather than replacing "apply".
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - all
+
+concurrency:
+  group: terraform-production
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    name: Terraform ${{ inputs.action }} (prod)
+    runs-on: ubuntu-latest
+
+    # GitHub Environment enables required-reviewer protection before apply.
+    environment: prod
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      TF_DIR: infra/terraform
+      TF_VAR_project_id: wd-tools
+      TF_VAR_region: australia-southeast1
+      TF_VAR_ci_sa_email: price-insight-ci@wd-tools.iam.gserviceaccount.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: terraform-ci@wd-tools.iam.gserviceaccount.com
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~> 1.6'
+
+      - name: Terraform fmt check
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Reconcile Terraform state
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          PROJECT=wd-tools
+
+          import_secret() {
+            local group="$1"
+            local key="$2"
+            local res="google_secret_manager_secret.${group}[\"${key}\"]"
+            local ver_res="google_secret_manager_secret_version.${group}[\"${key}\"]"
+            local gcp_id="projects/${PROJECT}/secrets/${key}"
+
+            if ! terraform state show "$res" &>/dev/null; then
+              if gcloud secrets describe "$key" --project="$PROJECT" &>/dev/null; then
+                echo "Importing $key"
+                terraform import "$res" "$gcp_id"
+              else
+                echo "Secret $key not found in GCP, skipping import (will be created)"
+                return 0
+              fi
+            fi
+
+            if ! terraform state show "$ver_res" &>/dev/null; then
+              local ver
+              ver=$(gcloud secrets versions list "$key" \
+                --project="$PROJECT" --filter="state=ENABLED" \
+                --sort-by="~createTime" --limit=1 \
+                --format="value(name)" 2>/dev/null | grep -oE '[0-9]+$' || true)
+              if [ -n "$ver" ]; then
+                echo "Importing $key/versions/$ver"
+                terraform import "$ver_res" "${gcp_id}/versions/${ver}"
+              fi
+            fi
+          }
+
+          for key in \
+            backend-dataforseo-login backend-dataforseo-password \
+            backend-mysql-host backend-own-store-name \
+            backend-shopify-client-id backend-shopify-client-secret \
+            backend-shopify-orders-url backend-shopify-products-url \
+            backend-shopify-token-url backend-session-secret \
+            backend-dev-auth-password backend-jina-api-key \
+            backend-serpapi-api-key backend-dataforseo-webhook-secret; do
+            import_secret backend "$key"
+          done
+
+          import_secret frontend frontend-nuxt-api-url
+          import_secret gateway gateway-dev-auth-password
+          import_secret gateway gateway-session-secret
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform plan -out=tfplan
+
+      - name: Export readable plan
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform show -no-color tfplan > tfplan.txt
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: |
+            ${{ env.TF_DIR }}/tfplan
+            ${{ env.TF_DIR }}/tfplan.txt
+          retention-days: 7
+
+      - name: Terraform apply
+        if: inputs.action == 'apply' || inputs.action == 'all'
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply tfplan

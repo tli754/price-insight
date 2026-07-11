@@ -13,6 +13,7 @@ function makeProductRow(overrides: Partial<ProductRow> = {}): ProductRow {
     brand: "Acme",
     handle: "test-product",
     price: 49.99,
+    cost: null,
     currency: "NZD",
     thumbnail: null,
     tags: null,
@@ -267,7 +268,9 @@ describe("POST /api/products/sync", () => {
 
     const shopifyService = makeShopifyService();
     shopifyService.getAccessToken.mockResolvedValue("tok_abc");
-    shopifyService.fetchAllProducts.mockResolvedValue([]);
+    shopifyService.streamProducts.mockImplementation(async function* () {
+      yield [];
+    });
 
     ({ app } = await buildTestApp({ productRepository, shopifyService }));
 
@@ -276,6 +279,6 @@ describe("POST /api/products/sync", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ synced: 5 });
     expect(shopifyService.getAccessToken).toHaveBeenCalledOnce();
-    expect(shopifyService.fetchAllProducts).toHaveBeenCalledWith("tok_abc");
+    expect(shopifyService.streamProducts).toHaveBeenCalledWith("tok_abc");
   });
 });

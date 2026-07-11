@@ -8,11 +8,8 @@
  * Usage (dev):
  *   cd apps/backend && npx tsx src/scripts/find-all-competitors.ts
  *
- * Usage (production / GKE):
+ * Usage (production / Cloud Run):
  *   node dist/scripts/find-all-competitors.js
- *
- * GKE one-off:
- *   kubectl create job find-competitors-manual --from=cronjob/find-all-competitors
  */
 
 import "dotenv/config";
@@ -69,7 +66,7 @@ if (activeProducts.length === 0) {
 }
 
 const pingbackUrl =
-  `${WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping` +
+  `${WEBHOOK_HOST}/webhooks/dataforseo/pingback/shopping` +
   `?secret=${env.DATAFORSEO_WEBHOOK_SECRET}&id=$id&tag=$tag`;
 
 let submitted = 0;
@@ -96,6 +93,6 @@ for (const batch of chunks(activeProducts, POST_BATCH_SIZE)) {
 }
 
 console.log(`[find-all-competitors] Done. ${submitted} / ${activeProducts.length} shopping tasks submitted.`);
-console.log(`[find-all-competitors] Pingback results will arrive at: ${WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping`);
+console.log(`[find-all-competitors] Pingback results will arrive at: ${WEBHOOK_HOST}/webhooks/dataforseo/pingback/shopping`);
 
 await pool.end();

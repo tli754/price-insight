@@ -12,7 +12,6 @@ RUN pnpm install --filter @price-insight/backend --frozen-lockfile
 
 # Copy source and build
 COPY apps/backend/ ./apps/backend/
-COPY prompts/ ./prompts/
 RUN pnpm turbo build --filter @price-insight/backend
 
 FROM node:22-alpine AS runner
@@ -29,7 +28,6 @@ RUN pnpm install --filter @price-insight/backend --prod --frozen-lockfile
 
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 COPY --from=builder /app/apps/backend/drizzle ./apps/backend/drizzle
-COPY --from=builder /app/prompts ./prompts
 
 RUN chown -R node:node /app
 ENV NODE_ENV=production

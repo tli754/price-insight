@@ -244,13 +244,13 @@ describe("DataForSeoService.getShoppingCandidates()", () => {
     expect(candidates).toHaveLength(2);
   });
 
-  it("caps candidates at 40", async () => {
+  it("returns all matching candidates without a cap", async () => {
     const items = Array.from({ length: 45 }, (_, i) => makeShoppingItem({ product_id: `prod-${i}` }));
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify(makeShoppingGetResponse(items)), { status: 200 })
     );
     const candidates = await makeService().getShoppingCandidates("t");
-    expect(candidates).toHaveLength(40);
+    expect(candidates).toHaveLength(45);
   });
 });
 

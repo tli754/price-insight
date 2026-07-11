@@ -56,15 +56,21 @@ watch(product, () => { selectedImageIndex.value = 0 })
 // Search
 const searching = ref(false)
 const searchError = ref<string | null>(null)
+const toast = useToast()
 
 async function searchCompetitors() {
   searching.value = true
   searchError.value = null
   try {
-    await $fetch(`/api/products/${route.params.id}/competitors/search`, { method: 'POST' })
-    await refreshCompetitors()
+    const result = await $fetch<{ submitted: number }>(`/api/products/${route.params.id}/competitors/search`, { method: 'POST' })
+    if (result.submitted > 0) {
+      toast.add({ title: 'Competitor search submitted', description: 'Results will appear shortly — refresh to check.', color: 'success' })
+    } else {
+      toast.add({ title: 'No search submitted', description: 'Product has no title to search with.', color: 'warning' })
+    }
   } catch (e: unknown) {
-    searchError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Search failed'
+    const err = e as { data?: { error?: { message?: string }; message?: string } }
+    searchError.value = err?.data?.error?.message ?? err?.data?.message ?? 'Search failed'
   } finally {
     searching.value = false
   }
@@ -103,22 +109,36 @@ const chartPrices = computed(() =>
     .map(c => c.extractedPrice)
     .filter((p): p is number => p != null)
 )
-const chartLabels = computed(() =>
-  confirmedCompetitors.value
-    .filter(c => c.extractedPrice != null)
-    .map(c => c.title)
-)
+
+// Decision Summary
+const tabItems = [
+  { label: 'Overview', value: 'overview', slot: 'overview' },
+  { label: 'Competition', value: 'competition', slot: 'competition' },
+  { label: 'Sales', value: 'sales', slot: 'sales' },
+  { label: 'AI Insights', value: 'ai', slot: 'ai' },
+  { label: 'Product Details', value: 'details', slot: 'details' }
+]
+
+const marketMedian = computed(() => median(chartPrices.value))
+
+const closestCompetitor = computed(() => {
+  const ourPrice = product.value?.price != null ? Number(product.value.price) : null
+  if (ourPrice == null) return null
+  let best: { title: string; diff: number } | null = null
+  for (const c of confirmedCompetitors.value) {
+    if (c.extractedPrice == null) continue
+    const diff = ourPrice - c.extractedPrice
+    if (!best || Math.abs(diff) < Math.abs(best.diff)) {
+      best = { title: c.title, diff }
+    }
+  }
+  return best
+})
 
 function statusColor(status: string) {
   if (status === 'active') return 'success' as const
   if (status === 'archived') return 'error' as const
   return 'neutral' as const
-}
-
-function formatPrice(extracted: number | null, raw: string | null, currency: string | null) {
-  if (raw) return raw
-  if (extracted == null) return '—'
-  return [currency, extracted].filter(Boolean).join(' ')
 }
 
 function financialColor(status: string | null) {
@@ -213,7 +233,7 @@ async function generateAiReport() {
     )
     aiReportData.value = { productId: result.productId, report: result.report }
   } catch (e: unknown) {
-    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Report generation failed'
+    aiError.value = getApiErrorMessage(e, 'Report generation failed')
   } finally {
     aiGenerating.value = false
   }
@@ -275,7 +295,6 @@ function matchTypeColor(matchType: string) {
       <!-- Header -->
       <div class="mb-6 flex items-start justify-between gap-4">
         <div class="flex items-center gap-3">
-          <UButton variant="ghost" color="neutral" icon="i-lucide-arrow-left" @click="navigateTo('/products')" />
           <UBadge :color="statusColor(product.status)" variant="soft">
             {{ product.status }}
           </UBadge>
@@ -297,7 +316,23 @@ function matchTypeColor(matchType: string) {
         </div>
       </div>
 
-      <!-- Competitors — full width, at top -->
+      <UTabs :items="tabItems" default-value="overview" class="mb-6">
+        <template #overview>
+          <ProductDecisionSummary
+            :product="product"
+            :sales-summary="salesData?.summary ?? null"
+            :market-median="marketMedian"
+            :confirmed-count="confirmedCompetitors.length"
+            :total-competitors="displayCompetitors.length"
+            :closest-competitor="closestCompetitor"
+            :pricing="aiReport?.output?.pricing ?? null"
+            :sales-trend="aiReport?.output?.salesTrend ?? null"
+            :has-ai-report="!!aiReport"
+          />
+        </template>
+
+        <template #competition>
+      <!-- Competitors -->
       <UCard class="mb-6">
         <template #header>
           <span>Competitor Products</span>
@@ -381,7 +416,7 @@ function matchTypeColor(matchType: string) {
                     v-if="c.thumbnail"
                     :src="c.thumbnail"
                     :alt="c.title"
-                    class="h-[60px] w-[60px] rounded object-cover"
+                    class="h-[60px] w-auto rounded"
                   />
                   <div v-else class="h-[60px] w-[60px] rounded bg-default/20" />
                 </td>
@@ -417,7 +452,7 @@ function matchTypeColor(matchType: string) {
                 <td class="break-words px-3 py-2 text-toned">{{ c.shippingRaw || '—' }}</td>
                 <td class="whitespace-nowrap px-3 py-2 text-right">
                   <span class="font-medium text-highlighted">
-                    {{ formatPrice(c.extractedPrice, c.rawPrice, c.currency) }}
+                    {{ formatCurrencyRaw(c.extractedPrice, c.rawPrice, c.currency) }}
                   </span>
                   <span v-if="c.extractedOldPrice" class="ml-1 text-xs text-toned line-through">
                     {{ c.currency }} {{ Number(c.extractedOldPrice).toFixed(2) }}
@@ -456,23 +491,15 @@ function matchTypeColor(matchType: string) {
           </table>
         </div>
 
-        <!-- Price charts (confirmed only) -->
-        <div v-if="chartPrices.length >= 2" class="mt-4 grid grid-cols-2 gap-4">
-          <div>
-            <p class="mb-1 text-xs font-medium text-toned">Scatter Plot</p>
-            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
-              <PriceScatterChart :prices="chartPrices" :labels="chartLabels" :our-price="product.price" />
-            </div>
-          </div>
-          <div>
-            <p class="mb-1 text-xs font-medium text-toned">Price Distribution</p>
-            <div class="rounded-lg border border-default/50 bg-default/5 p-2">
-              <PriceBoxChart :prices="chartPrices" :our-price="product.price" />
-            </div>
-          </div>
+        <!-- Price position (confirmed only) -->
+        <div v-if="chartPrices.length >= 1" class="mt-4 rounded-lg border border-default/50 bg-default/5 p-4">
+          <p class="mb-1 text-xs font-medium text-toned">Price Position</p>
+          <PricePositionBar :prices="chartPrices" :our-price="product.price" :currency="product.currency" />
         </div>
       </UCard>
+        </template>
 
+        <template #ai>
       <!-- AI Insights -->
       <UCard class="mb-6">
         <template #header>
@@ -628,7 +655,9 @@ function matchTypeColor(matchType: string) {
 
         </div>
       </UCard>
+        </template>
 
+        <template #sales>
       <!-- Sales History -->
       <UCard class="mb-6">
         <template #header>Sales History</template>
@@ -756,7 +785,9 @@ function matchTypeColor(matchType: string) {
 
         <div v-else class="py-6 text-center text-sm text-toned">No sales data available.</div>
       </UCard>
+        </template>
 
+        <template #details>
       <!-- Product info grid -->
       <div class="grid gap-6 lg:grid-cols-2">
         <!-- Left: image gallery -->
@@ -847,6 +878,8 @@ function matchTypeColor(matchType: string) {
         <div v-if="product.description" class="prose prose-sm max-w-none text-sm text-highlighted" v-html="product.description" />
         <p v-else class="text-sm text-toned">No description available.</p>
       </UCard>
+        </template>
+      </UTabs>
     </template>
   </div>
 </template>

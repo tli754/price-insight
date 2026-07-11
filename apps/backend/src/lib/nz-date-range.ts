@@ -24,7 +24,22 @@ export function getTodayNZRange(): { from: Date; to: Date } {
   return { from, to: new Date(from.getTime() + 24 * 60 * 60 * 1000 - 1) };
 }
 
-/** Returns a Date 36 hours before now — used for scheduled rolling-window discovery. */
+/** Returns a Date 24 hours before now — used for scheduled rolling-window discovery. */
+export function getLast24Hours(now = new Date()): Date {
+  return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+}
+
+/** Returns a Date 36 hours before now. */
 export function getLast36Hours(now = new Date()): Date {
   return new Date(now.getTime() - 36 * 60 * 60 * 1000);
+}
+
+/** Returns a Date 7 days before now. */
+export function getLast7Days(now = new Date()): Date {
+  return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+}
+
+/** Returns a Date 30 days before now. */
+export function getLast30Days(now = new Date()): Date {
+  return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 }

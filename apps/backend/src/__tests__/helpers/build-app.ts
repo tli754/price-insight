@@ -5,37 +5,45 @@
  * No real connections are opened. Call `app.close()` in afterEach/afterAll.
  */
 
+import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
+import jwt from "@fastify/jwt";
 import Fastify from "fastify";
 import { vi } from "vitest";
+import { ZodError } from "zod";
 
 import { AppError } from "../../lib/app-error.js";
+import { requireSession } from "../../lib/require-session.js";
 import analysisRoutes from "../../routes/analysis.js";
+import authRoutes from "../../routes/auth.js";
+import webhookRoutes from "../../routes/dataforseo-webhook.js";
 import healthRoutes from "../../routes/health.js";
+import internalCompetitorRoutes from "../../routes/internal-competitor.js";
 import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
-import queueRoutes from "../../routes/queue.js";
 import reportRoutes from "../../routes/reports.js";
+import shopifyWebhookRoutes from "../../routes/shopify-webhook.js";
 import shopifyRoutes from "../../routes/shopify.js";
-import webhookRoutes from "../../routes/webhook.js";
 
 // ── Minimal fake env ──────────────────────────────────────────────────────────
 export const fakeEnv = {
   NODE_ENV: "test" as const,
   PORT: 4000,
+  APP_URL: "http://localhost:3000",
+  SESSION_SECRET: "test-session-secret-at-least-32-characters",
+  DEV_AUTH_PASSWORD: "test-password",
   MYSQL_HOST: "localhost",
   MYSQL_PORT: 3306,
   MYSQL_USER: "test",
   MYSQL_PASSWORD: "",
   MYSQL_DATABASE: "test",
-  JINA_API_KEY: "fake",
-  SERPAPI_API_KEY: "fake",
   OPENAI_API_KEY: "fake",
   OPENAI_MODEL: "gpt-4.1-mini",
   SHOPIFY_TOKEN_URL: undefined,
   SHOPIFY_PRODUCTS_URL: undefined,
   SHOPIFY_ORDERS_URL: undefined,
   SHOPIFY_CLIENT_ID: undefined,
-  SHOPIFY_CLIENT_SECRET: undefined,
+  SHOPIFY_CLIENT_SECRET: "fake-shopify-secret",
   SERPAPI_LOCATION: "New Zealand",
   SERPAPI_GL: "nz",
   SERPAPI_HL: "en",
@@ -45,10 +53,12 @@ export const fakeEnv = {
   DATAFORSEO_PASSWORD: "fake",
   DATAFORSEO_WEBHOOK_SECRET: "fake-webhook-secret",
   WEBHOOK_HOST: "https://www.qweyha520.bar",
-  REDIS_HOST: "127.0.0.1",
-  REDIS_PORT: 6379,
-  REDIS_PASSWORD: "",
-  REDIS_DB: 0,
+  CLOUD_TASKS_PROJECT: undefined,
+  CLOUD_TASKS_LOCATION: undefined,
+  CLOUD_TASKS_QUEUE: undefined,
+  ORDER_WORKER_URL: undefined,
+  BACKEND_CLOUD_RUN_URL: undefined as string | undefined,
+  INTERNAL_OIDC_SERVICE_ACCOUNT: undefined as string | undefined,
 };
 
 // ── Mock repository / service factories ──────────────────────────────────────
@@ -107,28 +117,33 @@ export function makeCompetitorAnalysisService() {
 export function makeShopifyService() {
   return {
     getAccessToken: vi.fn().mockResolvedValue("fake-access-token"),
-    fetchAllProducts: vi.fn().mockResolvedValue([]),
+    streamProducts: vi.fn().mockImplementation(async function* () {}),
     fetchOrders: vi.fn().mockResolvedValue([])
   };
 }
 
 export function makeShopifyGraphQLService() {
   return {
-    fetchOrders: vi.fn().mockResolvedValue([])
+    fetchOrders: vi.fn().mockResolvedValue([]),
+    fetchOrderById: vi.fn().mockResolvedValue(null),
   };
 }
 
-export function makeOrderSyncQueue() {
+export function makeCloudTasksClient() {
   return {
-    add: vi.fn().mockResolvedValue(undefined),
-    close: vi.fn().mockResolvedValue(undefined),
-    getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 }),
-    getJobs: vi.fn().mockResolvedValue([]),
+    enqueueSyncOrder: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+export function makeCloudTasksCompetitorClient() {
+  return {
+    enqueue: vi.fn().mockResolvedValue(undefined),
   };
 }
 
 export function makeOrderRepository() {
   return {
+    getShopifyOrderUpdatedAt: vi.fn().mockResolvedValue(null),
     getLastSyncedAt: vi.fn().mockResolvedValue(null),
     importOrders: vi.fn().mockResolvedValue(0),
     upsertMappedOrder: vi.fn().mockResolvedValue({ skipped: false }),
@@ -167,14 +182,16 @@ export type TestMocks = {
   orderRepository: ReturnType<typeof makeOrderRepository>;
   shopifyService: ReturnType<typeof makeShopifyService> | null;
   shopifyGraphQLService: ReturnType<typeof makeShopifyGraphQLService> | null;
-  orderSyncQueue: ReturnType<typeof makeOrderSyncQueue> | null;
+  cloudTasksClient: ReturnType<typeof makeCloudTasksClient> | null;
+  cloudTasksCompetitorClient: ReturnType<typeof makeCloudTasksCompetitorClient> | null;
   aiReportRepository: ReturnType<typeof makeAiReportRepository>;
   aiReportService: ReturnType<typeof makeAiReportService>;
 };
 
 export async function buildTestApp(
   overrides: Partial<TestMocks> = {},
-  envOverrides: Partial<typeof fakeEnv & { OWN_STORE_NAME?: string }> = {}
+  envOverrides: Partial<typeof fakeEnv & { OWN_STORE_NAME?: string; INTERNAL_OIDC_SERVICE_ACCOUNT?: string }> = {},
+  opts: { protectAuth?: boolean } = {}
 ) {
   const mocks: TestMocks = {
     productRepository: overrides.productRepository ?? makeProductRepository(),
@@ -184,14 +201,27 @@ export async function buildTestApp(
     orderRepository: overrides.orderRepository ?? makeOrderRepository(),
     shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null,
     shopifyGraphQLService: "shopifyGraphQLService" in overrides ? overrides.shopifyGraphQLService ?? null : null,
-    orderSyncQueue: "orderSyncQueue" in overrides ? (overrides.orderSyncQueue as ReturnType<typeof makeOrderSyncQueue> | null) : makeOrderSyncQueue(),
+    cloudTasksClient: "cloudTasksClient" in overrides ? (overrides.cloudTasksClient as ReturnType<typeof makeCloudTasksClient> | null) : makeCloudTasksClient(),
+    cloudTasksCompetitorClient: "cloudTasksCompetitorClient" in overrides
+      ? (overrides.cloudTasksCompetitorClient as ReturnType<typeof makeCloudTasksCompetitorClient> | null)
+      : makeCloudTasksCompetitorClient(),
     aiReportRepository: overrides.aiReportRepository ?? makeAiReportRepository(),
     aiReportService: overrides.aiReportService ?? makeAiReportService(),
   };
 
   const app = Fastify({ logger: false });
 
-  app.decorate("env", { ...fakeEnv, ...envOverrides } as typeof fakeEnv);
+  const resolvedEnv = { ...fakeEnv, ...envOverrides } as typeof fakeEnv;
+  app.decorate("env", resolvedEnv);
+
+  await app.register(cors, {
+    origin: resolvedEnv.APP_URL,
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+  });
+  await app.register(cookie);
+  await app.register(jwt, { secret: resolvedEnv.SESSION_SECRET });
+
   app.decorate("productRepository", mocks.productRepository as any);
   app.decorate("competitorRepository", mocks.competitorRepository as any);
   app.decorate("competitorAnalysisService", mocks.competitorAnalysisService as any);
@@ -199,7 +229,8 @@ export async function buildTestApp(
   app.decorate("orderRepository", mocks.orderRepository as any);
   app.decorate("shopifyService", mocks.shopifyService as any);
   app.decorate("shopifyGraphQLService", mocks.shopifyGraphQLService as any);
-  app.decorate("orderSyncQueue", mocks.orderSyncQueue as any);
+  app.decorate("cloudTasksClient", mocks.cloudTasksClient as any);
+  app.decorate("cloudTasksCompetitorClient", mocks.cloudTasksCompetitorClient as any);
   app.decorate("aiReportRepository", mocks.aiReportRepository as any);
   app.decorate("aiReportService", mocks.aiReportService as any);
 
@@ -209,9 +240,15 @@ export async function buildTestApp(
         error: { code: error.code, message: error.message }
       });
     }
-    if (error instanceof Error && error.name === "ZodError") {
+    if (error instanceof ZodError) {
+      const message = error.issues
+        .map((issue) => {
+          const path = issue.path.join(".");
+          return path ? `${path}: ${issue.message}` : issue.message;
+        })
+        .join("; ");
       return reply.status(400).send({
-        error: { code: "VALIDATION_ERROR", message: error.message }
+        error: { code: "VALIDATION_ERROR", message: message || "Validation failed." }
       });
     }
     return reply.status(500).send({
@@ -219,16 +256,25 @@ export async function buildTestApp(
     });
   });
 
+  await app.register(authRoutes);
   await app.register(healthRoutes, { prefix: "/api" });
-  await app.register(productRoutes, { prefix: "/api" });
-  await app.register(ordersRoutes, { prefix: "/api" });
-  await app.register(shopifyRoutes, { prefix: "/api" });
-  await app.register(queueRoutes, { prefix: "/api" });
-  await app.register(analysisRoutes, { prefix: "/api" });
-  await app.register(reportRoutes, { prefix: "/api" });
+
+  await app.register(async (protectedApi) => {
+    if (opts.protectAuth) {
+      protectedApi.addHook("preHandler", requireSession(protectedApi));
+    }
+    await protectedApi.register(productRoutes, { prefix: "/api" });
+    await protectedApi.register(ordersRoutes, { prefix: "/api" });
+    await protectedApi.register(shopifyRoutes, { prefix: "/api" });
+    await protectedApi.register(analysisRoutes, { prefix: "/api" });
+    await protectedApi.register(reportRoutes, { prefix: "/api" });
+  });
+
   await app.register(webhookRoutes);
+  await app.register(internalCompetitorRoutes);
+  await app.register(shopifyWebhookRoutes);
 
   await app.ready();
 
-  return { app, mocks };
+  return { app, mocks, validSessionCookie: app.jwt.sign({ user: { id: "dev", email: "dev@local", name: "Dev User" } }) };
 }

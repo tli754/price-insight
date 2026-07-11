@@ -33,8 +33,10 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(503, "SHOPIFY_NOT_CONFIGURED", "Shopify credentials are not configured.");
     }
     const accessToken = await fastify.shopifyService.getAccessToken();
-    const shopifyProducts = await fastify.shopifyService.fetchAllProducts(accessToken);
-    const synced = await fastify.productRepository.importProducts(shopifyProducts);
+    let synced = 0;
+    for await (const page of fastify.shopifyService.streamProducts(accessToken)) {
+      synced += await fastify.productRepository.importProducts(page);
+    }
     reply.code(200);
     return { synced };
   });
@@ -57,7 +59,7 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const pingbackUrl =
-      `${fastify.env.WEBHOOK_HOST}/webhook/dataforseo/pingback/shopping` +
+      `${fastify.env.WEBHOOK_HOST}/webhooks/dataforseo/pingback/shopping` +
       `?secret=${fastify.env.DATAFORSEO_WEBHOOK_SECRET}&id=$id&tag=$tag`;
 
     const submitted = await fastify.dataForSeoService.postShoppingTasks(withTitle, pingbackUrl);

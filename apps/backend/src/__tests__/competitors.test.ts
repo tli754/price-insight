@@ -2,6 +2,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   buildTestApp,
   makeCompetitorRepository,
+  makeDataForSeoService,
   makeProductRepository
 } from "./helpers/build-app.js";
 import type { ProductRow, ProductImageRow } from "../db/schema.js";
@@ -17,6 +18,7 @@ function makeProductRow(overrides: Partial<ProductRow> = {}): ProductRow & { ima
     brand: "Acme",
     handle: "blue-widget",
     price: 49.99,
+    cost: null,
     currency: "NZD",
     thumbnail: null,
     tags: null,
@@ -399,5 +401,56 @@ describe("PATCH /api/products/:id/competitors/:competitorId", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("INVALID_COMPETITOR_ID");
+  });
+});
+
+// ── POST /api/products/:id/competitors/search ─────────────────────────────────
+
+describe("POST /api/products/:id/competitors/search", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns 202 with submitted=1 when product has a title", async () => {
+    const productRepository = makeProductRepository();
+    const dataForSeoService = makeDataForSeoService();
+    productRepository.getProductById.mockResolvedValue(makeProductRow({ title: "Blue Widget" }));
+    dataForSeoService.postShoppingTasks.mockResolvedValue(1);
+    ({ app } = await buildTestApp({ productRepository, dataForSeoService }));
+
+    const response = await app.inject({ method: "POST", url: "/api/products/1/competitors/search" });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().submitted).toBe(1);
+    expect(dataForSeoService.postShoppingTasks).toHaveBeenCalledWith(
+      [{ id: 1, title: "Blue Widget" }],
+      expect.stringContaining("/webhooks/dataforseo/pingback/shopping")
+    );
+  });
+
+  it("returns 202 with submitted=0 when product has no title", async () => {
+    const productRepository = makeProductRepository();
+    const dataForSeoService = makeDataForSeoService();
+    productRepository.getProductById.mockResolvedValue(makeProductRow({ title: null as unknown as string }));
+    ({ app } = await buildTestApp({ productRepository, dataForSeoService }));
+
+    const response = await app.inject({ method: "POST", url: "/api/products/1/competitors/search" });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().submitted).toBe(0);
+    expect(dataForSeoService.postShoppingTasks).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when product does not exist", async () => {
+    const productRepository = makeProductRepository();
+    productRepository.getProductById.mockResolvedValue(null);
+    ({ app } = await buildTestApp({ productRepository }));
+
+    const response = await app.inject({ method: "POST", url: "/api/products/99/competitors/search" });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe("PRODUCT_NOT_FOUND");
   });
 });

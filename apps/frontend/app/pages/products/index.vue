@@ -23,6 +23,27 @@ watch(search, (val) => {
   router.replace({ query: { ...route.query, search: val || undefined } })
 })
 
+// ── Status filter ───────────────────────────────────────────────────────────
+
+// 'all' means no status filter (empty-string values are disallowed by the Select).
+const statusOptions = [
+  { label: 'All statuses', value: 'all' },
+  { label: 'Active', value: 'active' },
+  { label: 'Archived', value: 'archived' },
+  { label: 'Draft', value: 'draft' },
+]
+
+function statusFromQuery(q: unknown): string {
+  if (typeof q === 'string' && statusOptions.some(o => o.value === q)) return q
+  return 'active'
+}
+
+const statusFilter = ref(statusFromQuery(route.query.status))
+
+watch(statusFilter, (val) => {
+  router.replace({ query: { ...route.query, status: val === 'active' ? undefined : val } })
+})
+
 const syncing = ref(false)
 const findingCompetitors = ref(false)
 
@@ -39,7 +60,7 @@ async function findCompetitors() {
       color: 'success'
     })
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Failed to submit competitor search'
+    const msg = getApiErrorMessage(e, 'Failed to submit competitor search')
     toast.add({ title: msg, color: 'error' })
   } finally {
     findingCompetitors.value = false
@@ -53,7 +74,7 @@ async function syncProducts() {
     toast.add({ title: `${result.synced} products synced`, color: 'success' })
     await refresh()
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Shopify sync failed'
+    const msg = getApiErrorMessage(e, 'Shopify sync failed')
     toast.add({ title: msg, color: 'error' })
   } finally {
     syncing.value = false
@@ -66,19 +87,27 @@ const statusColor = (status: string) => {
   return 'neutral'
 }
 
+// Split the query into whitespace-separated terms; a product matches if any
+// term appears in its title or SKU (e.g. "green bean" matches "green" OR "bean").
+const searchTerms = computed(() =>
+  search.value.toLowerCase().split(/\s+/).filter(Boolean)
+)
+
 const filtered = computed(() =>
   products.value.filter(p =>
-    p.status === 'active' && (
-      !search.value ||
-      p.title?.toLowerCase().includes(search.value.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(search.value.toLowerCase())
+    (statusFilter.value === 'all' || p.status === statusFilter.value) && (
+      searchTerms.value.length === 0 ||
+      searchTerms.value.some(term =>
+        p.title?.toLowerCase().includes(term) ||
+        p.sku?.toLowerCase().includes(term)
+      )
     )
   )
 )
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-type SortKey = 'title' | 'price' | 'inventoryQuantity' | 'sold7d' | 'sold30d' | 'sold90d'
+type SortKey = 'title' | 'price' | 'marginPercent' | 'inventoryQuantity' | 'sold7d' | 'sold30d' | 'sold90d'
 const sortKey = ref<SortKey | null>('sold7d')
 const sortDir = ref<'asc' | 'desc'>('desc')
 
@@ -112,7 +141,7 @@ const sorted = computed(() => {
 
 // ── Pagination ────────────────────────────────────────────────────────────────
 
-const page = ref(1)
+const page = ref(typeof route.query.page === 'string' ? Math.max(1, parseInt(route.query.page) || 1) : 1)
 const pageSizeStr = ref('20')
 const pageSize = computed(() => Number(pageSizeStr.value))
 
@@ -123,8 +152,12 @@ const pageSizeOptions = [
   { label: '100 per page', value: '100' },
 ]
 
+watch(page, (val) => {
+  router.replace({ query: { ...route.query, page: val > 1 ? String(val) : undefined } })
+})
 watch(pageSizeStr, () => { page.value = 1 })
 watch(search, () => { page.value = 1 })
+watch(statusFilter, () => { page.value = 1 })
 
 const paginated = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -134,11 +167,12 @@ const paginated = computed(() => {
 // ── Column resize ─────────────────────────────────────────────────────────────
 
 const colWidths = reactive({
-  thumbnail: 72,
+  thumbnail: 60,
   title: 400,
-  sku: 130,
   price: 110,
+  margin: 130,
   inventory: 110,
+  inventoryAlert: 210,
   status: 100,
   avgCompetitor: 140,
   sales7d: 130,
@@ -168,6 +202,17 @@ function fmtSales(qty: number | undefined, rev: number | undefined): string {
   return `${qty} ($${Math.round(rev ?? 0).toLocaleString()})`
 }
 
+function marginColor(pct: number | undefined): string {
+  if (pct == null) return ''
+  if (pct < 15) return 'text-red-500'
+  if (pct < 30) return 'text-amber-500'
+  return 'text-green-600'
+}
+
+function inventoryAlert(p: ProductRow) {
+  return calcInventoryAlert(p.inventoryQuantity, p.sold7d, p.sold30d, p.sold90d)
+}
+
 onMounted(() => {
   window.addEventListener('mousemove', onResizeMove)
   window.addEventListener('mouseup', stopResize)
@@ -195,6 +240,12 @@ onUnmounted(() => {
         />
       </div>
       <div class="flex items-center gap-2">
+        <USelect
+          v-model="statusFilter"
+          :items="statusOptions"
+          icon="i-lucide-filter"
+          class="w-40"
+        />
         <UInput v-model="inputValue" placeholder="Search products..." icon="i-lucide-search" class="w-56" @keyup.enter="applySearch" />
         <UButton size="sm" icon="i-lucide-search" @click="applySearch">Search</UButton>
       </div>
@@ -238,22 +289,23 @@ onUnmounted(() => {
 
       <UCard>
         <div class="overflow-x-auto rounded-lg border border-default/50">
-          <table class="table-fixed text-sm">
+          <table class="min-w-max table-fixed text-sm">
             <colgroup>
               <col :style="`width: ${colWidths.thumbnail}px`" />
               <col :style="`width: ${colWidths.title}px`" />
-              <col :style="`width: ${colWidths.sku}px`" />
               <col :style="`width: ${colWidths.price}px`" />
+              <col :style="`width: ${colWidths.margin}px`" />
               <col :style="`width: ${colWidths.inventory}px`" />
+              <col :style="`width: ${colWidths.inventoryAlert}px`" />
               <col :style="`width: ${colWidths.status}px`" />
-              <col :style="`width: ${colWidths.avgCompetitor}px`" />
               <col :style="`width: ${colWidths.sales7d}px`" />
               <col :style="`width: ${colWidths.sales30d}px`" />
               <col :style="`width: ${colWidths.sales90d}px`" />
+              <col :style="`width: ${colWidths.avgCompetitor}px`" />
             </colgroup>
             <thead>
               <tr class="border-b border-default/50 bg-default/20">
-                <th class="p-0" />
+                <th class="w-[60px] p-0" />
                 <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
                   <button class="flex cursor-pointer items-center gap-1 hover:text-highlighted" @click="toggleSort('title')">
                     Product Name
@@ -261,10 +313,6 @@ onUnmounted(() => {
                     <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
                   </button>
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'title')" />
-                </th>
-                <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
-                  SKU
-                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'sku')" />
                 </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
                   <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('price')">
@@ -275,6 +323,14 @@ onUnmounted(() => {
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'price')" />
                 </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
+                  <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('marginPercent')">
+                    <UIcon v-if="sortKey === 'marginPercent'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
+                    <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
+                    Margin
+                  </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'margin')" />
+                </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
                   <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('inventoryQuantity')">
                     <UIcon v-if="sortKey === 'inventoryQuantity'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
                     <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
@@ -282,13 +338,13 @@ onUnmounted(() => {
                   </button>
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'inventory')" />
                 </th>
+                <th class="relative border-r border-default/30 px-3 py-2 text-center font-medium text-toned">
+                  Inventory Alert
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'inventoryAlert')" />
+                </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-left font-medium text-toned">
                   Status
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'status')" />
-                </th>
-                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
-                  Avg Competitor
-                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'avgCompetitor')" />
                 </th>
                 <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
                   <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('sold7d')">
@@ -306,12 +362,16 @@ onUnmounted(() => {
                   </button>
                   <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'sales30d')" />
                 </th>
-                <th class="px-3 py-2 text-right font-medium text-toned">
+                <th class="relative border-r border-default/30 px-3 py-2 text-right font-medium text-toned">
                   <button class="flex w-full cursor-pointer items-center justify-end gap-1 hover:text-highlighted" @click="toggleSort('sold90d')">
                     <UIcon v-if="sortKey === 'sold90d'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="h-3 w-3" />
                     <UIcon v-else name="i-lucide-arrow-up-down" class="h-3 w-3 opacity-40" />
                     90d Sales
                   </button>
+                  <div class="absolute inset-y-0 right-0 w-1 cursor-col-resize hover:bg-primary-400/40" @mousedown.prevent="startResize($event, 'sales90d')" />
+                </th>
+                <th class="px-3 py-2 text-right font-medium text-toned">
+                  Avg Competitor
                 </th>
               </tr>
             </thead>
@@ -321,8 +381,8 @@ onUnmounted(() => {
                 :key="p.id"
                 class="border-b border-default/30 last:border-0 hover:bg-default/10"
               >
-                <td class="p-0">
-                  <NuxtLink :to="`/products/${p.id}`">
+                <td class="w-[60px] p-0">
+                  <NuxtLink :to="`/products/${p.id}`" class="block">
                     <img
                       v-if="p.thumbnail"
                       :src="p.thumbnail"
@@ -341,30 +401,31 @@ onUnmounted(() => {
                     {{ p.title }}
                   </NuxtLink>
                 </td>
-                <td class="px-3 py-2">
-                  <span class="font-mono text-sm text-gray-500">{{ p.sku }}</span>
-                </td>
                 <td class="px-3 py-2 text-right">
                   <span v-if="p.price != null">${{ Number(p.price).toFixed(2) }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-3 py-2 text-right font-mono text-sm" :title="p.cost != null ? `Cost $${Number(p.cost).toFixed(2)}` : 'No cost set'">
+                  <template v-if="p.marginPercent != null">
+                    <span :class="marginColor(p.marginPercent)">{{ p.marginPercent.toFixed(0) }}%</span>
+                    <span class="ml-1 text-xs text-gray-400">(${{ Math.round(p.marginAmount ?? 0).toLocaleString() }})</span>
+                  </template>
                   <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="px-3 py-2 text-right">
                   <span v-if="p.inventoryQuantity != null">{{ p.inventoryQuantity }}</span>
                   <span v-else class="text-gray-400">—</span>
                 </td>
+                <td class="px-3 py-2 text-center">
+                  <UBadge v-if="inventoryAlert(p)" :color="inventoryAlert(p)!.color" variant="soft" size="sm">
+                    {{ inventoryAlert(p)!.text }}
+                  </UBadge>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
                 <td class="px-3 py-2">
                   <UBadge :color="statusColor(p.status)" variant="soft" size="sm">
                     {{ p.status }}
                   </UBadge>
-                </td>
-                <td class="px-3 py-2 text-right font-mono text-sm">
-                  <template v-if="p.avgCompetitorPrice != null">
-                    <span :class="p.avgCompetitorPrice < (p.price ?? Infinity) ? 'text-red-500' : 'text-green-600'">
-                      ${{ p.avgCompetitorPrice.toFixed(2) }}
-                    </span>
-                    <span class="ml-1 text-xs text-gray-400">({{ p.confirmedCompetitorCount }})</span>
-                  </template>
-                  <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="px-3 py-2 text-right font-mono text-sm text-gray-600">
                   {{ fmtSales(p.sold7d, p.revenue7d) }}
@@ -374,6 +435,15 @@ onUnmounted(() => {
                 </td>
                 <td class="px-3 py-2 text-right font-mono text-sm text-gray-600">
                   {{ fmtSales(p.sold90d, p.revenue90d) }}
+                </td>
+                <td class="px-3 py-2 text-right font-mono text-sm">
+                  <template v-if="p.avgCompetitorPrice != null">
+                    <span :class="p.avgCompetitorPrice < (p.price ?? Infinity) ? 'text-red-500' : 'text-green-600'">
+                      ${{ p.avgCompetitorPrice.toFixed(2) }}
+                    </span>
+                    <span class="ml-1 text-xs text-gray-400">({{ p.confirmedCompetitorCount }})</span>
+                  </template>
+                  <span v-else class="text-gray-400">—</span>
                 </td>
               </tr>
             </tbody>

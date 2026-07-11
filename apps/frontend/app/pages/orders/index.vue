@@ -41,12 +41,12 @@ async function syncOrders() {
   try {
     const result = await $fetch<{ jobsEnqueued: number }>(
       '/api/shopify/orders/sync',
-      { method: 'POST', body: { mode: 'today', source: 'manual' } }
+      { method: 'POST', body: { mode: 'last30days', source: 'manual' } }
     )
     toast.add({ title: 'Sync queued', description: `${result.jobsEnqueued} order(s) queued for sync.`, color: 'success' })
     await refresh()
   } catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Could not queue sync'
+    const msg = getApiErrorMessage(e, 'Could not queue sync')
     toast.add({ title: msg, color: 'error' })
   } finally {
     syncing.value = false

@@ -1,25 +1,24 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { AppError } from "../lib/app-error.js";
-import { getTodayNZRange } from "../lib/nz-date-range.js";
-import type { SyncOrderJobData } from "../services/order-sync-queue.js";
+import { getLast7Days } from "../lib/nz-date-range.js";
+import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
 
 const ordersRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/orders/sync", async (request, reply) => {
     if (!fastify.shopifyService || !fastify.shopifyGraphQLService) {
       throw new AppError(503, "SHOPIFY_NOT_CONFIGURED", "Shopify credentials are not configured.");
     }
-    if (!fastify.orderSyncQueue) {
+    if (!fastify.cloudTasksClient) {
       throw new AppError(503, "QUEUE_NOT_CONFIGURED", "Order sync queue is not available.");
     }
 
-    const { from, to } = getTodayNZRange();
-    const filter = `updated_at:>=${from.toISOString()} updated_at:<=${to.toISOString()}`;
+    const filter = `updated_at:>=${getLast7Days().toISOString()}`;
     const accessToken = await fastify.shopifyService.getAccessToken();
     const orders = await fastify.shopifyGraphQLService.fetchOrders(accessToken, filter);
 
     for (const order of orders) {
-      const jobData: SyncOrderJobData = {
+      const payload: ScheduledSyncOrderPayload = {
         type: "sync-order",
         source: "manual",
         shopifyOrderId: order.id,
@@ -27,7 +26,7 @@ const ordersRoutes: FastifyPluginAsync = async (fastify) => {
         shopifyUpdatedAt: order.updatedAt,
         shopifyOrder: order,
       };
-      await fastify.orderSyncQueue.add("sync-order", jobData);
+      await fastify.cloudTasksClient.enqueueSyncOrder(fastify.env.ORDER_WORKER_URL!, payload);
     }
 
     reply.code(202);
