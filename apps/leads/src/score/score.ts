@@ -1,6 +1,7 @@
-import { RECENCY, WEIGHTS, type ScoreWeights } from "../config.js";
+import { RECENCY, VALUE_BAND, WEIGHTS, type ScoreWeights } from "../config.js";
 import type { ScoreInput, ScoreResult } from "../domain/types.js";
 import { clamp, percentileFn, round } from "../lib/normalize.js";
+import { bandScore } from "./band.js";
 
 /**
  * Percentile context built from the whole dataset — scoring is relative, so a
@@ -47,21 +48,35 @@ export function scoreOne(
 ): ScoreResult {
   const reasons: string[] = [];
 
-  // Value — ability to pay / real business. Average over available signals.
+  // Value — fit with the ICP (owner-led SME with real operational complexity),
+  // NOT raw "bigger is better". The SIZE signals (revenue, SKU count) run through
+  // a sweet-spot band so micro-sellers AND enterprise vendors are down-weighted;
+  // tech-spend and prominence stay monotonic (more/better is still better).
+  // Out of scope here (not in the structured export): physical-product detection
+  // and owner-led / team-size detection — deferred to the crawl/AI phases; we do
+  // NOT fabricate signals for them.
   const valueParts: number[] = [];
   const rev = ctx.revenuePct(input.salesRevenue);
   const spend = ctx.spendPct(input.technologySpend);
   const sku = ctx.skuPct(input.productCount);
   const rank = ctx.rankPct(input.prominenceRank);
-  if (rev != null) valueParts.push(rev);
-  if (spend != null) valueParts.push(spend);
-  if (sku != null) valueParts.push(sku);
-  if (rank != null) valueParts.push(1 - rank); // lower rank = higher prominence
+  if (rev != null) valueParts.push(bandScore(rev, VALUE_BAND)); // size → banded
+  if (spend != null) valueParts.push(spend); // tech-spend: monotonic
+  if (sku != null) valueParts.push(bandScore(sku, VALUE_BAND)); // size → banded
+  if (rank != null) valueParts.push(1 - rank); // prominence: monotonic (lower rank = higher)
   const value = mean(valueParts);
-  if (rev != null && rev >= 0.75) reasons.push("high revenue");
-  if (sku != null && sku >= 0.75) reasons.push("large catalog");
 
-  // Automation gap — the sales opportunity.
+  // Explain the size verdict from the dominant size percentile (revenue or SKU).
+  const sizePcts = [rev, sku].filter((p): p is number => p != null);
+  if (sizePcts.length > 0) {
+    const sizePct = Math.max(...sizePcts);
+    if (sizePct > VALUE_BAND.plateauTop) reasons.push("enterprise-scale (down-weighted)");
+    else if (sizePct > VALUE_BAND.rampTop) reasons.push("sweet-spot size");
+  }
+
+  // Automation gap — the sales opportunity. NOTE: on the current dataset this
+  // barely differentiates leads (CRM & AI adoption are ~3% coverage, so almost
+  // everyone "lacks" them). Weights are kept as-is; revisit once coverage improves.
   const gapAi = input.hasAi ? 0.2 : 1;
   const gapCrm = input.hasCrm ? 0.5 : 1;
   const receptivity = input.hasMarketingAutomation ? 1 : 0.6;

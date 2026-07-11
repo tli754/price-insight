@@ -1,6 +1,8 @@
 // Tunable knobs for the deterministic pipeline. Kept in one place so the rubric
 // can be adjusted without touching logic.
 
+import type { ValueBandConfig } from "./domain/types.js";
+
 export interface ScoreWeights {
   value: number;
   gap: number;
@@ -21,6 +23,10 @@ export const AI_SCORE_THRESHOLD = 70;
 export interface HardFilterConfig {
   /** Reject when revenue is known and below this. 0 disables the check. */
   minRevenue: number;
+  /** Reject when revenue is known and ABOVE this (enterprise ceiling). 0 disables. */
+  maxRevenue: number;
+  /** Reject when SKU count is known and ABOVE this (enterprise catalog). 0 disables. */
+  maxProductCount: number;
   /** Restrict to these 2-letter country codes. null disables the check. */
   allowedCountries: string[] | null;
   /** Reject platforms not in this set. null disables the check (keep everything,
@@ -30,8 +36,27 @@ export interface HardFilterConfig {
 
 export const HARD_FILTER: HardFilterConfig = {
   minRevenue: 0,
+  // Enterprise ceilings are DEFAULT DISABLED (0). We lack calibration data, and
+  // the VALUE_BAND curve already *softly* down-weights the enterprise tail, so a
+  // hard cut here risks dropping good leads. Enable + tune once Tao calibrates.
+  // Suggested placeholder starting points: maxRevenue: 50_000_000, maxProductCount: 10_000.
+  maxRevenue: 0,
+  maxProductCount: 0,
   allowedCountries: null,
   allowedPlatforms: null
+};
+
+/**
+ * Sweet-spot band for the SIZE value signals (revenue percentile, SKU percentile).
+ * Percentiles below `rampTop` ramp up linearly; between `rampTop` and `plateauTop`
+ * sit in the sweet spot (full credit); above `plateauTop` decay toward `decayFloor`
+ * at percentile 1.0. This makes Value non-monotonic: mid-sized SMEs beat both
+ * micro-sellers and enterprise vendors — matching the ICP.
+ */
+export const VALUE_BAND: ValueBandConfig = {
+  rampTop: 0.4,
+  plateauTop: 0.85,
+  decayFloor: 0.3
 };
 
 /** Recency decay (months) applied to last-activity dates. */

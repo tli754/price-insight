@@ -28,5 +28,15 @@ export function hardFilter(input: HardFilterInput, cfg: HardFilterConfig = HARD_
     return { pass: false, reason: "below_min_revenue" };
   }
 
+  // Enterprise ceilings — only enforced when the knob is > 0 (default: disabled).
+  // Exclude vendors that are too large for the ICP (they have internal teams).
+  if (cfg.maxRevenue > 0 && input.salesRevenue != null && input.salesRevenue > cfg.maxRevenue) {
+    return { pass: false, reason: "above_max_revenue" };
+  }
+
+  if (cfg.maxProductCount > 0 && input.productCount != null && input.productCount > cfg.maxProductCount) {
+    return { pass: false, reason: "enterprise_catalog" };
+  }
+
   return { pass: true, reason: null };
 }

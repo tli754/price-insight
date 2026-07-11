@@ -16,6 +16,21 @@ export interface HardFilterInput {
   country: string | null;
   platform: Platform | string | null;
   salesRevenue: number | null;
+  productCount: number | null;
+}
+
+/**
+ * Shape of the value "band" curve applied to size signals (revenue, SKU count).
+ * Percentiles in [0,1] map to a 0→1 ramp, a sweet-spot plateau, then a decay to
+ * a floor — so both micro-sellers AND enterprise vendors are down-weighted.
+ */
+export interface ValueBandConfig {
+  /** Percentile at which the ramp reaches full credit (1.0). */
+  rampTop: number;
+  /** Top of the sweet-spot plateau; above this, size is down-weighted. */
+  plateauTop: number;
+  /** Floor the decay approaches at percentile 1.0 (enterprise tail). */
+  decayFloor: number;
 }
 
 export interface HardFilterResult {
