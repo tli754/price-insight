@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { buildScoringContext, recencyScore, scoreDataset, scoreOne } from "../score/score.js";
-import type { ScoreInput } from "../domain/types.js";
+import { bandScore } from "../score/band.js";
+import type { ScoreInput, ValueBandConfig } from "../domain/types.js";
 
 const NOW = new Date("2026-07-01T00:00:00Z");
 
@@ -21,6 +22,23 @@ function make(overrides: Partial<ScoreInput>): ScoreInput {
     ...overrides
   };
 }
+
+const BAND: ValueBandConfig = { rampTop: 0.4, plateauTop: 0.85, decayFloor: 0.3 };
+
+describe("bandScore", () => {
+  it("ramps 0→1, plateaus, then decays to the floor", () => {
+    expect(bandScore(0, BAND)).toBe(0);
+    expect(bandScore(0.2, BAND)).toBeCloseTo(0.5, 10); // half-way up the ramp
+    expect(bandScore(BAND.rampTop, BAND)).toBe(1); // top of ramp
+    expect(bandScore(0.6, BAND)).toBe(1); // inside the sweet-spot plateau
+    expect(bandScore(BAND.plateauTop, BAND)).toBe(1); // top of plateau
+    expect(bandScore(1, BAND)).toBeCloseTo(BAND.decayFloor, 10); // enterprise tail → floor
+  });
+
+  it("is non-monotonic: a mid percentile beats a top percentile", () => {
+    expect(bandScore(0.6, BAND)).toBeGreaterThan(bandScore(0.98, BAND));
+  });
+});
 
 describe("recencyScore", () => {
   it("full credit when fresh, floor when stale, neutral when unknown", () => {
@@ -76,5 +94,17 @@ describe("scoreOne / scoreDataset", () => {
     const [only] = scoreDataset([make({ hasEmail: true })], undefined, NOW);
     expect(Number.isNaN(only.overall)).toBe(false);
     expect(only.components.value).toBe(0);
+  });
+
+  it("value is non-monotonic in size: a mid-sized lead beats an enterprise one", () => {
+    // 11 rows differing only in revenue → percentiles (k+0.5)/11 for distinct k.
+    const rows: ScoreInput[] = Array.from({ length: 11 }, (_, i) => make({ salesRevenue: i * 10_000 }));
+    const results = scoreDataset(rows, undefined, NOW);
+    const mid = results[6]; // pct ≈ 0.59 → sweet-spot plateau
+    const top = results[10]; // pct ≈ 0.95 → enterprise tail (down-weighted)
+
+    expect(mid.components.value).toBeGreaterThan(top.components.value);
+    expect(mid.reasons).toContain("sweet-spot size");
+    expect(top.reasons).toContain("enterprise-scale (down-weighted)");
   });
 });
