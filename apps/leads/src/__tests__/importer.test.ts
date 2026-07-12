@@ -15,6 +15,17 @@ function fakeRepo(): CompanyRepository & { calls: UpsertInput[] } {
     calls,
     async upsertByDomain(input: UpsertInput) {
       calls.push(input);
+    },
+    // Read/query methods are unused by the importer — stubbed to satisfy the
+    // expanded CompanyRepository surface.
+    async list() {
+      return { items: [], total: 0 };
+    },
+    async getById() {
+      return null;
+    },
+    async updateStatus() {
+      return false;
     }
   };
 }
