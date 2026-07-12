@@ -4,7 +4,8 @@ const items = [
   { label: 'Competitors', to: '/competitors' },
   { label: 'Competitor Products', to: '/competitor-products' },
   { label: 'Orders', to: '/orders' },
-  { label: 'Insight', to: '/insight' }
+  { label: 'Insight', to: '/insight' },
+  { label: 'Leads', to: '/leads' }
 ]
 </script>
 
