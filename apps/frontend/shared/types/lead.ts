@@ -51,6 +51,14 @@ export interface LeadStatusUpdateResponse {
   status: LeadStatus
 }
 
+// POST /leads-api/leads/import (multipart xlsx upload) → ImportSummary
+export interface LeadImportSummary {
+  total: number
+  rejected: number
+  scored: number
+  byReason: Record<string, number>
+}
+
 // GET /leads-api/leads/:id → full company document. The exact shape is owned by
 // the leads service; these are the fields the detail page reads defensively.
 export interface LeadScoreComponent {

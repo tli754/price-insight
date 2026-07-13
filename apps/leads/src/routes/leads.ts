@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { CompanyDoc, Contact } from "../db/collections.js";
 import { lifecycleStatusSchema } from "../db/collections.js";
 import { AppError } from "../lib/app-error.js";
+import { runImport, type ImportSummary } from "../import/importer.js";
+import { parseWorkbookBuffer } from "../import/xlsx-parser.js";
 
 // Query params arrive as strings, so numbers are coerced. Unknown sort/order
 // values and out-of-range page sizes fail Zod → 400 via the app error handler.
@@ -92,6 +94,44 @@ const leadsRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(404, "LEAD_NOT_FOUND", "Lead not found.");
     }
     return { ok: true, status };
+  });
+
+  // POST /api/leads/import — upload an xlsx and run it through the same
+  // parse/map/filter/score/upsert pipeline as `tsx src/cli.ts import`.
+  fastify.post("/leads/import", async (request): Promise<ImportSummary> => {
+    if (!request.isMultipart()) {
+      throw new AppError(400, "INVALID_CONTENT_TYPE", "Expected a multipart/form-data upload.");
+    }
+
+    const data = await request.file();
+    if (!data) {
+      throw new AppError(400, "NO_FILE", "No file was uploaded.");
+    }
+    if (!data.filename.toLowerCase().endsWith(".xlsx")) {
+      throw new AppError(400, "INVALID_FILE_TYPE", "Only .xlsx files are supported.");
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = await data.toBuffer();
+    } catch (err) {
+      if (err instanceof fastify.multipartErrors.RequestFileTooLargeError) {
+        throw new AppError(413, "FILE_TOO_LARGE", "File exceeds the 10MB upload limit.");
+      }
+      throw err;
+    }
+
+    let rows: ReturnType<typeof parseWorkbookBuffer>;
+    try {
+      rows = parseWorkbookBuffer(buffer);
+    } catch {
+      throw new AppError(400, "INVALID_XLSX", "Could not parse the uploaded file as an xlsx workbook.");
+    }
+
+    return runImport(data.filename, {
+      repo: fastify.companyRepository,
+      readRows: () => rows
+    });
   });
 
   // ---------------------------------------------------------------------------

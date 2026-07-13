@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LeadListItem, LeadListResponse, LeadStatus, LeadStatusUpdateResponse } from '#shared/types/lead'
+import type { LeadImportSummary, LeadListItem, LeadListResponse, LeadStatus, LeadStatusUpdateResponse } from '#shared/types/lead'
 import { LIFECYCLE_STATUSES } from '#shared/types/lead'
 
 const toast = useToast()
@@ -95,6 +95,41 @@ async function updateStatus(item: LeadListItem, next: LeadStatus) {
   }
 }
 
+// ── Import leads from an uploaded xlsx ────────────────────────────────────────
+const importing = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function triggerImport() {
+  fileInput.value?.click()
+}
+
+async function handleFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  importing.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const summary = await $fetch<LeadImportSummary>('/leads-api/leads/import', {
+      method: 'POST',
+      body: formData,
+    })
+    toast.add({
+      title: `Imported ${summary.total} lead${summary.total === 1 ? '' : 's'}`,
+      description: `${summary.scored} scored, ${summary.rejected} rejected`,
+      color: 'success',
+    })
+    await refresh()
+  } catch (e: unknown) {
+    toast.add({ title: getApiErrorMessage(e, 'Import failed'), color: 'error' })
+  } finally {
+    importing.value = false
+  }
+}
+
 // ── Row selection (AI-send shell; wiring deferred to Phase 3) ─────────────────
 const selected = ref<Set<string>>(new Set())
 
@@ -146,6 +181,22 @@ const columns = [
           :loading="pending"
           @click="refresh"
         />
+        <UButton
+          size="xs"
+          variant="soft"
+          icon="i-lucide-upload"
+          :loading="importing"
+          @click="triggerImport"
+        >
+          Import Leads
+        </UButton>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".xlsx"
+          class="hidden"
+          @change="handleFileChange"
+        >
       </div>
       <div class="flex items-center gap-2">
         <USelect v-model="statusFilter" :items="statusFilterItems" icon="i-lucide-filter" class="w-44" />

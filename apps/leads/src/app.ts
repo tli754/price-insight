@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 import { ZodError } from "zod";
 
@@ -87,6 +88,9 @@ export async function buildApp(env: LeadsEnv, deps: AppDeps = {}) {
 
   await app.register(async (protectedApi) => {
     protectedApi.addHook("preHandler", requireSession(protectedApi));
+    await protectedApi.register(multipart, {
+      limits: { fileSize: 10 * 1024 * 1024, files: 1 }
+    });
     await protectedApi.register(leadsRoutes, { prefix: "/api" });
   });
 
