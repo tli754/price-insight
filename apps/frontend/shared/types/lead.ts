@@ -5,21 +5,12 @@
 // can drive both the TS union and the runtime `USelect` options.
 export const LIFECYCLE_STATUSES = [
   'new',
-  'imported',
-  'filtered',
-  'qualified',
-  'queued',
-  'crawling',
-  'crawled',
   'scored',
-  'ai_analysed',
-  'ready',
+  'analysed',
   'contacted',
-  'meeting',
+  'meet',
   'customer',
   'rejected',
-  'archived',
-  'failed',
 ] as const
 
 export type LeadStatus = (typeof LIFECYCLE_STATUSES)[number]

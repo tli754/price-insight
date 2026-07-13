@@ -18,25 +18,16 @@ export const COLLECTIONS = {
 } as const;
 
 // Lifecycle status -----------------------------------------------------------
-// Canonical casing: lower_snake_case tokens, exactly as listed here. `imported`
-// is the default assigned by the importer at insert time.
+// Canonical casing: lower_snake_case tokens, exactly as listed here. `new` is
+// the schema default; the importer itself only ever writes `scored`/`rejected`.
 export const LIFECYCLE_STATUSES = [
   "new",
-  "imported",
-  "filtered",
-  "qualified",
-  "queued",
-  "crawling",
-  "crawled",
   "scored",
-  "ai_analysed",
-  "ready",
+  "analysed",
   "contacted",
-  "meeting",
+  "meet",
   "customer",
-  "rejected",
-  "archived",
-  "failed"
+  "rejected"
 ] as const;
 
 export const lifecycleStatusSchema = z.enum(LIFECYCLE_STATUSES);
@@ -117,7 +108,7 @@ export const companySchema = z.object({
   vertical: z.string().optional(),
   employeeCount: z.number().optional(),
   productCount: z.number().optional(),
-  status: lifecycleStatusSchema.default("imported"),
+  status: lifecycleStatusSchema.default("new"),
   filterReason: z.string().nullish(),
   signals: companySignalsSchema,
   contacts: z.array(contactSchema).default([]),

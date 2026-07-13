@@ -13,7 +13,7 @@ function makeCompany(overrides: Record<string, unknown> = {}): Record<string, un
     domain: "example.com",
     platform: "shopify",
     country: "NZ",
-    status: "imported",
+    status: "scored",
     signals: {
       salesRevenue: 120000,
       hasMarketingAutomation: false,
@@ -39,17 +39,17 @@ describe("companySchema", () => {
   it("parses a valid companies document (and applies array/status defaults)", () => {
     const parsed = companySchema.parse(makeCompany());
     expect(parsed.domain).toBe("example.com");
-    expect(parsed.status).toBe("imported");
+    expect(parsed.status).toBe("scored");
     // defaulted arrays present even when omitted
     expect(Array.isArray(parsed.scoreHistory)).toBe(true);
     expect(parsed.scoreHistory).toEqual([]);
   });
 
-  it("defaults status to 'imported' and platform to 'unknown' when omitted", () => {
+  it("defaults status to 'new' and platform to 'unknown' when omitted", () => {
     const parsed = companySchema.parse(
       makeCompany({ status: undefined, platform: undefined })
     );
-    expect(parsed.status).toBe("imported");
+    expect(parsed.status).toBe("new");
     expect(parsed.platform).toBe("unknown");
   });
 
