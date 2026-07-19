@@ -57,6 +57,34 @@ resource "google_secret_manager_secret_iam_member" "order_worker_secrets" {
   depends_on = [google_secret_manager_secret.backend]
 }
 
+# leads is Mongo Atlas only (no Cloud SQL, no cloudsql.client grant needed).
+resource "google_service_account" "leads_runtime" {
+  project      = var.project_id
+  account_id   = "price-insight-leads"
+  display_name = "Price Insight leads (Cloud Run runtime)"
+}
+
+resource "google_secret_manager_secret_iam_member" "leads_runtime_secrets" {
+  for_each  = toset(local.leads_secrets)
+  project   = var.project_id
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.leads_runtime.email}"
+
+  depends_on = [google_secret_manager_secret.leads]
+}
+
+# Shares SESSION_SECRET with backend so one pi-session login works across
+# both domains — see apps/leads/.env.example.
+resource "google_secret_manager_secret_iam_member" "leads_runtime_shared_session_secret" {
+  project   = var.project_id
+  secret_id = "backend-session-secret"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.leads_runtime.email}"
+
+  depends_on = [google_secret_manager_secret.backend]
+}
+
 # Runtime secret access for backend/frontend — distinct from the CI
 # service account's accessor grants in iam.tf, which are build/deploy-time
 # only (kubectl secret sync under GKE), not used by Cloud Run at runtime.

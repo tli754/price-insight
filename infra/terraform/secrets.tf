@@ -32,6 +32,12 @@ locals {
     "gateway-session-secret",
     "gateway-dev-auth-password",
   ]
+
+  # leads reuses backend-session-secret (SESSION_SECRET) for the shared
+  # pi-session cookie — only its own Mongo Atlas URI is a new secret here.
+  leads_secrets = [
+    "leads-mongodb-uri",
+  ]
 }
 
 resource "google_secret_manager_secret" "backend" {
@@ -103,6 +109,34 @@ resource "google_secret_manager_secret" "gateway" {
 resource "google_secret_manager_secret_version" "gateway" {
   for_each    = toset(local.gateway_secrets)
   secret      = google_secret_manager_secret.gateway[each.key].id
+  secret_data = "placeholder"
+
+  lifecycle {
+    ignore_changes = [secret_data, enabled]
+  }
+}
+
+resource "google_secret_manager_secret" "leads" {
+  for_each  = toset(local.leads_secrets)
+  project   = var.project_id
+  secret_id = each.value
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+# Placeholder version — Terraform creates this so `apply` always succeeds.
+# Add the real value once via gcloud:
+#   echo -n "real-value" | gcloud secrets versions add leads-mongodb-uri --data-file=-
+# The lifecycle block ensures Terraform never overwrites a manual update.
+resource "google_secret_manager_secret_version" "leads" {
+  for_each    = toset(local.leads_secrets)
+  secret      = google_secret_manager_secret.leads[each.key].id
   secret_data = "placeholder"
 
   lifecycle {

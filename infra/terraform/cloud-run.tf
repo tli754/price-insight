@@ -344,3 +344,100 @@ resource "google_cloud_run_v2_service_iam_member" "order_worker_invoker" {
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.invoker.email}"
 }
+
+# --- leads (public, reached directly by frontend's server-side proxy) ------
+#
+# Mirrors backend's pattern rather than order-worker's: frontend's Nuxt
+# routeRules proxy (`/leads-api/** -> leads /api/**`, apps/frontend/nuxt.config.ts)
+# is a plain reverse proxy and can't attach a GCP OIDC identity token, so this
+# can't be IAM-gated like order-worker. App-level auth is the shared
+# pi-session cookie (SESSION_SECRET, same secret as backend) verified by
+# apps/leads/src/lib/require-session.ts. No Cloud SQL — leads is Mongo Atlas
+# only, reached over the public internet via MONGODB_URI.
+#
+# frontend does NOT get a runtime env pointing at this service: nuxt.config.ts
+# bakes the leads proxy target in at Nitro BUILD time via NUXT_LEADS_URL
+# (apps/frontend/Dockerfile build-arg, resolved in .github/workflows/build.yml
+# the same way NUXT_BACKEND_URL is), not read at container runtime.
+
+resource "google_cloud_run_v2_service" "leads" {
+  name                = "leads"
+  project             = var.project_id
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  deletion_protection = false
+
+  template {
+    service_account = google_service_account.leads_runtime.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 4
+    }
+
+    containers {
+      image = var.bootstrap_image
+
+      ports {
+        container_port = 4100
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+      }
+
+      env {
+        name  = "NODE_ENV"
+        value = "production"
+      }
+      env {
+        name  = "APP_URL"
+        value = "https://${var.domain}"
+      }
+      env {
+        name = "SESSION_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = "backend-session-secret"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "MONGODB_URI"
+        value_source {
+          secret_key_ref {
+            secret  = "leads-mongodb-uri"
+            version = "latest"
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+      traffic,
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run,
+    google_secret_manager_secret_iam_member.leads_runtime_secrets,
+    google_secret_manager_secret_iam_member.leads_runtime_shared_session_secret,
+  ]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "leads_public" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.leads.location
+  name     = google_cloud_run_v2_service.leads.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}

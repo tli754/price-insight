@@ -53,6 +53,14 @@ resource "google_cloud_run_v2_service_iam_member" "ci_order_worker_deployer" {
   member   = "serviceAccount:${var.ci_sa_email}"
 }
 
+resource "google_cloud_run_v2_service_iam_member" "ci_leads_deployer" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.leads.location
+  name     = google_cloud_run_v2_service.leads.name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${var.ci_sa_email}"
+}
+
 # Lets price-insight-ci update the backend-migrate Job's image and execute it
 # during deploy (deploy.yml runs `gcloud run jobs update/execute backend-migrate`
 # before deploying the backend service). roles/run.developer covers run.jobs.update

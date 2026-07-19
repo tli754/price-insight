@@ -15,6 +15,7 @@ on:
           - backend
           - frontend
           - order-worker
+          - leads
       commit_sha:
         description: 'Commit SHA to deploy. Leave empty to use the latest SHA from the selected branch.'
         required: false
@@ -29,6 +30,7 @@ env:
   PROJECT_ID: wd-tools
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
+  LEADS_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-leads
 
 jobs:
   resolve:
@@ -41,6 +43,7 @@ jobs:
       deploy_sha: ${{ steps.sha.outputs.deploy_sha }}
       backend_digest: ${{ steps.backend_digest.outputs.digest }}
       frontend_digest: ${{ steps.frontend_digest.outputs.digest }}
+      leads_digest: ${{ steps.leads_digest.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,6 +92,18 @@ jobs:
             "${{ env.FRONTEND_IMAGE }}:${{ steps.sha.outputs.deploy_sha }}" \
             --format='value(image_summary.digest)') || {
               echo "::error::frontend image not found for SHA ${{ steps.sha.outputs.deploy_sha }} — run Build first"
+              exit 1
+            }
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Verify leads image exists and resolve digest
+        id: leads_digest
+        if: inputs.target == 'all' || inputs.target == 'leads'
+        run: |
+          DIGEST=$(gcloud artifacts docker images describe \
+            "${{ env.LEADS_IMAGE }}:${{ steps.sha.outputs.deploy_sha }}" \
+            --format='value(image_summary.digest)') || {
+              echo "::error::leads image not found for SHA ${{ steps.sha.outputs.deploy_sha }} — run Build first"
               exit 1
             }
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
@@ -183,15 +198,97 @@ jobs:
           echo "Health check failed — rolled back to ${{ steps.previous.outputs.revision }}"
           exit 1
 
+  deploy-leads:
+    name: Deploy Leads
+    needs: resolve
+    if: inputs.target == 'all' || inputs.target == 'leads'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Record current revision (for rollback)
+        id: previous
+        run: |
+          PREV=$(gcloud run services describe leads \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$PREV" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy by digest
+        id: deploy
+        run: |
+          gcloud run deploy leads \
+            --image="${{ env.LEADS_IMAGE }}@${{ needs.resolve.outputs.leads_digest }}" \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}"
+          NEW_REV=$(gcloud run services describe leads \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revision=$NEW_REV" >> "$GITHUB_OUTPUT"
+
+      - name: Health check
+        id: health
+        continue-on-error: true
+        run: |
+          URL=$(gcloud run services describe leads \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.url)')
+          curl -sf "$URL/api/health" \
+            --max-time 10 \
+            --retry 6 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            --retry-all-errors
+
+      - name: Roll back on health-check failure
+        if: steps.health.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic leads \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --to-revisions="${{ steps.previous.outputs.revision }}=100"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Leads deploy"
+            echo "- Requested SHA: \`${{ needs.resolve.outputs.deploy_sha }}\`"
+            echo "- Deployed digest: \`${{ needs.resolve.outputs.leads_digest }}\`"
+            echo "- New revision: \`${{ steps.deploy.outputs.revision }}\`"
+            echo "- Health check: ${{ steps.health.outcome }}"
+            if [ "${{ steps.health.outcome }}" = "failure" ]; then
+              echo "- Rolled back to: \`${{ steps.previous.outputs.revision }}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if health check failed
+        if: steps.health.outcome == 'failure'
+        run: |
+          echo "Health check failed — rolled back to ${{ steps.previous.outputs.revision }}"
+          exit 1
+
   deploy-frontend:
     name: Deploy Frontend
-    needs: [resolve, deploy-backend]
+    needs: [resolve, deploy-backend, deploy-leads]
     if: |
       always() &&
       needs.resolve.result == 'success' &&
       (
         inputs.target == 'frontend' ||
-        (inputs.target == 'all' && needs.deploy-backend.result == 'success')
+        (
+          inputs.target == 'all' &&
+          needs.deploy-backend.result == 'success' &&
+          needs.deploy-leads.result == 'success'
+        )
       )
     runs-on: ubuntu-latest
     permissions:

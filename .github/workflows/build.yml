@@ -18,6 +18,7 @@ on:
           - all
           - backend
           - frontend
+          - leads
 
 concurrency:
   group: build-${{ inputs.ref }}
@@ -30,6 +31,7 @@ env:
   PROJECT_ID: wd-tools
   BACKEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-backend
   FRONTEND_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-frontend
+  LEADS_IMAGE: australia-southeast1-docker.pkg.dev/wd-tools/price-insight/price-insight-leads
 
 jobs:
   build-backend:
@@ -118,6 +120,14 @@ jobs:
             --format='value(status.url)')
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve leads URL (build-time proxy target)
+        id: leads_url
+        run: |
+          URL=$(gcloud run services describe leads \
+            --region="${{ env.RUN_REGION }}" --project="${{ env.PROJECT_ID }}" \
+            --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
       - name: Build and push frontend image (SHA-tagged, immutable)
         id: build
         uses: docker/build-push-action@v5
@@ -132,6 +142,7 @@ jobs:
           cache-to: type=inline
           build-args: |
             NUXT_BACKEND_URL=${{ steps.backend_url.outputs.url }}
+            NUXT_LEADS_URL=${{ steps.leads_url.outputs.url }}
 
       - name: Job summary
         run: |
@@ -140,4 +151,54 @@ jobs:
             echo "- Commit SHA: \`${{ steps.sha.outputs.full_sha }}\`"
             echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
             echo "- Tag: \`${{ env.FRONTEND_IMAGE }}:${{ steps.sha.outputs.full_sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-leads:
+    name: Build Leads
+    if: inputs.target == 'all' || inputs.target == 'leads'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      sha: ${{ steps.sha.outputs.full_sha }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve commit SHA
+        id: sha
+        run: echo "full_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/920312412888/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: price-insight-ci@wd-tools.iam.gserviceaccount.com
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GAR_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push leads image (SHA-tagged, immutable)
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/leads/Dockerfile
+          push: true
+          tags: |
+            ${{ env.LEADS_IMAGE }}:${{ steps.sha.outputs.full_sha }}
+            ${{ env.LEADS_IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.LEADS_IMAGE }}:latest
+          cache-to: type=inline
+
+      - name: Job summary
+        run: |
+          {
+            echo "### Leads image built"
+            echo "- Commit SHA: \`${{ steps.sha.outputs.full_sha }}\`"
+            echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "- Tag: \`${{ env.LEADS_IMAGE }}:${{ steps.sha.outputs.full_sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
