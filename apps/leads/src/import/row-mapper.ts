@@ -1,0 +1,203 @@
+// Pure mapping from a raw Store-Leads/BuiltWith spreadsheet row onto the
+// `companies` schema pieces the importer needs. No I/O, no DB — deterministic
+// given `(raw, sourceFile, now)`, so it is unit-testable in isolation.
+
+import type { CompanySignals, CompanySource, Contact } from "../db/collections.js";
+import type { HardFilterInput, ScoreInput } from "../domain/types.js";
+import {
+  excelSerialToDate,
+  normalizeDomain,
+  parseNumber,
+  splitMultiValue
+} from "../lib/normalize.js";
+import type { RawRow } from "./xlsx-parser.js";
+
+/** Company-level fields (excluding status/score/timestamps, which the importer owns). */
+export interface MappedCompanyFields {
+  domain: string | null;
+  companyName?: string;
+  platform: string;
+  country?: string;
+  vertical?: string;
+  employeeCount?: number;
+  productCount?: number;
+}
+
+/** Everything one spreadsheet row contributes to a company document. */
+export interface MappedLead {
+  companyFields: MappedCompanyFields;
+  signals: CompanySignals;
+  contacts: Contact[];
+  source: CompanySource;
+  hardFilterInput: HardFilterInput;
+  scoreInput: ScoreInput;
+}
+
+// --- small cell helpers ------------------------------------------------------
+
+/** Trimmed string, or undefined when the cell is null/blank. */
+function trimmedString(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  const s = String(raw).trim();
+  return s === "" ? undefined : s;
+}
+
+/** True when a cell holds any non-blank content. */
+function isPresent(raw: unknown): boolean {
+  return trimmedString(raw) !== undefined;
+}
+
+/** First line of a multi-line cell, lowercased (e.g. "Shopify\nShopify HKD" → "shopify"). */
+function firstLineLower(raw: unknown): string | undefined {
+  const s = trimmedString(raw);
+  if (s === undefined) return undefined;
+  const first = s.split(/\r?\n/)[0]?.trim();
+  return first ? first.toLowerCase() : undefined;
+}
+
+/**
+ * True when a normalized value looks like a hostname: only `[a-z0-9.-]`, no
+ * whitespace, and at least one dot (so a bare label or a free-text sentence such
+ * as "compliance notice: pii is removed…" is rejected).
+ */
+function isDomainShaped(host: string): boolean {
+  return /^[a-z0-9.-]+$/.test(host) && host.includes(".");
+}
+
+/** Normalize a Root Domain cell, returning null for empty OR non-domain-shaped values. */
+function safeDomain(raw: unknown): string | null {
+  const host = normalizeDomain(raw);
+  if (host === null) return null;
+  return isDomainShaped(host) ? host : null;
+}
+
+/** Later of two nullable dates (null when both are absent). */
+function maxDate(a: Date | null, b: Date | null): Date | null {
+  if (a && b) return a.getTime() >= b.getTime() ? a : b;
+  return a ?? b ?? null;
+}
+
+/** Build a deduped contact list (by type+value), tagging the first email primary. */
+function buildContacts(raw: RawRow): Contact[] {
+  const out: Contact[] = [];
+  const seen = new Set<string>();
+
+  const push = (type: Contact["type"], value: string, label?: string, isPrimary = false): void => {
+    const key = `${type}|${value.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const c: Contact = { type, value, isPrimary };
+    if (label !== undefined) c.label = label;
+    out.push(c);
+  };
+
+  splitMultiValue(raw["Emails"]).forEach((v, i) => push("email", v, undefined, i === 0));
+  splitMultiValue(raw["Telephones"]).forEach((v) => push("phone", v));
+  splitMultiValue(raw["People"]).forEach((v) => push("person", v));
+
+  const socialCols: Array<[string, string]> = [
+    ["X", "X"],
+    ["Twitter", "Twitter"],
+    ["Facebook", "Facebook"],
+    ["LinkedIn", "LinkedIn"]
+  ];
+  for (const [col, label] of socialCols) {
+    splitMultiValue(raw[col]).forEach((v) => push("social", v, label));
+  }
+
+  return out;
+}
+
+/**
+ * Map a raw row into the pieces of a company document. `sourceFile` is stored on
+ * the provenance entry; `now` timestamps the import (defaulted so callers can
+ * still invoke `mapRow(raw, sourceFile)`).
+ */
+export function mapRow(raw: RawRow, sourceFile: string, now: Date = new Date()): MappedLead {
+  const domain = safeDomain(raw["Root Domain"]);
+  const country = trimmedString(raw["Country"])?.toUpperCase();
+  const platform = firstLineLower(raw["eCommerce Platform"]) ?? "unknown";
+  const salesRevenue = parseNumber(raw["Sales Revenue"]);
+  const technologySpend = parseNumber(raw["Technology Spend"]);
+  const productCount = parseNumber(raw["SKU"]);
+  const pageRank = parseNumber(raw["Page Rank"]);
+
+  const hasMarketingAutomation = isPresent(raw["Marketing Automation Platform"]);
+  const hasCrm = isPresent(raw["CRM Platform"]);
+  const hasAi = isPresent(raw["AI"]);
+
+  const lastFound = excelSerialToDate(raw["Last Found"]);
+  const lastIndexed = excelSerialToDate(raw["Last Indexed"]);
+  const lastActivityAt = maxDate(lastFound, lastIndexed);
+
+  const contacts = buildContacts(raw);
+  const hasEmail = contacts.some((c) => c.type === "email");
+  const hasPhone = contacts.some((c) => c.type === "phone");
+  const hasNamedPerson = contacts.some((c) => c.type === "person");
+
+  // --- company fields (omit undefined so we never $set them to null) ---
+  const companyFields: MappedCompanyFields = { domain, platform };
+  const companyName = trimmedString(raw["Company"]);
+  if (companyName !== undefined) companyFields.companyName = companyName;
+  if (country !== undefined) companyFields.country = country;
+  const vertical = trimmedString(raw["Vertical"]);
+  if (vertical !== undefined) companyFields.vertical = vertical;
+  const employeeCount = parseNumber(raw["Employees"]);
+  if (employeeCount !== null) companyFields.employeeCount = employeeCount;
+  if (productCount !== null) companyFields.productCount = productCount;
+
+  // --- signals (numeric via parseNumber; string cols trimmed; dates via serial) ---
+  const signals: CompanySignals = { hasMarketingAutomation, hasCrm, hasAi };
+  if (salesRevenue !== null) signals.salesRevenue = salesRevenue;
+  if (technologySpend !== null) signals.technologySpend = technologySpend;
+  const tranco = parseNumber(raw["Tranco"]);
+  if (tranco !== null) signals.tranco = tranco;
+  if (pageRank !== null) signals.pageRank = pageRank;
+  const cruxRank = trimmedString(raw["CRuX Rank"]);
+  if (cruxRank !== undefined) signals.cruxRank = cruxRank;
+  const socialFollowers = parseNumber(raw["Social"]);
+  if (socialFollowers !== null) signals.socialFollowers = socialFollowers;
+  const marketingAutomation = trimmedString(raw["Marketing Automation Platform"]);
+  if (marketingAutomation !== undefined) signals.marketingAutomation = marketingAutomation;
+  const crmPlatform = trimmedString(raw["CRM Platform"]);
+  if (crmPlatform !== undefined) signals.crmPlatform = crmPlatform;
+  const aiPlatform = trimmedString(raw["AI"]);
+  if (aiPlatform !== undefined) signals.aiPlatform = aiPlatform;
+  const paymentPlatforms = trimmedString(raw["Payment Platforms"]);
+  if (paymentPlatforms !== undefined) signals.paymentPlatforms = paymentPlatforms;
+  const firstDetected = excelSerialToDate(raw["First Detected"]);
+  if (firstDetected !== null) signals.firstDetected = firstDetected;
+  if (lastFound !== null) signals.lastFound = lastFound;
+  if (lastIndexed !== null) signals.lastIndexed = lastIndexed;
+
+  const source: CompanySource = {
+    source: "store-leads",
+    sourceFile,
+    raw,
+    importedAt: now
+  };
+
+  const hardFilterInput: HardFilterInput = {
+    domain,
+    country: country ?? null,
+    platform,
+    salesRevenue,
+    productCount
+  };
+
+  const scoreInput: ScoreInput = {
+    salesRevenue,
+    technologySpend,
+    productCount,
+    prominenceRank: pageRank, // Page Rank column (NOT Tranco — far better coverage)
+    hasAi,
+    hasCrm,
+    hasMarketingAutomation,
+    hasEmail,
+    hasPhone,
+    hasNamedPerson,
+    lastActivityAt
+  };
+
+  return { companyFields, signals, contacts, source, hardFilterInput, scoreInput };
+}
