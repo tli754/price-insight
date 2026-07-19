@@ -10,7 +10,7 @@ const items = [
 
 <template>
   <div class="border-b border-gray-200 bg-white">
-    <div class="mx-auto max-w-[1500px] px-6">
+    <div class="mx-auto max-w-full px-[150px]">
       <UNavigationMenu :items="items" />
     </div>
   </div>

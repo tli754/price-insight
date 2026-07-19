@@ -225,7 +225,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1500px] px-6 py-6">
+  <div class="mx-auto max-w-full px-[150px] py-6">
     <div class="mb-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <h1 class="text-lg font-semibold text-gray-900">Products</h1>

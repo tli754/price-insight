@@ -6,9 +6,9 @@ async function logout() {
 </script>
 
 <template>
-  <div class="mx-auto min-h-screen max-w-[1500px]">
+  <div class="mx-auto min-h-screen max-w-full">
     <header class="border-b border-default/60 bg-white/70 backdrop-blur">
-      <div class="mx-auto flex max-w-[1500px] items-center justify-between px-6 py-4">
+      <div class="mx-auto flex max-w-full items-center justify-between px-[150px] py-4">
         <div>
           <p class="text-xs font-semibold uppercase tracking-[0.24em] text-primary-600">
             Price Insight
