@@ -1,0 +1,135 @@
+You are a senior software engineer and technical writer.
+
+Your task is to create a professional README.md file for the Price Insight project.
+
+The README should be designed for:
+- developers
+- AI coding agents
+- future contributors
+- infrastructure engineers
+- technical reviewers
+
+The project is an AI-native eCommerce competitor price monitoring platform.
+
+The README must be:
+- modern
+- structured
+- concise but comprehensive
+- architecture-focused
+- onboarding-friendly
+- suitable for a production-grade monorepo
+
+Project Context:
+- Monorepo architecture
+- Turborepo
+- pnpm workspace
+- Nuxt frontend
+- Node.js backend
+- PostgreSQL database
+- Drizzle ORM
+- GKE deployment
+- GitHub Actions CI/CD
+- Cloudflare
+- AI-assisted development workflow using ChatGPT + OpenClaw + Claude workers
+
+The README should include the following sections:
+
+1. Project Overview
+- Explain business purpose
+- Explain main workflows
+- Explain target users
+
+2. Features
+- Current features
+- Planned features
+
+3. Architecture
+- Frontend stack
+- Backend stack
+- Infrastructure
+- External services
+
+4. Repository Structure
+- apps/
+- packages/
+- infra/
+- docs/
+
+5. Local Development Setup
+- prerequisites
+- installation
+- environment setup
+- development commands
+
+6. Environment Variables
+- document required variables
+- do NOT include real secrets
+
+7. Database Strategy
+- PostgreSQL
+- Drizzle ORM
+- migration workflow
+- expand-and-contract migration strategy
+- dedicated migration step in CI/CD
+
+8. AI Development Workflow
+Explain:
+Tony
+→ ChatGPT Planner
+→ OpenClaw Manager
+→ Claude Workers
+→ Testing Worker
+→ PR Review
+→ Human Approval
+
+Include rules:
+- never work directly on main
+- use git worktrees
+- investigation before implementation
+- human approval before merge
+
+9. Common Commands
+Include:
+- dev
+- build
+- lint
+- test
+- db commands
+
+10. Deployment
+- GitHub Actions
+- GKE
+- rolling deployment strategy
+- Workload Identity Federation
+
+11. Engineering Principles
+- incremental changes
+- explicit typing
+- package boundaries
+- testing expectations
+- CI validation
+
+12. Documentation Links
+Reference:
+- architecture docs
+- deployment docs
+- AI workflow docs
+
+13. Current Status / Roadmap
+Include MVP phase and upcoming milestones.
+
+Requirements:
+- Use clean markdown formatting
+- Use code blocks where appropriate
+- Use tables for environment variables
+- Keep wording professional and concise
+- Avoid placeholder lorem ipsum content
+- Make reasonable assumptions when necessary
+- The README should feel realistic and production-ready
+- Include badges section at top
+- Include quick-start section near the beginning
+- Optimize for readability in GitHub
+
+Output:
+- Full README.md content only
+- No explanations outside the markdown
