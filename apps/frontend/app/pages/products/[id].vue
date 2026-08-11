@@ -274,7 +274,7 @@ function matchTypeColor(matchType: string) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1500px] px-6 py-10">
+  <div class="mx-auto max-w-full px-[150px] py-10">
     <template v-if="pending">
       <USkeleton class="mb-6 h-8 w-64" />
       <USkeleton class="mb-6 h-64 w-full rounded-xl" />
