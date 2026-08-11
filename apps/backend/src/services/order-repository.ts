@@ -123,7 +123,7 @@ export class OrderRepository {
       return existing.id;
     }
 
-    const result = await this.db.insert(customers).values(payload).$returningId();
+    const result = await this.db.insert(customers).values(payload).returning({ id: customers.id });
     return Number(result[0]?.id);
   }
 
@@ -193,7 +193,7 @@ export class OrderRepository {
       return existing.id;
     }
 
-    const result = await this.db.insert(orders).values(payload).$returningId();
+    const result = await this.db.insert(orders).values(payload).returning({ id: orders.id });
     return Number(result[0]?.id);
   }
 
@@ -319,7 +319,11 @@ export class OrderRepository {
         .leftJoin(customers, eq(orders.customerId, customers.id))
         .leftJoin(orderItems, eq(orders.id, orderItems.orderId))
         .where(where)
-        .groupBy(orders.id)
+        // Postgres requires every selected column to be grouped or functionally
+        // dependent on a grouped primary key — unlike MySQL, which infers this
+        // automatically. Grouping by customers.id (its PK) makes the rest of
+        // customers.* columns implicitly groupable alongside orders.id's own.
+        .groupBy(orders.id, customers.id)
         .orderBy(desc(orders.shopifyCreatedAt))
         .limit(limit)
         .offset(offset),
@@ -362,7 +366,7 @@ export class OrderRepository {
       return existing.id;
     }
 
-    const result = await this.db.insert(customers).values(payload).$returningId();
+    const result = await this.db.insert(customers).values(payload).returning({ id: customers.id });
     return Number(result[0]?.id);
   }
 
@@ -446,7 +450,7 @@ export class OrderRepository {
         await tx.update(orders).set(orderPayload).where(eq(orders.id, existing.id));
         orderId = existing.id;
       } else {
-        const result = await tx.insert(orders).values(orderPayload).$returningId();
+        const result = await tx.insert(orders).values(orderPayload).returning({ id: orders.id });
         orderId = Number(result[0]?.id);
       }
 
@@ -553,17 +557,17 @@ export class OrderRepository {
     const [summaryRows, monthlyRows, itemRows, [{ itemsTotal }]] = await Promise.all([
       this.db
         .select({
-          totalQty: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
-          totalRevenue: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0))`,
+          totalQty: sql<string>`SUM(COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
+          totalRevenue: sql<string>`SUM(COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0))`,
           avgUnitPrice: sql<string>`AVG(${orderItems.unitPrice})`,
           orderCount: sql<string>`COUNT(DISTINCT ${orders.id})`,
           lastSoldAt: max(orders.processedAt),
-          sold7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
-          sold30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
-          sold90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
-          revenue7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
-          revenue30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
-          revenue90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 90 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          sold7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '7 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+          sold30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '30 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+          sold90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '90 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+          revenue7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '7 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          revenue30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '30 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+          revenue90d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '90 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0) ELSE 0 END)`,
         })
         .from(orderItems)
         .innerJoin(orders, eq(orderItems.orderId, orders.id))
@@ -576,9 +580,9 @@ export class OrderRepository {
 
       this.db
         .select({
-          month: sql<string>`DATE_FORMAT(${orders.processedAt}, '%Y-%m')`,
-          qty: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
-          revenue: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0))`,
+          month: sql<string>`TO_CHAR(${orders.processedAt}, 'YYYY-MM')`,
+          qty: sql<string>`SUM(COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
+          revenue: sql<string>`SUM(COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0))`,
         })
         .from(orderItems)
         .innerJoin(orders, eq(orderItems.orderId, orders.id))
@@ -586,11 +590,11 @@ export class OrderRepository {
           eq(orderItems.productId, productId),
           isNotNull(orders.processedAt),
           isNull(orders.cancelledAt),
-          sql`${orders.processedAt} >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`,
+          sql`${orders.processedAt} >= NOW() - INTERVAL '12 months'`,
           sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`
         ))
-        .groupBy(sql`DATE_FORMAT(${orders.processedAt}, '%Y-%m')`)
-        .orderBy(sql`DATE_FORMAT(${orders.processedAt}, '%Y-%m')`),
+        .groupBy(sql`TO_CHAR(${orders.processedAt}, 'YYYY-MM')`)
+        .orderBy(sql`TO_CHAR(${orders.processedAt}, 'YYYY-MM')`),
 
       this.db
         .select({
@@ -602,7 +606,7 @@ export class OrderRepository {
           financialStatus: orders.financialStatus,
           fulfillmentStatus: orders.fulfillmentStatus,
           currency: orders.currency,
-          qty: sql<number>`IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity})`,
+          qty: sql<number>`COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity})`,
           unitPrice: orderItems.unitPrice,
         })
         .from(orderItems)

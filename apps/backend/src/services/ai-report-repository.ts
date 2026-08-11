@@ -26,7 +26,7 @@ export class AiReportRepository {
   }
 
   async insert(data: NewProductAiReportRow): Promise<number> {
-    const result = await this.db.insert(productAiReports).values(data).$returningId();
+    const result = await this.db.insert(productAiReports).values(data).returning({ id: productAiReports.id });
     return Number(result[0]?.id);
   }
 

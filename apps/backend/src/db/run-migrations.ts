@@ -1,57 +1,66 @@
 import "dotenv/config";
-import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
-import { migrate } from "drizzle-orm/mysql2/migrator";
-import type { Pool } from "mysql2/promise";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import type Sql from "postgres";
 
 import { loadEnv } from "../config/env.js";
 import { createDatabase } from "./index.js";
 
 /**
- * Seeds __drizzle_migrations for databases that were initialised before
- * migration tracking was introduced. Computes hashes the same way
- * drizzle-orm does so that migrate() treats all existing files as applied.
+ * Seeds drizzle.__drizzle_migrations for a database whose schema was applied
+ * outside Drizzle (e.g. the initial Supabase import via
+ * docs/data/price_insight_supabase_schema.sql) so that migrate() treats the
+ * matching migration file(s) as already applied instead of re-running their
+ * DDL. Postgres port of the MySQL bootstrapMigrationTracking helper this
+ * replaces — same approach (compute the same hash Drizzle computes, insert
+ * one tracking row per journal entry), adapted to Postgres's default
+ * migrations table location (schema "drizzle", not the public schema).
  */
-async function bootstrapMigrationTracking(pool: Pool, migrationsFolder: string) {
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS \`__drizzle_migrations\` (
+async function bootstrapMigrationTracking(client: Sql.Sql, migrationsFolder: string) {
+  await client`create schema if not exists "drizzle"`;
+  await client`
+    create table if not exists "drizzle"."__drizzle_migrations" (
       id serial primary key,
       hash text not null,
       created_at bigint
     )
-  `);
+  `;
 
   const journal = JSON.parse(
     fs.readFileSync(path.join(migrationsFolder, "meta/_journal.json"), "utf-8")
   );
 
+  const { createHash } = await import("crypto");
   for (const entry of journal.entries) {
     const sql = fs.readFileSync(
       path.join(migrationsFolder, `${entry.tag}.sql`),
       "utf-8"
     );
-    const hash = crypto.createHash("sha256").update(sql).digest("hex");
-    await pool.execute(
-      "INSERT IGNORE INTO `__drizzle_migrations` (hash, created_at) VALUES (?, ?)",
-      [hash, entry.when]
-    );
+    const hash = createHash("sha256").update(sql).digest("hex");
+    await client`
+      insert into "drizzle"."__drizzle_migrations" (hash, created_at)
+      values (${hash}, ${entry.when})
+    `;
   }
 }
 
-export async function runMigrations(migrationsFolder = "./drizzle") {
+export async function runMigrations(migrationsFolder = "./drizzle-pg") {
   const env = loadEnv();
   const { db, pool } = createDatabase(env);
 
   try {
     await migrate(db, { migrationsFolder });
   } catch (err: unknown) {
+    // 42P07 = duplicate_table, 42701 = duplicate_column — Postgres equivalents
+    // of MySQL's ER_TABLE_EXISTS_ERROR/ER_DUP_FIELDNAME used by the migration
+    // this replaced to detect "schema already applied outside Drizzle".
     const code = (err as { code?: string; cause?: { code?: string } })?.code ?? (err as { cause?: { code?: string } })?.cause?.code;
-    if (code === "ER_TABLE_EXISTS_ERROR" || code === "ER_DUP_FIELDNAME") {
+    if (code === "42P07" || code === "42701") {
       console.warn(
-        "WARNING: Schema drift detected — DB schema is ahead of __drizzle_migrations. " +
-        "This usually means db:push was run directly. " +
+        "WARNING: Schema drift detected — DB schema is ahead of drizzle.__drizzle_migrations. " +
+        "This usually means the schema was applied outside Drizzle (e.g. a direct SQL import). " +
         "Bootstrapping migration tracking and skipping already-applied migrations."
       );
       await bootstrapMigrationTracking(pool, migrationsFolder);

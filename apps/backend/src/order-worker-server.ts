@@ -21,11 +21,7 @@ import { ShopifyService } from "./services/shopify-service.js";
 
 const orderWorkerEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(8080),
-  MYSQL_HOST: z.string().min(1),
-  MYSQL_PORT: z.coerce.number().int().positive().default(3306),
-  MYSQL_USER: z.string().min(1),
-  MYSQL_PASSWORD: z.string().default(""),
-  MYSQL_DATABASE: z.string().min(1),
+  DATABASE_URL: z.string().min(1),
   SHOPIFY_TOKEN_URL: z.string().url().optional(),
   SHOPIFY_PRODUCTS_URL: z.string().url().optional(),
   SHOPIFY_ORDERS_URL: z.string().url().optional(),
