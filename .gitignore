@@ -17,6 +17,7 @@ pnpm-debug.log
 .idea
 .idea/
 .vscode/
+docs/
 .DS_Store
 *.swp
 
