@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
