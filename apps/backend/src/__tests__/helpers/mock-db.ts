@@ -5,7 +5,7 @@
  *   SELECT  → .limit() or .orderBy()
  *   DELETE  → .where()
  *   UPDATE  → .set().where()
- *   INSERT  → .values() (direct await) or .values().$returningId()
+ *   INSERT  → .values() (direct await) or .values().returning()
  *
  * Strategy: separate sub-mock per operation type so terminals are independent.
  * Use mockResolvedValueOnce() on terminals to control return values per call.
@@ -43,13 +43,13 @@ export function makeSelectBuilder() {
 /**
  * The values() result must be both:
  *   - awaitable directly (for image inserts)
- *   - chainable with .$returningId() (for product inserts)
- * We achieve this by making it a thenable that also carries $returningId.
+ *   - chainable with .returning() (for inserts that need the new row's id)
+ * We achieve this by making it a thenable that also carries returning.
  */
 function makeInsertValuesResult(returnedId = 1) {
   const resolved = Promise.resolve(undefined);
   const result: Record<string, unknown> = {
-    $returningId: vi.fn().mockResolvedValue([{ id: returnedId }]),
+    returning: vi.fn().mockResolvedValue([{ id: returnedId }]),
     then: resolved.then.bind(resolved),
     catch: resolved.catch.bind(resolved),
     finally: resolved.finally.bind(resolved)

@@ -122,7 +122,7 @@ export class ProductRepository {
         await this.db.delete(productImages).where(eq(productImages.productId, productId));
       } else {
         // New product: no prior cost to preserve, so unavailable collapses to null.
-        const result = await this.db.insert(products).values({ ...productPayload, cost: cost ?? null }).$returningId();
+        const result = await this.db.insert(products).values({ ...productPayload, cost: cost ?? null }).returning({ id: products.id });
         productId = Number(result[0]?.id);
         count++;
       }
@@ -194,12 +194,12 @@ export class ProductRepository {
     const rows = await this.db
       .select({
         productId: orderItems.productId,
-        sold7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
-        revenue7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 7 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
-        sold30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
-        revenue30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL 30 DAY THEN IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0) ELSE 0 END)`,
-        sold90d: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
-        revenue90d: sql<string>`SUM(IFNULL(${orderItems.currentQuantity}, ${orderItems.quantity}) * IFNULL(${orderItems.unitPrice}, 0))`,
+        sold7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '7 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+        revenue7d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '7 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+        sold30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '30 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) ELSE 0 END)`,
+        revenue30d: sql<string>`SUM(CASE WHEN ${orders.processedAt} >= NOW() - INTERVAL '30 days' THEN COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0) ELSE 0 END)`,
+        sold90d: sql<string>`SUM(COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}))`,
+        revenue90d: sql<string>`SUM(COALESCE(${orderItems.currentQuantity}, ${orderItems.quantity}) * COALESCE(${orderItems.unitPrice}, 0))`,
       })
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
@@ -209,7 +209,7 @@ export class ProductRepository {
           isNotNull(orders.processedAt),
           isNull(orders.cancelledAt),
           sql`(${orders.financialStatus} IS NULL OR ${orders.financialStatus} NOT IN ('voided', 'refunded'))`,
-          sql`${orders.processedAt} >= NOW() - INTERVAL 90 DAY`
+          sql`${orders.processedAt} >= NOW() - INTERVAL '90 days'`
         )
       )
       .groupBy(orderItems.productId);

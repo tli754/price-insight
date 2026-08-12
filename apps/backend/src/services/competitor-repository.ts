@@ -100,7 +100,7 @@ export class CompetitorRepository {
 
     if (existing) return existing;
 
-    const result = await this.db.insert(competitor).values({ name }).$returningId();
+    const result = await this.db.insert(competitor).values({ name }).returning({ id: competitor.id });
     const insertedId = Number(result[0]?.id);
     const [created] = await this.db
       .select()
@@ -185,7 +185,7 @@ export class CompetitorRepository {
               shippingExtracted: item.shippingExtracted ?? null,
               extractedOldPrice: item.extractedOldPrice ?? null
             })
-            .$returningId();
+            .returning({ id: competitorProducts.id });
           competitorProductId = Number(result[0]?.id);
         }
 
@@ -303,7 +303,7 @@ export class CompetitorRepository {
             shippingExtracted: item.shippingExtracted ?? null,
             extractedOldPrice: item.extractedOldPrice ?? null
           })
-          .$returningId();
+          .returning({ id: competitorProducts.id });
 
         const competitorProductId = Number(result[0]?.id);
 
@@ -359,7 +359,7 @@ export class CompetitorRepository {
             shippingExtracted: item.shippingExtracted ?? null,
             extractedOldPrice: item.extractedOldPrice ?? null
           })
-          .$returningId();
+          .returning({ id: competitorProducts.id });
         competitorProductId = Number(result[0]?.id);
       }
 

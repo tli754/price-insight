@@ -1,0 +1,37 @@
+Update the Stage-1 auth investigation plan.
+
+Current architecture:
+- Backend service is not publicly reachable.
+- Nuxt server exposes public APIs for frontend.
+- Nuxt server also exposes webhook endpoints.
+- Frontend already uses nuxt-auth-utils.
+
+Auth decision:
+- Use nuxt-auth-utils to protect user-facing Nuxt API routes.
+- Do not add database users.
+- Do not add Google OAuth at this stage.
+- Do not build custom JWT/session logic.
+- Use environment-based admin login.
+- Protect web app pages and user-facing API routes.
+- Do not protect webhook endpoints with user session auth.
+- Webhook endpoints must use provider signature verification, such as Shopify HMAC.
+
+Investigation requirements:
+1. Identify all Nuxt server API routes.
+2. Classify each route as:
+   - user-facing protected route
+   - auth/session public route
+   - health public route
+   - webhook signature-protected route
+3. Identify where requireUserSession(event) should be applied.
+4. Identify webhook verification already implemented or missing.
+5. Confirm backend is only called from Nuxt/private network.
+6. Confirm no browser code calls the private backend directly.
+7. Propose route-level protection plan.
+8. Propose validation tests.
+
+Do not implement yet.
+
+End with:
+
+Waiting for Tony approval.
