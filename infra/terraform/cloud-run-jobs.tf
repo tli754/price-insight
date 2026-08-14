@@ -19,13 +19,6 @@ resource "google_cloud_run_v2_job" "backend_script_runner" {
       max_retries     = 0
       timeout         = "1800s"
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [var.cloud_sql_connection_name]
-        }
-      }
-
       containers {
         image   = var.bootstrap_image
         command = ["node"]
@@ -38,11 +31,6 @@ resource "google_cloud_run_v2_job" "backend_script_runner" {
           }
         }
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         env {
           name  = "NODE_ENV"
           value = "production"
@@ -50,10 +38,6 @@ resource "google_cloud_run_v2_job" "backend_script_runner" {
         env {
           name  = "APP_URL"
           value = "https://${var.domain}"
-        }
-        env {
-          name  = "MYSQL_PORT"
-          value = "3306"
         }
         env {
           name  = "CLOUD_TASKS_PROJECT"
@@ -124,13 +108,6 @@ resource "google_cloud_run_v2_job" "backend_migrate" {
       max_retries     = 0
       timeout         = "1800s"
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [var.cloud_sql_connection_name]
-        }
-      }
-
       containers {
         image   = var.bootstrap_image
         command = ["node"]
@@ -143,11 +120,6 @@ resource "google_cloud_run_v2_job" "backend_migrate" {
           }
         }
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         env {
           name  = "NODE_ENV"
           value = "production"
@@ -155,10 +127,6 @@ resource "google_cloud_run_v2_job" "backend_migrate" {
         env {
           name  = "APP_URL"
           value = "https://${var.domain}"
-        }
-        env {
-          name  = "MYSQL_PORT"
-          value = "3306"
         }
         env {
           name  = "CLOUD_TASKS_PROJECT"

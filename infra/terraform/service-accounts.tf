@@ -27,18 +27,9 @@ resource "google_service_account" "order_worker_runtime" {
   display_name = "Price Insight order-worker (Cloud Run runtime)"
 }
 
-resource "google_project_iam_member" "order_worker_cloudsql_client" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.order_worker_runtime.email}"
-}
-
 locals {
   order_worker_secrets = [
-    "backend-mysql-host",
-    "backend-mysql-user",
-    "backend-mysql-password",
-    "backend-mysql-database",
+    "backend-database-url",
     "backend-shopify-token-url",
     "backend-shopify-products-url",
     "backend-shopify-orders-url",

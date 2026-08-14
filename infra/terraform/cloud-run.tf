@@ -5,10 +5,7 @@
 
 locals {
   backend_secret_env = [
-    { name = "MYSQL_HOST", secret = "backend-mysql-host" },
-    { name = "MYSQL_USER", secret = "backend-mysql-user" },
-    { name = "MYSQL_PASSWORD", secret = "backend-mysql-password" },
-    { name = "MYSQL_DATABASE", secret = "backend-mysql-database" },
+    { name = "DATABASE_URL", secret = "backend-database-url" },
     { name = "OPENAI_API_KEY", secret = "backend-openai-api-key" },
     { name = "OPENAI_MODEL", secret = "backend-openai-model" },
     { name = "JINA_API_KEY", secret = "backend-jina-api-key" },
@@ -28,10 +25,7 @@ locals {
 
   # Provisional — see the order-worker comment block below.
   order_worker_secret_env = [
-    { name = "MYSQL_HOST", secret = "backend-mysql-host" },
-    { name = "MYSQL_USER", secret = "backend-mysql-user" },
-    { name = "MYSQL_PASSWORD", secret = "backend-mysql-password" },
-    { name = "MYSQL_DATABASE", secret = "backend-mysql-database" },
+    { name = "DATABASE_URL", secret = "backend-database-url" },
     { name = "SHOPIFY_TOKEN_URL", secret = "backend-shopify-token-url" },
     { name = "SHOPIFY_PRODUCTS_URL", secret = "backend-shopify-products-url" },
     { name = "SHOPIFY_ORDERS_URL", secret = "backend-shopify-orders-url" },
@@ -123,13 +117,6 @@ resource "google_cloud_run_v2_service" "backend" {
       max_instance_count = 4
     }
 
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [var.cloud_sql_connection_name]
-      }
-    }
-
     containers {
       image = var.bootstrap_image
 
@@ -144,11 +131,6 @@ resource "google_cloud_run_v2_service" "backend" {
         }
       }
 
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
-
       env {
         name  = "NODE_ENV"
         value = "production"
@@ -156,10 +138,6 @@ resource "google_cloud_run_v2_service" "backend" {
       env {
         name  = "APP_URL"
         value = "https://${var.domain}"
-      }
-      env {
-        name  = "MYSQL_PORT"
-        value = "3306"
       }
       env {
         name  = "CLOUD_TASKS_PROJECT"
@@ -248,13 +226,6 @@ resource "google_cloud_run_v2_service" "order_worker" {
       max_instance_count = 4
     }
 
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [var.cloud_sql_connection_name]
-      }
-    }
-
     containers {
       # command/args are deliberately omitted here — see ignore_changes below.
       # CI's `gcloud run deploy` sets them alongside the real image so the
@@ -273,18 +244,9 @@ resource "google_cloud_run_v2_service" "order_worker" {
         cpu_idle = true
       }
 
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
-
       env {
         name  = "NODE_ENV"
         value = "production"
-      }
-      env {
-        name  = "MYSQL_PORT"
-        value = "3306"
       }
       env {
         name  = "CLOUD_TASKS_PROJECT"
