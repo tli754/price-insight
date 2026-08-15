@@ -46,6 +46,7 @@ watch(statusFilter, (val) => {
 
 const syncing = ref(false)
 const findingCompetitors = ref(false)
+const drainingCompetitors = ref(false)
 
 async function findCompetitors() {
   findingCompetitors.value = true
@@ -64,6 +65,25 @@ async function findCompetitors() {
     toast.add({ title: msg, color: 'error' })
   } finally {
     findingCompetitors.value = false
+  }
+}
+
+// Drains the competitor-pingback queue right now, instead of waiting for the
+// 1am job — see docs/decisions/0002-pgmq-order-sync-competitor-queue-migration.md.
+async function drainCompetitorQueue() {
+  drainingCompetitors.value = true
+  try {
+    const result = await $fetch<{ processed: number; failed: number; archived: number }>(
+      '/api/products/competitors/drain',
+      { method: 'POST' }
+    )
+    toast.add({ title: 'Queue drained', description: `${result.processed} pingback(s) processed${result.failed ? `, ${result.failed} failed` : ''}.`, color: result.failed ? 'warning' : 'success' })
+    await refresh()
+  } catch (e: unknown) {
+    const msg = getApiErrorMessage(e, 'Could not drain queue')
+    toast.add({ title: msg, color: 'error' })
+  } finally {
+    drainingCompetitors.value = false
   }
 }
 
@@ -283,6 +303,9 @@ onUnmounted(() => {
           </UButton>
           <UButton size="sm" variant="soft" icon="i-lucide-search" :loading="findingCompetitors" @click="findCompetitors">
             Find Competitor
+          </UButton>
+          <UButton size="sm" variant="soft" icon="i-lucide-refresh-cw" :loading="drainingCompetitors" @click="drainCompetitorQueue">
+            Sync Competitor Results
           </UButton>
         </div>
       </div>

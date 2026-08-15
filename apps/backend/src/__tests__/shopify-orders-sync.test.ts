@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect } from "vitest";
 
-import { buildTestApp, makeShopifyService, makeShopifyGraphQLService, makeCloudTasksClient } from "./helpers/build-app.js";
+import { buildTestApp, makeShopifyService, makeShopifyGraphQLService } from "./helpers/build-app.js";
 import type { ShopifyGQLOrder } from "../services/shopify-graphql-service.js";
 
 function makeGQLOrder(overrides: Partial<ShopifyGQLOrder> = {}): ShopifyGQLOrder {
@@ -56,21 +56,11 @@ describe("POST /api/shopify/orders/sync", () => {
     expect(res.json().error.code).toBe("SHOPIFY_NOT_CONFIGURED");
   });
 
-  it("returns 503 when Cloud Tasks is not configured", async () => {
-    const shopifyService = makeShopifyService();
-    const shopifyGraphQLService = makeShopifyGraphQLService();
-    ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient: null }));
-    const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
-    expect(res.statusCode).toBe(503);
-    expect(res.json().error.code).toBe("QUEUE_NOT_CONFIGURED");
-  });
-
   it("returns 202 with queued counts when orders are found", async () => {
     const shopifyService = makeShopifyService();
     const shopifyGraphQLService = makeShopifyGraphQLService();
-    const cloudTasksClient = makeCloudTasksClient();
     shopifyGraphQLService.fetchOrders.mockResolvedValue([makeGQLOrder(), makeGQLOrder({ id: "gid://shopify/Order/1000001052", name: "#WD1052" })]);
-    ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
+    ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService }));
 
     const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days", source: "manual" } });
 
@@ -83,33 +73,34 @@ describe("POST /api/shopify/orders/sync", () => {
     expect(body.source).toBe("manual");
   });
 
-  it("enqueues one task per discovered order", async () => {
+  it("enqueues one pgmq message per discovered order", async () => {
     const shopifyService = makeShopifyService();
     const shopifyGraphQLService = makeShopifyGraphQLService();
-    const cloudTasksClient = makeCloudTasksClient();
     shopifyGraphQLService.fetchOrders.mockResolvedValue([makeGQLOrder()]);
-    ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
+    const { app: builtApp, mocks } = await buildTestApp({ shopifyService, shopifyGraphQLService });
+    app = builtApp;
 
     await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
 
-    expect(cloudTasksClient.enqueueSyncOrder).toHaveBeenCalledTimes(1);
-    const [, payload] = cloudTasksClient.enqueueSyncOrder.mock.calls[0];
+    expect(mocks.pgmqClient.send).toHaveBeenCalledTimes(1);
+    const [queueName, payload] = mocks.pgmqClient.send.mock.calls[0];
+    expect(queueName).toBe("shopify_orders");
     expect(payload.type).toBe("sync-order");
     expect(payload.source).toBe("manual");
     expect(payload.shopifyOrderId).toBe("gid://shopify/Order/1000001051");
   });
 
-  it("task payload contains raw Shopify order data", async () => {
+  it("message payload contains raw Shopify order data", async () => {
     const shopifyService = makeShopifyService();
     const shopifyGraphQLService = makeShopifyGraphQLService();
-    const cloudTasksClient = makeCloudTasksClient();
     const order = makeGQLOrder();
     shopifyGraphQLService.fetchOrders.mockResolvedValue([order]);
-    ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
+    const { app: builtApp, mocks } = await buildTestApp({ shopifyService, shopifyGraphQLService });
+    app = builtApp;
 
     await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
 
-    const payload = cloudTasksClient.enqueueSyncOrder.mock.calls[0][1];
+    const payload = mocks.pgmqClient.send.mock.calls[0][1];
     expect(payload.shopifyOrder).toEqual(order);
     expect(payload.shopifyUpdatedAt).toBe(order.updatedAt);
     expect(payload.orderName).toBe(order.name);
@@ -118,14 +109,14 @@ describe("POST /api/shopify/orders/sync", () => {
   it("returns 202 with 0 orders when none found", async () => {
     const shopifyService = makeShopifyService();
     const shopifyGraphQLService = makeShopifyGraphQLService();
-    const cloudTasksClient = makeCloudTasksClient();
     shopifyGraphQLService.fetchOrders.mockResolvedValue([]);
-    ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService, cloudTasksClient }));
+    const { app: builtApp, mocks } = await buildTestApp({ shopifyService, shopifyGraphQLService });
+    app = builtApp;
 
     const res = await app.inject({ method: "POST", url: "/api/shopify/orders/sync", payload: { mode: "last30days" } });
 
     expect(res.statusCode).toBe(202);
     expect(res.json().ordersDiscovered).toBe(0);
-    expect(cloudTasksClient.enqueueSyncOrder).not.toHaveBeenCalled();
+    expect(mocks.pgmqClient.send).not.toHaveBeenCalled();
   });
 });

@@ -282,3 +282,49 @@ describe("POST /api/products/sync", () => {
     expect(shopifyService.streamProducts).toHaveBeenCalledWith("tok_abc");
   });
 });
+
+describe("POST /api/products/competitors/drain", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns 200 with all-zero counts when the queue is empty", async () => {
+    ({ app } = await buildTestApp());
+
+    const res = await app.inject({ method: "POST", url: "/api/products/competitors/drain" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ processed: 0, failed: 0, archived: 0 });
+  });
+
+  it("drains a queued pingback message and reports it processed", async () => {
+    const { app: builtApp, mocks } = await buildTestApp();
+    app = builtApp;
+    mocks.productRepository.getProductById.mockResolvedValue(null); // simplest path: product not found -> skip
+    mocks.pgmqClient.read
+      .mockResolvedValueOnce({ msgId: 1, readCt: 1, message: { type: "process-product-info-pingback", taskId: "task-1", productId: 5 } })
+      .mockResolvedValueOnce(null);
+
+    const res = await app.inject({ method: "POST", url: "/api/products/competitors/drain" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().processed).toBe(1);
+    expect(mocks.pgmqClient.delete).toHaveBeenCalledWith("dataforseo_competitors", 1);
+  });
+
+  it("leaves a failed message in the queue", async () => {
+    const { app: builtApp, mocks } = await buildTestApp();
+    app = builtApp;
+    mocks.dataForSeoService.fetchShoppingTaskResult.mockRejectedValue(new Error("network error"));
+    mocks.pgmqClient.read
+      .mockResolvedValueOnce({ msgId: 1, readCt: 1, message: { type: "process-shopping-pingback", taskId: "task-1", productId: 1 } })
+      .mockResolvedValueOnce(null);
+
+    const res = await app.inject({ method: "POST", url: "/api/products/competitors/drain" });
+
+    expect(res.json()).toMatchObject({ processed: 0, failed: 1 });
+    expect(mocks.pgmqClient.delete).not.toHaveBeenCalled();
+  });
+});

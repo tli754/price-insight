@@ -69,26 +69,6 @@ resource "google_cloud_run_v2_job" "backend_script_runner" {
           name  = "MYSQL_PORT"
           value = "3306"
         }
-        env {
-          name  = "CLOUD_TASKS_PROJECT"
-          value = var.project_id
-        }
-        env {
-          name  = "CLOUD_TASKS_LOCATION"
-          value = var.region
-        }
-        env {
-          name  = "CLOUD_TASKS_QUEUE"
-          value = google_cloud_tasks_queue.order_sync.name
-        }
-        env {
-          name  = "ORDER_WORKER_URL"
-          value = google_cloud_run_v2_service.order_worker.uri
-        }
-        env {
-          name  = "INTERNAL_OIDC_SERVICE_ACCOUNT"
-          value = google_service_account.invoker.email
-        }
 
         dynamic "env" {
           for_each = local.backend_script_runner_secret_env
@@ -157,26 +137,6 @@ resource "google_cloud_run_v2_job" "backend_migrate" {
         env {
           name  = "APP_URL"
           value = "https://${var.domain}"
-        }
-        env {
-          name  = "CLOUD_TASKS_PROJECT"
-          value = var.project_id
-        }
-        env {
-          name  = "CLOUD_TASKS_LOCATION"
-          value = var.region
-        }
-        env {
-          name  = "CLOUD_TASKS_QUEUE"
-          value = google_cloud_tasks_queue.order_sync.name
-        }
-        env {
-          name  = "ORDER_WORKER_URL"
-          value = google_cloud_run_v2_service.order_worker.uri
-        }
-        env {
-          name  = "INTERNAL_OIDC_SERVICE_ACCOUNT"
-          value = google_service_account.invoker.email
         }
 
         dynamic "env" {

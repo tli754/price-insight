@@ -73,7 +73,7 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(401);
-    expect(mocks.cloudTasksClient?.enqueueSyncOrder).not.toHaveBeenCalled();
+    expect(mocks.pgmqClient.send).not.toHaveBeenCalled();
   });
 
   it("returns 401 when HMAC is invalid", async () => {
@@ -84,7 +84,7 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(401);
-    expect(mocks.cloudTasksClient?.enqueueSyncOrder).not.toHaveBeenCalled();
+    expect(mocks.pgmqClient.send).not.toHaveBeenCalled();
   });
 
   // ── Topic filtering ───────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(200);
-    expect(mocks.cloudTasksClient?.enqueueSyncOrder).not.toHaveBeenCalled();
+    expect(mocks.pgmqClient.send).not.toHaveBeenCalled();
   });
 
   it.each(["orders/create", "orders/updated", "orders/paid", "orders/cancelled", "refunds/create"])(
@@ -110,7 +110,7 @@ describe("POST /webhooks/shopify/orders", () => {
         payload: defaultBody,
       });
       expect(res.statusCode).toBe(200);
-      expect(mocks.cloudTasksClient?.enqueueSyncOrder).toHaveBeenCalledOnce();
+      expect(mocks.pgmqClient.send).toHaveBeenCalledOnce();
     }
   );
 
@@ -160,7 +160,7 @@ describe("POST /webhooks/shopify/orders", () => {
 
   // ── Happy path ────────────────────────────────────────────────────────────
 
-  it("returns 200 and enqueues a Cloud Task with correct payload", async () => {
+  it("returns 200 and enqueues a pgmq message with correct payload", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/shopify/orders",
@@ -168,9 +168,10 @@ describe("POST /webhooks/shopify/orders", () => {
       payload: defaultBody,
     });
     expect(res.statusCode).toBe(200);
-    expect(mocks.cloudTasksClient?.enqueueSyncOrder).toHaveBeenCalledOnce();
+    expect(mocks.pgmqClient.send).toHaveBeenCalledOnce();
 
-    const [, data] = mocks.cloudTasksClient!.enqueueSyncOrder.mock.calls[0] as [string, Record<string, unknown>];
+    const [queueName, data] = mocks.pgmqClient.send.mock.calls[0] as [string, Record<string, unknown>];
+    expect(queueName).toBe("shopify_orders");
     expect(data.type).toBe("sync-order");
     expect(data.source).toBe("webhook");
     expect(data.webhookId).toBe(WEBHOOK_ID);
@@ -182,24 +183,10 @@ describe("POST /webhooks/shopify/orders", () => {
     expect(data).not.toHaveProperty("shopifyOrder");
   });
 
-  // ── Cloud Tasks not configured ──────────────────────────────────────────
+  // ── pgmq enqueue failure ──────────────────────────────────────────────────
 
-  it("returns 503 when Cloud Tasks is not configured", async () => {
-    const { app: noTasksApp } = await buildTestApp({ cloudTasksClient: null });
-    const res = await noTasksApp.inject({
-      method: "POST",
-      url: "/webhooks/shopify/orders",
-      headers: makeHeaders(),
-      payload: defaultBody,
-    });
-    await noTasksApp.close();
-    expect(res.statusCode).toBe(503);
-  });
-
-  // ── Cloud Tasks enqueue failure ───────────────────────────────────────────
-
-  it("returns 500 when Cloud Tasks enqueue fails", async () => {
-    mocks.cloudTasksClient!.enqueueSyncOrder.mockRejectedValue(new Error("Cloud Tasks unavailable"));
+  it("returns 500 when pgmq enqueue fails", async () => {
+    mocks.pgmqClient.send.mockRejectedValue(new Error("pgmq unavailable"));
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/shopify/orders",

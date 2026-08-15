@@ -19,10 +19,9 @@ output "load_balancer_ip" {
 }
 
 output "cloud_run_service_uris" {
-  description = "Cloud Run-assigned URIs for each service (order-worker's is the OIDC audience target, not publicly routed)"
+  description = "Cloud Run-assigned URIs for each service"
   value = {
-    frontend     = google_cloud_run_v2_service.frontend.uri
-    backend      = google_cloud_run_v2_service.backend.uri
-    order_worker = google_cloud_run_v2_service.order_worker.uri
+    frontend = google_cloud_run_v2_service.frontend.uri
+    backend  = google_cloud_run_v2_service.backend.uri
   }
 }

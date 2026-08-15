@@ -18,44 +18,9 @@ resource "google_service_account" "frontend_runtime" {
   display_name = "Price Insight frontend (Cloud Run runtime)"
 }
 
-# Dedicated, least-privilege runtime identity for order-worker — separate from
-# backend's so it only ever has Cloud SQL + the DB/Shopify secrets it needs,
-# never OpenAI/DataForSEO/frontend/session secrets.
-resource "google_service_account" "order_worker_runtime" {
-  project      = var.project_id
-  account_id   = "price-insight-order-worker"
-  display_name = "Price Insight order-worker (Cloud Run runtime)"
-}
-
-resource "google_project_iam_member" "order_worker_cloudsql_client" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.order_worker_runtime.email}"
-}
-
-locals {
-  order_worker_secrets = [
-    "backend-mysql-host",
-    "backend-mysql-user",
-    "backend-mysql-password",
-    "backend-mysql-database",
-    "backend-shopify-token-url",
-    "backend-shopify-products-url",
-    "backend-shopify-orders-url",
-    "backend-shopify-client-id",
-    "backend-shopify-client-secret",
-  ]
-}
-
-resource "google_secret_manager_secret_iam_member" "order_worker_secrets" {
-  for_each  = toset(local.order_worker_secrets)
-  project   = var.project_id
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.order_worker_runtime.email}"
-
-  depends_on = [google_secret_manager_secret.backend]
-}
+# order-worker's dedicated runtime SA, its Cloud SQL client grant, and its
+# scoped secret access were retired 2026-08-15 alongside the service itself
+# — see cloud-run.tf's retirement note and ADR 0002.
 
 # Runtime secret access for backend/frontend — distinct from the CI
 # service account's accessor grants in iam.tf, which are build/deploy-time
@@ -86,7 +51,7 @@ resource "google_secret_manager_secret_iam_member" "frontend_runtime_secrets" {
 # terraform-ci needs roles/artifactregistry.reader on the price-insight repo —
 # Cloud Run's services.patch API validates image-pull access for the *calling*
 # identity on every update, even when the image itself isn't changing, so any
-# in-place update to frontend/backend/order-worker fails with a 403 without it.
+# in-place update to frontend/backend fails with a 403 without it.
 # The repo predates Terraform (like the Cloud SQL instance) and terraform-ci
 # lacks getIamPolicy/setIamPolicy on it, so this grant is applied out-of-band:
 #   gcloud artifacts repositories add-iam-policy-binding price-insight \
@@ -94,48 +59,25 @@ resource "google_secret_manager_secret_iam_member" "frontend_runtime_secrets" {
 #     --member="serviceAccount:terraform-ci@wd-tools.iam.gserviceaccount.com" \
 #     --role="roles/artifactregistry.reader"
 
-# --- Cloud Tasks / Cloud Scheduler OIDC caller identity ---------------------
+# --- Cloud Scheduler OIDC caller identity ------------------------------------
 #
-# Shared identity Cloud Tasks and Cloud Scheduler both attach as the OIDC
-# token subject when pushing to order-worker. They are NOT the same as the
-# Google-managed service agents below — the agents are only permitted to
-# *mint a token as* this caller (serviceAccountTokenCreator), never granted
-# run.invoker themselves. A single identity is sufficient here because both
-# grants would be identical (run.invoker on order-worker only) and the two
-# trigger sources are already distinguishable by the endpoint each calls
-# (/internal/sync-order vs /internal/scheduled-order-discovery).
+# Identity Cloud Scheduler attaches as the OIDC token subject when invoking
+# backend's internal routes (order-sync-internal.ts, competitor-drain-
+# internal.ts) — see ADR 0002. Previously also used by Cloud Tasks pushing to
+# order-worker; that queue and service are retired, so only the Scheduler
+# grant below remains. No actAs/impersonation grants are needed anymore —
+# backend/order-worker no longer create outbound Cloud Tasks tasks
+# themselves, they only verify incoming OIDC tokens minted by Cloud
+# Scheduler's own service agent.
 
 resource "google_service_account" "invoker" {
   project      = var.project_id
   account_id   = "price-insight-invoker"
-  display_name = "OIDC identity Cloud Tasks/Scheduler attach when invoking order-worker"
-}
-
-resource "google_service_account_iam_member" "cloudtasks_agent_token_creator" {
-  service_account_id = google_service_account.invoker.name
-  role               = "roles/iam.serviceAccountTokenCreator"
-  member             = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"
+  display_name = "OIDC identity Cloud Scheduler attaches when invoking backend's internal routes"
 }
 
 resource "google_service_account_iam_member" "scheduler_agent_token_creator" {
   service_account_id = google_service_account.invoker.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
-}
-
-# Distinct from the two grants above: those let the Cloud Tasks/Scheduler
-# *agents* mint a token as the invoker SA when they dispatch a task. This lets
-# backend and order-worker themselves set invoker as the oidcToken.serviceAccountEmail
-# when they call tasks.create() (CloudTasksOrderSyncClient.enqueueSyncOrder) —
-# without it, createTask fails with PERMISSION_DENIED on iam.serviceAccounts.actAs.
-resource "google_service_account_iam_member" "backend_actas_invoker" {
-  service_account_id = google_service_account.invoker.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${data.google_service_account.backend_runtime.email}"
-}
-
-resource "google_service_account_iam_member" "order_worker_actas_invoker" {
-  service_account_id = google_service_account.invoker.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.order_worker_runtime.email}"
 }

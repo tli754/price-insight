@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect } from "vitest";
-import { buildTestApp, makeOrderRepository } from "./helpers/build-app.js";
+import { buildTestApp, makeOrderRepository, makeShopifyGraphQLService, makeShopifyService } from "./helpers/build-app.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -120,6 +120,67 @@ describe("GET /api/orders", () => {
     expect(orderRepository.listOrders).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1, limit: 20 })
     );
+  });
+});
+
+// ── POST /api/orders/sync-now ─────────────────────────────────────────────────
+
+describe("POST /api/orders/sync-now", () => {
+  let app: Awaited<ReturnType<typeof buildTestApp>>["app"];
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns 503 when Shopify is not configured", async () => {
+    ({ app } = await buildTestApp());
+    const res = await app.inject({ method: "POST", url: "/api/orders/sync-now" });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.code).toBe("SHOPIFY_NOT_CONFIGURED");
+  });
+
+  it("returns 200 with all-zero counts when the queue is empty, no discovery step", async () => {
+    const shopifyService = makeShopifyService();
+    const shopifyGraphQLService = makeShopifyGraphQLService();
+    ({ app } = await buildTestApp({ shopifyService, shopifyGraphQLService }));
+
+    const res = await app.inject({ method: "POST", url: "/api/orders/sync-now" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ processed: 0, failed: 0, archived: 0 });
+    expect(shopifyGraphQLService.fetchOrders).not.toHaveBeenCalled();
+  });
+
+  it("drains a queued message and reports it processed", async () => {
+    const shopifyService = makeShopifyService();
+    const shopifyGraphQLService = makeShopifyGraphQLService();
+    const { app: builtApp, mocks } = await buildTestApp({ shopifyService, shopifyGraphQLService });
+    app = builtApp;
+    const order = {
+      id: "gid://shopify/Order/1", name: "#1", email: "a@b.com",
+      createdAt: "2026-06-06T01:00:00Z", updatedAt: "2026-06-06T01:00:00Z", processedAt: "2026-06-06T01:00:00Z",
+      cancelledAt: null, displayFinancialStatus: "PAID", displayFulfillmentStatus: "UNFULFILLED", currencyCode: "NZD",
+      tags: [], sourceName: "web",
+      subtotalPriceSet: { shopMoney: { amount: "50.00", currencyCode: "NZD" } },
+      totalDiscountsSet: { shopMoney: { amount: "0.00", currencyCode: "NZD" } },
+      totalShippingPriceSet: { shopMoney: { amount: "10.00", currencyCode: "NZD" } },
+      totalTaxSet: { shopMoney: { amount: "0.00", currencyCode: "NZD" } },
+      totalPriceSet: { shopMoney: { amount: "60.00", currencyCode: "NZD" } },
+      customer: null, lineItems: { nodes: [] },
+    };
+    mocks.pgmqClient.read
+      .mockResolvedValueOnce({
+        msgId: 1, readCt: 1,
+        message: { type: "sync-order", source: "manual", shopifyOrderId: order.id, orderName: order.name, shopifyUpdatedAt: order.updatedAt, shopifyOrder: order },
+      })
+      .mockResolvedValueOnce(null);
+
+    const res = await app.inject({ method: "POST", url: "/api/orders/sync-now" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().processed).toBe(1);
+    expect(mocks.orderRepository.upsertMappedOrder).toHaveBeenCalledOnce();
+    expect(mocks.pgmqClient.delete).toHaveBeenCalledWith("shopify_orders", 1);
   });
 });
 

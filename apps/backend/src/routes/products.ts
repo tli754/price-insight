@@ -1,7 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { AppError } from "../lib/app-error.js";
+import { drainQueue } from "../lib/queue-drain.js";
+import { DATAFORSEO_COMPETITORS_QUEUE, QUEUE_ARCHIVE_AFTER_READ_COUNT, QUEUE_VISIBILITY_SECONDS } from "../lib/queue-names.js";
+import type { CompetitorTaskPayload } from "../lib/competitor-task-payload.js";
 import { importShopifyProductsSchema } from "../schemas/product.js";
+import { processCompetitorTaskMessage } from "../services/competitor-drain-service.js";
 
 const productRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/products", async () => {
@@ -66,6 +70,33 @@ const productRoutes: FastifyPluginAsync = async (fastify) => {
 
     reply.code(202);
     return { submitted };
+  });
+
+  // Manual "drain now" trigger for the competitor-pingback queue (see ADR
+  // 0002) — drains whatever pingbacks are already queued from prior "Find
+  // Competitor" submissions. No discovery step: discovery is
+  // /products/find-competitors above, which submits new DataForSEO tasks.
+  fastify.post("/products/competitors/drain", async (request, reply) => {
+    const deps = {
+      dataForSeoService: fastify.dataForSeoService,
+      competitorRepository: fastify.competitorRepository,
+      productRepository: fastify.productRepository,
+      ownStoreName: fastify.env.OWN_STORE_NAME,
+      webhookHost: fastify.env.WEBHOOK_HOST,
+      dataForSeoWebhookSecret: fastify.env.DATAFORSEO_WEBHOOK_SECRET,
+    };
+
+    const result = await drainQueue<CompetitorTaskPayload>({
+      pgmq: fastify.pgmqClient,
+      queueName: DATAFORSEO_COMPETITORS_QUEUE,
+      visibilitySeconds: QUEUE_VISIBILITY_SECONDS,
+      archiveAfterReadCount: QUEUE_ARCHIVE_AFTER_READ_COUNT,
+      processMessage: (message) => processCompetitorTaskMessage(deps, message),
+      logger: request.log,
+    });
+
+    reply.code(200);
+    return { ok: true, ...result };
   });
 
   fastify.get("/products/:id/sales", async (request) => {

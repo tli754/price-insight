@@ -16,9 +16,10 @@ import { AppError } from "../../lib/app-error.js";
 import { requireSession } from "../../lib/require-session.js";
 import analysisRoutes from "../../routes/analysis.js";
 import authRoutes from "../../routes/auth.js";
+import competitorDrainInternalRoutes from "../../routes/competitor-drain-internal.js";
 import webhookRoutes from "../../routes/dataforseo-webhook.js";
 import healthRoutes from "../../routes/health.js";
-import internalCompetitorRoutes from "../../routes/internal-competitor.js";
+import orderSyncInternalRoutes from "../../routes/order-sync-internal.js";
 import ordersRoutes from "../../routes/orders.js";
 import productRoutes from "../../routes/products.js";
 import reportRoutes from "../../routes/reports.js";
@@ -49,10 +50,6 @@ export const fakeEnv = {
   DATAFORSEO_PASSWORD: "fake",
   DATAFORSEO_WEBHOOK_SECRET: "fake-webhook-secret",
   WEBHOOK_HOST: "https://www.qweyha520.bar",
-  CLOUD_TASKS_PROJECT: undefined,
-  CLOUD_TASKS_LOCATION: undefined,
-  CLOUD_TASKS_QUEUE: undefined,
-  ORDER_WORKER_URL: undefined,
   BACKEND_CLOUD_RUN_URL: undefined as string | undefined,
   INTERNAL_OIDC_SERVICE_ACCOUNT: undefined as string | undefined,
 };
@@ -125,15 +122,15 @@ export function makeShopifyGraphQLService() {
   };
 }
 
-export function makeCloudTasksClient() {
+// Defaults to an empty queue (read() resolves null) so tests that don't
+// exercise drain behavior don't loop. Tests that do can mockResolvedValueOnce
+// a message followed by null to end the loop.
+export function makePgmqClient() {
   return {
-    enqueueSyncOrder: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-export function makeCloudTasksCompetitorClient() {
-  return {
-    enqueue: vi.fn().mockResolvedValue(undefined),
+    send: vi.fn().mockResolvedValue(undefined),
+    read: vi.fn().mockResolvedValue(null),
+    delete: vi.fn().mockResolvedValue(undefined),
+    archive: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -178,8 +175,7 @@ export type TestMocks = {
   orderRepository: ReturnType<typeof makeOrderRepository>;
   shopifyService: ReturnType<typeof makeShopifyService> | null;
   shopifyGraphQLService: ReturnType<typeof makeShopifyGraphQLService> | null;
-  cloudTasksClient: ReturnType<typeof makeCloudTasksClient> | null;
-  cloudTasksCompetitorClient: ReturnType<typeof makeCloudTasksCompetitorClient> | null;
+  pgmqClient: ReturnType<typeof makePgmqClient>;
   aiReportRepository: ReturnType<typeof makeAiReportRepository>;
   aiReportService: ReturnType<typeof makeAiReportService>;
 };
@@ -197,10 +193,7 @@ export async function buildTestApp(
     orderRepository: overrides.orderRepository ?? makeOrderRepository(),
     shopifyService: "shopifyService" in overrides ? overrides.shopifyService ?? null : null,
     shopifyGraphQLService: "shopifyGraphQLService" in overrides ? overrides.shopifyGraphQLService ?? null : null,
-    cloudTasksClient: "cloudTasksClient" in overrides ? (overrides.cloudTasksClient as ReturnType<typeof makeCloudTasksClient> | null) : makeCloudTasksClient(),
-    cloudTasksCompetitorClient: "cloudTasksCompetitorClient" in overrides
-      ? (overrides.cloudTasksCompetitorClient as ReturnType<typeof makeCloudTasksCompetitorClient> | null)
-      : makeCloudTasksCompetitorClient(),
+    pgmqClient: overrides.pgmqClient ?? makePgmqClient(),
     aiReportRepository: overrides.aiReportRepository ?? makeAiReportRepository(),
     aiReportService: overrides.aiReportService ?? makeAiReportService(),
   };
@@ -225,8 +218,7 @@ export async function buildTestApp(
   app.decorate("orderRepository", mocks.orderRepository as any);
   app.decorate("shopifyService", mocks.shopifyService as any);
   app.decorate("shopifyGraphQLService", mocks.shopifyGraphQLService as any);
-  app.decorate("cloudTasksClient", mocks.cloudTasksClient as any);
-  app.decorate("cloudTasksCompetitorClient", mocks.cloudTasksCompetitorClient as any);
+  app.decorate("pgmqClient", mocks.pgmqClient as any);
   app.decorate("aiReportRepository", mocks.aiReportRepository as any);
   app.decorate("aiReportService", mocks.aiReportService as any);
 
@@ -267,7 +259,8 @@ export async function buildTestApp(
   });
 
   await app.register(webhookRoutes);
-  await app.register(internalCompetitorRoutes);
+  await app.register(orderSyncInternalRoutes);
+  await app.register(competitorDrainInternalRoutes);
   await app.register(shopifyWebhookRoutes);
 
   await app.ready();

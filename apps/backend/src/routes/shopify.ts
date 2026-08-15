@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { AppError } from "../lib/app-error.js";
 import { getLast30Days } from "../lib/nz-date-range.js";
+import { SHOPIFY_ORDERS_QUEUE } from "../lib/queue-names.js";
 import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
 
 const shopifyRoutes: FastifyPluginAsync = async (fastify) => {
@@ -17,9 +18,6 @@ const shopifyRoutes: FastifyPluginAsync = async (fastify) => {
     }
     if (!fastify.shopifyGraphQLService) {
       throw new AppError(503, "SHOPIFY_NOT_CONFIGURED", "Shopify GraphQL service is not configured.");
-    }
-    if (!fastify.cloudTasksClient) {
-      throw new AppError(503, "QUEUE_NOT_CONFIGURED", "Order sync queue is not available.");
     }
 
     const since = getLast30Days();
@@ -37,7 +35,7 @@ const shopifyRoutes: FastifyPluginAsync = async (fastify) => {
         shopifyUpdatedAt: order.updatedAt,
         shopifyOrder: order,
       };
-      await fastify.cloudTasksClient.enqueueSyncOrder(fastify.env.ORDER_WORKER_URL!, payload);
+      await fastify.pgmqClient.send(SHOPIFY_ORDERS_QUEUE, payload);
     }
 
     reply.code(202);

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
+import { SHOPIFY_ORDERS_QUEUE } from "../lib/queue-names.js";
 import type { WebhookSyncOrderPayload } from "../lib/sync-order-payload.js";
 import { verifyShopifyHmac } from "../lib/shopify-hmac.js";
 
@@ -66,10 +67,6 @@ const shopifyWebhookRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Missing updated_at." } });
     }
 
-    if (!fastify.cloudTasksClient) {
-      return reply.status(503).send({ error: { code: "SERVICE_UNAVAILABLE", message: "Cloud Tasks is not configured." } });
-    }
-
     const payload: WebhookSyncOrderPayload = {
       type: "sync-order",
       source: "webhook",
@@ -82,7 +79,7 @@ const shopifyWebhookRoutes: FastifyPluginAsync = async (fastify) => {
     };
 
     try {
-      await fastify.cloudTasksClient.enqueueSyncOrder(fastify.env.ORDER_WORKER_URL!, payload);
+      await fastify.pgmqClient.send(SHOPIFY_ORDERS_QUEUE, payload);
     } catch (err) {
       request.log.error(err, "Failed to enqueue webhook order task");
       return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to enqueue task." } });

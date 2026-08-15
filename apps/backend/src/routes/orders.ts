@@ -1,36 +1,38 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { AppError } from "../lib/app-error.js";
-import { getLast7Days } from "../lib/nz-date-range.js";
-import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
+import { drainQueue } from "../lib/queue-drain.js";
+import { QUEUE_ARCHIVE_AFTER_READ_COUNT, QUEUE_VISIBILITY_SECONDS, SHOPIFY_ORDERS_QUEUE } from "../lib/queue-names.js";
+import type { SyncOrderPayload } from "../lib/sync-order-payload.js";
+import { processSyncOrderMessage } from "../services/order-sync-service.js";
 
 const ordersRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.post("/orders/sync", async (request, reply) => {
+  // Manual "drain now" trigger (see ADR 0002 / plan-15082026-pgmq-queue-migration.md
+  // Gap 1) — drains whatever's already in shopify_orders (webhook traffic +
+  // whatever the "Sync Orders" button in routes/shopify.ts has enqueued), no
+  // discovery step of its own. Runs inline, synchronously, in this request.
+  fastify.post("/orders/sync-now", async (request, reply) => {
     if (!fastify.shopifyService || !fastify.shopifyGraphQLService) {
       throw new AppError(503, "SHOPIFY_NOT_CONFIGURED", "Shopify credentials are not configured.");
     }
-    if (!fastify.cloudTasksClient) {
-      throw new AppError(503, "QUEUE_NOT_CONFIGURED", "Order sync queue is not available.");
-    }
 
-    const filter = `updated_at:>=${getLast7Days().toISOString()}`;
-    const accessToken = await fastify.shopifyService.getAccessToken();
-    const orders = await fastify.shopifyGraphQLService.fetchOrders(accessToken, filter);
+    const deps = {
+      orderRepository: fastify.orderRepository,
+      shopifyService: fastify.shopifyService,
+      shopifyGraphQLService: fastify.shopifyGraphQLService,
+    };
 
-    for (const order of orders) {
-      const payload: ScheduledSyncOrderPayload = {
-        type: "sync-order",
-        source: "manual",
-        shopifyOrderId: order.id,
-        orderName: order.name,
-        shopifyUpdatedAt: order.updatedAt,
-        shopifyOrder: order,
-      };
-      await fastify.cloudTasksClient.enqueueSyncOrder(fastify.env.ORDER_WORKER_URL!, payload);
-    }
+    const result = await drainQueue<SyncOrderPayload>({
+      pgmq: fastify.pgmqClient,
+      queueName: SHOPIFY_ORDERS_QUEUE,
+      visibilitySeconds: QUEUE_VISIBILITY_SECONDS,
+      archiveAfterReadCount: QUEUE_ARCHIVE_AFTER_READ_COUNT,
+      processMessage: (message) => processSyncOrderMessage(deps, message),
+      logger: request.log,
+    });
 
-    reply.code(202);
-    return { status: "queued", jobsEnqueued: orders.length };
+    reply.code(200);
+    return { ok: true, ...result };
   });
 
   fastify.get("/orders", async (request, reply) => {

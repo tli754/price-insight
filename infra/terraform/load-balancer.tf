@@ -1,6 +1,6 @@
 # Single external HTTPS load balancer, path-routing to frontend/backend on
-# one custom domain. order-worker is intentionally NOT attached here — it's
-# private and only ever invoked directly via its Cloud Run URL.
+# one custom domain. (The private order-worker service this comment used to
+# exclude was retired 2026-08-15 — see cloud-run.tf's retirement note.)
 
 resource "google_compute_global_address" "lb_ip" {
   name    = "price-insight-lb-ip"

@@ -11,22 +11,22 @@ import { AppError } from "./lib/app-error.js";
 import { requireSession } from "./lib/require-session.js";
 import analysisRoutes from "./routes/analysis.js";
 import authRoutes from "./routes/auth.js";
+import competitorDrainInternalRoutes from "./routes/competitor-drain-internal.js";
 import healthRoutes from "./routes/health.js";
+import orderSyncInternalRoutes from "./routes/order-sync-internal.js";
 import ordersRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
 import reportRoutes from "./routes/reports.js";
 import shopifyRoutes from "./routes/shopify.js";
 import shopifyWebhookRoutes from "./routes/shopify-webhook.js";
 import webhookRoutes from "./routes/dataforseo-webhook.js";
-import internalCompetitorRoutes from "./routes/internal-competitor.js";
 import { AiReportRepository } from "./services/ai-report-repository.js";
 import { AiReportService } from "./services/ai-report-service.js";
-import { CloudTasksOrderSyncClient } from "./services/cloud-tasks-client.js";
-import { CloudTasksCompetitorClient } from "./services/cloud-tasks-competitor-client.js";
 import { CompetitorAnalysisService } from "./services/competitor-analysis-service.js";
 import { CompetitorRepository } from "./services/competitor-repository.js";
 import { DataForSeoService } from "./services/dataforseo-service.js";
 import { OrderRepository } from "./services/order-repository.js";
+import { PgmqClient } from "./services/pgmq-client.js";
 import { ProductRepository } from "./services/product-repository.js";
 import { ShopifyGraphQLService } from "./services/shopify-graphql-service.js";
 import { ShopifyService } from "./services/shopify-service.js";
@@ -64,26 +64,7 @@ export async function buildApp(env: AppEnv) {
     env.OPENAI_MODEL
   );
 
-  const cloudTasksClient =
-    env.CLOUD_TASKS_PROJECT && env.CLOUD_TASKS_LOCATION && env.CLOUD_TASKS_QUEUE && env.ORDER_WORKER_URL && env.INTERNAL_OIDC_SERVICE_ACCOUNT
-      ? new CloudTasksOrderSyncClient(
-          env.CLOUD_TASKS_PROJECT,
-          env.CLOUD_TASKS_LOCATION,
-          env.CLOUD_TASKS_QUEUE,
-          env.INTERNAL_OIDC_SERVICE_ACCOUNT
-        )
-      : null;
-
-  const cloudTasksCompetitorClient =
-    env.CLOUD_TASKS_PROJECT && env.CLOUD_TASKS_LOCATION && env.CLOUD_TASKS_QUEUE && env.INTERNAL_OIDC_SERVICE_ACCOUNT && env.BACKEND_CLOUD_RUN_URL
-      ? new CloudTasksCompetitorClient(
-          env.CLOUD_TASKS_PROJECT,
-          env.CLOUD_TASKS_LOCATION,
-          env.CLOUD_TASKS_QUEUE,
-          env.INTERNAL_OIDC_SERVICE_ACCOUNT,
-          env.BACKEND_CLOUD_RUN_URL
-        )
-      : null;
+  const pgmqClient = new PgmqClient(pool);
 
   app.decorate("env", env);
 
@@ -102,8 +83,7 @@ export async function buildApp(env: AppEnv) {
   app.decorate("orderRepository", orderRepository);
   app.decorate("shopifyService", shopifyService);
   app.decorate("shopifyGraphQLService", shopifyGraphQLService);
-  app.decorate("cloudTasksClient", cloudTasksClient);
-  app.decorate("cloudTasksCompetitorClient", cloudTasksCompetitorClient);
+  app.decorate("pgmqClient", pgmqClient);
   app.decorate("aiReportRepository", aiReportRepository);
   app.decorate("aiReportService", aiReportService);
 
@@ -159,7 +139,8 @@ export async function buildApp(env: AppEnv) {
   });
 
   await app.register(webhookRoutes);
-  await app.register(internalCompetitorRoutes);
+  await app.register(orderSyncInternalRoutes);
+  await app.register(competitorDrainInternalRoutes);
   await app.register(shopifyWebhookRoutes);
 
   return app;

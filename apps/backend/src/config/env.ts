@@ -24,10 +24,9 @@ const envSchema = z.object({
   SERPAPI_GOOGLE_DOMAIN: z.string().default("google.co.nz"),
   SERPAPI_NUM_RESULTS: z.coerce.number().int().min(1).max(100).default(40),
   OWN_STORE_NAME: z.string().optional(),
-  CLOUD_TASKS_PROJECT: z.string().min(1).optional(),
-  CLOUD_TASKS_LOCATION: z.string().min(1).optional(),
-  CLOUD_TASKS_QUEUE: z.string().min(1).optional(),
-  ORDER_WORKER_URL: z.string().url().optional(),
+  // Used as the expected OIDC audience for Cloud Scheduler-invoked internal
+  // routes (order-sync-internal.ts, competitor-drain-internal.ts) — see ADR
+  // 0002. Falls back to WEBHOOK_HOST when unset (local/dev).
   BACKEND_CLOUD_RUN_URL: z.string().url().optional(),
   INTERNAL_OIDC_SERVICE_ACCOUNT: z.string().min(1).optional(),
 });

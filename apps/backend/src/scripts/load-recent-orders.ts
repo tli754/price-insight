@@ -1,8 +1,8 @@
 /**
- * Load orders from Shopify by enqueueing one Cloud Task per order — same
- * path as the "Sync Orders" button (source: "manual"). order-worker does
- * the actual upsert; this script needs no direct DB/Cloud SQL access, just
- * Cloud Tasks API access.
+ * Load orders from Shopify by enqueueing one pgmq message per order onto
+ * shopify_orders — same queue the "Sync Orders" button and the daily
+ * scheduled job feed (see ADR 0002). Needs DATABASE_URL (to reach pgmq) and
+ * Shopify credentials; no Cloud Tasks/order-worker wiring needed anymore.
  *
  * Usage:
  *   cd apps/backend && npx tsx src/scripts/load-recent-orders.ts
@@ -15,8 +15,10 @@
 import "dotenv/config";
 
 import { loadEnv } from "../config/env.js";
-import { CloudTasksOrderSyncClient } from "../services/cloud-tasks-client.js";
+import { createDatabase } from "../db/index.js";
 import type { ScheduledSyncOrderPayload } from "../lib/sync-order-payload.js";
+import { SHOPIFY_ORDERS_QUEUE } from "../lib/queue-names.js";
+import { PgmqClient } from "../services/pgmq-client.js";
 import { ShopifyGraphQLService } from "../services/shopify-graphql-service.js";
 import { ShopifyService } from "../services/shopify-service.js";
 
@@ -29,17 +31,6 @@ if (
   !env.SHOPIFY_CLIENT_SECRET
 ) {
   console.error("[load-orders] Shopify credentials are not configured. Check your .env file.");
-  process.exit(1);
-}
-
-if (
-  !env.CLOUD_TASKS_PROJECT ||
-  !env.CLOUD_TASKS_LOCATION ||
-  !env.CLOUD_TASKS_QUEUE ||
-  !env.ORDER_WORKER_URL ||
-  !env.INTERNAL_OIDC_SERVICE_ACCOUNT
-) {
-  console.error("[load-orders] Cloud Tasks is not configured. Check your .env file.");
   process.exit(1);
 }
 
@@ -56,12 +47,8 @@ console.log(
     : "[load-orders] Fetching ALL orders from Shopify…"
 );
 
-const cloudTasksClient = new CloudTasksOrderSyncClient(
-  env.CLOUD_TASKS_PROJECT,
-  env.CLOUD_TASKS_LOCATION,
-  env.CLOUD_TASKS_QUEUE,
-  env.INTERNAL_OIDC_SERVICE_ACCOUNT
-);
+const { pool } = createDatabase(env);
+const pgmqClient = new PgmqClient(pool);
 
 const shopifyService = new ShopifyService(
   env.SHOPIFY_TOKEN_URL,
@@ -92,7 +79,7 @@ try {
         shopifyUpdatedAt: order.updatedAt,
         shopifyOrder: order,
       };
-      await cloudTasksClient.enqueueSyncOrder(env.ORDER_WORKER_URL, payload);
+      await pgmqClient.send(SHOPIFY_ORDERS_QUEUE, payload);
       totalEnqueued++;
     }
 
@@ -102,9 +89,11 @@ try {
   if (totalEnqueued === 0) {
     console.log("[load-orders] Nothing to enqueue.");
   } else {
-    console.log(`[load-orders] Done. ${totalEnqueued} orders enqueued. order-worker will skip unchanged orders.`);
+    console.log(`[load-orders] Done. ${totalEnqueued} orders enqueued. Next drain will skip unchanged orders.`);
   }
 } catch (err) {
   console.error("[load-orders] Failed:", err);
   process.exit(1);
+} finally {
+  await pool.end();
 }

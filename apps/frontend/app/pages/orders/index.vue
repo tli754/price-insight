@@ -35,6 +35,7 @@ watch(error, (e) => {
 })
 
 const syncing = ref(false)
+const draining = ref(false)
 
 async function syncOrders() {
   syncing.value = true
@@ -50,6 +51,26 @@ async function syncOrders() {
     toast.add({ title: msg, color: 'error' })
   } finally {
     syncing.value = false
+  }
+}
+
+// Drains whatever's already queued (webhook traffic + anything "Sync
+// Orders" enqueued) right now, instead of waiting for the 1am job — see
+// docs/decisions/0002-pgmq-order-sync-competitor-queue-migration.md.
+async function drainOrderQueue() {
+  draining.value = true
+  try {
+    const result = await $fetch<{ processed: number; failed: number; archived: number }>(
+      '/api/orders/sync-now',
+      { method: 'POST' }
+    )
+    toast.add({ title: 'Queue drained', description: `${result.processed} order(s) processed${result.failed ? `, ${result.failed} failed` : ''}.`, color: result.failed ? 'warning' : 'success' })
+    await refresh()
+  } catch (e: unknown) {
+    const msg = getApiErrorMessage(e, 'Could not drain queue')
+    toast.add({ title: msg, color: 'error' })
+  } finally {
+    draining.value = false
   }
 }
 
@@ -101,7 +122,7 @@ const syncStatusColor = (status: string) => {
 
 const syncSourceLabel = (source: string) => {
   if (source === 'webhook') return 'Webhook'
-  if (source === 'scheduled_2am') return '2 AM Job'
+  if (source === 'scheduled_1am') return '1 AM Job'
   if (source === 'manual') return 'Manual'
   return source
 }
@@ -180,6 +201,9 @@ const columns = [
         />
         <UButton size="sm" color="primary" icon="i-lucide-play" :loading="syncing" @click="syncOrders">
           Sync Orders
+        </UButton>
+        <UButton size="sm" variant="soft" icon="i-lucide-refresh-cw" :loading="draining" @click="drainOrderQueue">
+          Drain Now
         </UButton>
       </div>
     </div>
