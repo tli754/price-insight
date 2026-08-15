@@ -8,6 +8,20 @@
 #     --args=dist/scripts/<other-script>.js \
 #     --update-env-vars=SINCE=2026-06-14 \
 #     --wait
+locals {
+  # backend_script_runner still targets Cloud SQL/MySQL — not part of the
+  # Postgres cutover (backend service + backend_migrate only, see cloud-run.tf).
+  backend_script_runner_secret_env = concat(
+    [
+      { name = "MYSQL_HOST", secret = "backend-mysql-host" },
+      { name = "MYSQL_USER", secret = "backend-mysql-user" },
+      { name = "MYSQL_PASSWORD", secret = "backend-mysql-password" },
+      { name = "MYSQL_DATABASE", secret = "backend-mysql-database" },
+    ],
+    local.backend_common_secret_env
+  )
+}
+
 resource "google_cloud_run_v2_job" "backend_script_runner" {
   name     = "backend-script-runner"
   project  = var.project_id
@@ -77,7 +91,7 @@ resource "google_cloud_run_v2_job" "backend_script_runner" {
         }
 
         dynamic "env" {
-          for_each = local.backend_secret_env
+          for_each = local.backend_script_runner_secret_env
           content {
             name = env.value.name
             value_source {
@@ -124,13 +138,6 @@ resource "google_cloud_run_v2_job" "backend_migrate" {
       max_retries     = 0
       timeout         = "1800s"
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [var.cloud_sql_connection_name]
-        }
-      }
-
       containers {
         image   = var.bootstrap_image
         command = ["node"]
@@ -143,11 +150,6 @@ resource "google_cloud_run_v2_job" "backend_migrate" {
           }
         }
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         env {
           name  = "NODE_ENV"
           value = "production"
@@ -155,10 +157,6 @@ resource "google_cloud_run_v2_job" "backend_migrate" {
         env {
           name  = "APP_URL"
           value = "https://${var.domain}"
-        }
-        env {
-          name  = "MYSQL_PORT"
-          value = "3306"
         }
         env {
           name  = "CLOUD_TASKS_PROJECT"

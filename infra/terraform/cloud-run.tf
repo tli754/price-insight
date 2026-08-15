@@ -4,11 +4,10 @@
 # from reverting CI's deploy.
 
 locals {
-  backend_secret_env = [
-    { name = "MYSQL_HOST", secret = "backend-mysql-host" },
-    { name = "MYSQL_USER", secret = "backend-mysql-user" },
-    { name = "MYSQL_PASSWORD", secret = "backend-mysql-password" },
-    { name = "MYSQL_DATABASE", secret = "backend-mysql-database" },
+  # Shared by backend (service) and backend_migrate (job) — everything except
+  # the DB connection var, which differs from backend_script_runner's (still
+  # Cloud SQL/MySQL — see backend_script_runner_secret_env in cloud-run-jobs.tf).
+  backend_common_secret_env = [
     { name = "OPENAI_API_KEY", secret = "backend-openai-api-key" },
     { name = "OPENAI_MODEL", secret = "backend-openai-model" },
     { name = "JINA_API_KEY", secret = "backend-jina-api-key" },
@@ -25,6 +24,14 @@ locals {
     { name = "SESSION_SECRET", secret = "backend-session-secret" },
     { name = "DEV_AUTH_PASSWORD", secret = "backend-dev-auth-password" },
   ]
+
+  # backend (service) and backend_migrate (job) — Postgres/Supabase via a
+  # single DATABASE_URL. backend_script_runner stays on Cloud SQL/MySQL for
+  # now (see cloud-run-jobs.tf) — not part of this cutover.
+  backend_secret_env = concat(
+    [{ name = "DATABASE_URL", secret = "backend-database-url" }],
+    local.backend_common_secret_env
+  )
 
   # Provisional — see the order-worker comment block below.
   order_worker_secret_env = [
@@ -123,13 +130,6 @@ resource "google_cloud_run_v2_service" "backend" {
       max_instance_count = 4
     }
 
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [var.cloud_sql_connection_name]
-      }
-    }
-
     containers {
       image = var.bootstrap_image
 
@@ -144,11 +144,6 @@ resource "google_cloud_run_v2_service" "backend" {
         }
       }
 
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
-
       env {
         name  = "NODE_ENV"
         value = "production"
@@ -156,10 +151,6 @@ resource "google_cloud_run_v2_service" "backend" {
       env {
         name  = "APP_URL"
         value = "https://${var.domain}"
-      }
-      env {
-        name  = "MYSQL_PORT"
-        value = "3306"
       }
       env {
         name  = "CLOUD_TASKS_PROJECT"
