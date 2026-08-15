@@ -27,6 +27,7 @@ COPY --from=builder /app/apps/backend/package.json ./apps/backend/
 RUN pnpm install --filter @price-insight/backend --prod --frozen-lockfile
 
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
+COPY --from=builder /app/apps/backend/drizzle-pg ./apps/backend/drizzle-pg
 COPY --from=builder /app/apps/backend/drizzle ./apps/backend/drizzle
 
 RUN chown -R node:node /app
