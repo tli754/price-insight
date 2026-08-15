@@ -1,5 +1,5 @@
 FROM node:22-alpine AS base
-RUN npm install -g pnpm turbo
+RUN npm install -g pnpm@10.28.2 turbo
 WORKDIR /app
 
 FROM base AS builder
@@ -16,7 +16,7 @@ RUN pnpm turbo build --filter @price-insight/backend
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache tini
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.28.2
 WORKDIR /app
 
 # Copy workspace manifests so pnpm can resolve the lockfile
