@@ -1,5 +1,5 @@
 FROM node:22-alpine AS base
-RUN npm install -g pnpm turbo
+RUN npm install -g pnpm@10.28.2 turbo
 WORKDIR /app
 
 FROM base AS builder
